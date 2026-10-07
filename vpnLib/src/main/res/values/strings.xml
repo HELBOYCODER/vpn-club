@@ -290,6 +290,7 @@
     <string name="state_screenoff">VPN paused - screen off</string>
     <string name="device_specific">Device specifics Hacks</string>
     <string name="cannotparsecert">Cannot display certificate information</string>
+    <string name="cannot_find_exec">Cannot find native exec binary at %1$s</string>
     <string name="appbehaviour">Application behaviour</string>
     <string name="vpnbehaviour">VPN behaviour</string>
     <string name="allow_vpn_changes">Allow changes to VPN Profiles</string>
