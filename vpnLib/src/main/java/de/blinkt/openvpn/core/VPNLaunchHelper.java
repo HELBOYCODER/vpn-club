@@ -31,6 +31,7 @@ public class VPNLaunchHelper {
                 return nativeExec.getPath();
             }
             VpnStatus.logWarning(R.string.cannot_find_exec, nativeExec.getPath());
+        }
 
         String[] abis = Build.SUPPORTED_ABIS;
 
