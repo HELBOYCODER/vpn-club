@@ -6,9 +6,9 @@
 package de.blinkt.openvpn.core
 
 import android.os.Build
+import android.util.Base64
 import org.json.JSONException
 import org.json.JSONObject
-import kotlin.io.encoding.Base64
 
 data class AccMessage(val protocol: String, val fragment: Boolean, val message: ByteArray)
 
@@ -28,7 +28,7 @@ public class AppCustomControl {
 
             val fragment = if (arguments[1] == "1") true else false
 
-            val message = Base64.decode(b64message)
+            val message = Base64.decode(b64message, Base64.DEFAULT)
 
             return AccMessage(protocol, fragment, message)
         }
