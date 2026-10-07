@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">VPN CLUB</string>
+    <string name="title_activity_main">VPN CLUB</string>
+    <string name="state_disconnected">قطع اتصال</string>
+    <string name="state_connecting">در حال برقراری تونل...</string>
+    <string name="state_connected">متصل شد (تونل سراسری فعال)</string>
+    <string name="state_error">خطا در برقراری اتصال</string>
+</resources>

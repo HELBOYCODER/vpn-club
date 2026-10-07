@@ -1,0 +1,59 @@
+name: Build VPN Club APK
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Android Release APK
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Copy and rename APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk dist/VPNClub-1.0.0.apk
+          ls -la dist/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VPNClub-1.0.0-APK
+          path: dist/VPNClub-1.0.0.apk
+          retention-days: 90
+
+      - name: Create or Update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v1.0.0"
+          NOTES="VPN CLUB v1.0.0 — اپلیکیشن اندروید اختصاصی سرورهای VPN Gate با موتور داخلی OpenVPN، اتصال سراسری به تمام ترافیک گوشی، تزریق خودکار یوزرنیم و پسورد (vpn/vpn)، ساب‌اسکریپشن زنده و آیکون اختصاصی"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, uploading asset..."
+            gh release upload "$TAG_NAME" dist/VPNClub-1.0.0.apk --clobber
+          else
+            echo "Creating new release $TAG_NAME..."
+            gh release create "$TAG_NAME" dist/VPNClub-1.0.0.apk --title "VPN CLUB v1.0.0 — کلاینت اختصاصی و پرسرعت VPN Gate با موتور داخلی OpenVPN" --notes "$NOTES"
+          fi
