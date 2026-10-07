@@ -10,7 +10,9 @@ import com.helboy.vpnclub.data.model.VpnServer
 import de.blinkt.openvpn.VpnProfile
 import de.blinkt.openvpn.core.ConfigParser
 import de.blinkt.openvpn.core.ConnectionStatus
+import de.blinkt.openvpn.core.LogItem
 import de.blinkt.openvpn.core.OpenVPNService
+import de.blinkt.openvpn.core.PasswordCache
 import de.blinkt.openvpn.core.ProfileManager
 import de.blinkt.openvpn.core.VPNLaunchHelper
 import de.blinkt.openvpn.core.VpnStatus
@@ -30,7 +32,10 @@ enum class VpnConnectionState {
     ERROR
 }
 
-class OpenVpnController(private val context: Context) : VpnStatus.StateListener, VpnStatus.ByteCountListener {
+class OpenVpnController(private val context: Context) :
+    VpnStatus.StateListener,
+    VpnStatus.ByteCountListener,
+    VpnStatus.LogListener {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -63,11 +68,13 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
     init {
         VpnStatus.addStateListener(this)
         VpnStatus.addByteCountListener(this)
+        VpnStatus.addLogListener(this)
     }
 
     fun release() {
         VpnStatus.removeStateListener(this)
         VpnStatus.removeByteCountListener(this)
+        VpnStatus.removeLogListener(this)
     }
 
     fun isVpnServicePrepared(): Intent? {
@@ -79,7 +86,7 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
             _connectedServer.value = server
             _connectionState.value = VpnConnectionState.PREPARING
             val targetPort = customPort ?: server.port
-            _statusMessage.value = "در حال آماده‌سازی اتصال به ${server.countryLong} (پورت $targetPort)..."
+            _statusMessage.value = "در حال آماده‌سازی پروفایل ${server.countryLong} (پورت $targetPort)..."
 
             val ovpnConfig = server.getDecodedOvpnConfig(customPort)
             if (ovpnConfig.isBlank()) {
@@ -95,25 +102,37 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
             val profile = configParser.convertProfile()
             profile.mName = "VPN CLUB — ${server.countryLong} (${server.ip}:$targetPort)"
 
-            // Auto-inject default VPNGate credentials (vpn / vpn)
+            // 1. Auto-inject default VPNGate credentials (vpn / vpn) in profile and password cache
             profile.mUsername = "vpn"
             profile.mPassword = "vpn"
             profile.mProfileCreator = context.packageName
+            PasswordCache.setCachedPassword(profile.getUUIDString(), PasswordCache.AUTHPASSWORD, "vpn")
 
-            // Ensure username/password authentication mode is enforced
-            if (profile.mAuthenticationType == VpnProfile.TYPE_CERTIFICATES) {
+            // 2. OpenVPN 2.4.x SoftEther compatibility mode (critical for SoftEther 2013 servers)
+            profile.mCompatMode = 20400 // VPN_PROFILE_COMPAT_MODE_24X
+            profile.mUseLegacyProvider = true // Load OpenSSL 3 legacy crypto provider (SHA-1, BF-CBC)
+            profile.mTlSCertProfile = "insecure" // Accept 1024-bit/SHA-1 legacy certificates
+            profile.mExpectTLSCert = false // SoftEther volunteers do not have matching server CNs
+            profile.mCheckRemoteCN = false
+
+            // 3. Ensure user-password authentication type is active
+            if (profile.mAuthenticationType == VpnProfile.TYPE_CERTIFICATES ||
+                profile.mAuthenticationType == VpnProfile.TYPE_USERPASS_CERTIFICATES) {
                 profile.mAuthenticationType = VpnProfile.TYPE_USERPASS_CERTIFICATES
-            } else if (profile.mAuthenticationType == 0 || profile.mAuthenticationType == VpnProfile.TYPE_STATICKEYS) {
+            } else {
                 profile.mAuthenticationType = VpnProfile.TYPE_USERPASS
             }
 
-            // Inject IPv6 ULA to avoid carrier network IPv6 routing faults
+            // 4. Default routes & DNS leak protection
+            profile.mUseDefaultRoute = true
+            profile.mUseDefaultRoutev6 = true
+
+            // Inject IPv6 ULA to avoid cellular IPv6 routing disconnects
             val ula = Ipv6Ula.getOrDerive(context)
             profile.mUseIPv6 = true
             profile.mIPv6Address = "$ula/64"
-            profile.mUseDefaultRoutev6 = true
 
-            // Set clean High-Speed DNS to prevent ISP DNS hijacking
+            // Override with clean Cloudflare & Google DNS
             profile.mOverrideDNS = true
             profile.mDNS1 = "1.1.1.1"
             profile.mDNS2 = "8.8.8.8"
@@ -160,12 +179,7 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
         mainHandler.post {
             val cleanLog = VpnStatus.getLastCleanLogMessage(context)
             if (!cleanLog.isNullOrBlank()) {
-                val current = _logEntries.value.toMutableList()
-                if (current.isEmpty() || current.last() != cleanLog) {
-                    current.add(cleanLog)
-                    if (current.size > 50) current.removeAt(0)
-                    _logEntries.value = current
-                }
+                addLogEntry(cleanLog)
             }
 
             when (level) {
@@ -217,6 +231,25 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
             _uploadSpeed.value = formatSpeed(diffOut)
             _totalDownloaded.value = formatTotalBytes(`in`)
             _totalUploaded.value = formatTotalBytes(out)
+        }
+    }
+
+    override fun newLog(logItem: LogItem?) {
+        if (logItem == null) return
+        mainHandler.post {
+            val msg = logItem.getString(context)
+            if (!msg.isNullOrBlank()) {
+                addLogEntry(msg)
+            }
+        }
+    }
+
+    private fun addLogEntry(entry: String) {
+        val current = _logEntries.value.toMutableList()
+        if (current.isEmpty() || current.last() != entry) {
+            current.add(entry)
+            if (current.size > 100) current.removeAt(0)
+            _logEntries.value = current
         }
     }
 

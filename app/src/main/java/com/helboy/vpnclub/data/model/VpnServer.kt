@@ -146,21 +146,19 @@ data class VpnServer(
             configStr = configStr + "\nredirect-gateway def1\n"
         }
 
-        // Anti-throttling & cellular MTU/MSS tuning directives for Iran networks
+        // Anti-throttling & cellular MTU/MSS tuning directives for Iran networks & SoftEther compatibility
         val tuningDirectives = """
             
 # VPN CLUB Anti-Throttle & Cellular Tuning
 mssfix 1280
 tun-mtu 1400
-connect-retry 1 300
-connect-retry-max 1
-connect-timeout 8
-handshake-window 15
-resolv-retry 3
+resolv-retry infinite
 nobind
 persist-key
 persist-tun
-data-ciphers AES-128-CBC:AES-256-CBC:AES-128-GCM:AES-256-GCM:BF-CBC
+tls-cert-profile insecure
+data-ciphers AES-128-CBC:AES-256-CBC:BF-CBC:AES-128-GCM:AES-256-GCM
+data-ciphers-fallback AES-128-CBC
 """.trimIndent()
 
         configStr = configStr + "\n" + tuningDirectives

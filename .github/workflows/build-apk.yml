@@ -34,26 +34,26 @@ jobs:
       - name: Copy and rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk dist/VPNClub-1.1.0.apk
+          cp app/build/outputs/apk/release/*.apk dist/VPNClub-1.2.0.apk
           ls -la dist/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VPNClub-1.1.0-APK
-          path: dist/VPNClub-1.1.0.apk
+          name: VPNClub-1.2.0-APK
+          path: dist/VPNClub-1.2.0.apk
           retention-days: 90
 
       - name: Create or Update GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="v1.1.0"
-          NOTES="VPN CLUB v1.1.0 — ارتقای اساسی برای سازگاری ۱۰۰٪ با اینترنت ایران: الگوریتم غربالگری سرورهای مسدود تسوکوبا، اولویت‌بندی پورت‌های 995 و غیراستاندارد، سنجش زنده سوکت TCP از خط کاربر، دیده‌بان تعویض خودکار در صورت فیلترینگ و تیونینگ MTU/MSS برای همراه اول و ایرانسل"
+          TAG_NAME="v1.2.0"
+          NOTES="VPN CLUB v1.2.0 — حل ریشه‌ای عدم برقراری تونل موتور اتصال OpenVPN: استخراج قطعی باینری‌های نیتیو (extractNativeLibs)، فعال‌سازی مود سازگاری SoftEther 2013 (compat-mode 2.4.0)، لود پرووایدر لگسی OpenSSL 3، پروفایل insecure برای گواهی‌های SHA-1، کش دائمی رمز عبور و شنونده زنده لاگ"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, uploading asset..."
-            gh release upload "$TAG_NAME" dist/VPNClub-1.1.0.apk --clobber
+            gh release upload "$TAG_NAME" dist/VPNClub-1.2.0.apk --clobber
           else
             echo "Creating new release $TAG_NAME..."
-            gh release create "$TAG_NAME" dist/VPNClub-1.1.0.apk --title "VPN CLUB v1.1.0 — سازگاری هوشمند با اینترنت ایران و موتور سنجش زنده سوکت" --notes "$NOTES"
+            gh release create "$TAG_NAME" dist/VPNClub-1.2.0.apk --title "VPN CLUB v1.2.0 — تعمیر اساسی موتور اتصال OpenVPN و سازگاری کامل SoftEther" --notes "$NOTES"
           fi

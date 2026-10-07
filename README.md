@@ -43,7 +43,7 @@
 ## 📥 دانلود و نصب (Download)
 
 آخرین نسخه بیلدشده را می‌توانید مستقیماً از بخش Releases گیت‌هاب دریافت کنید:
-👉 **[دانلود فایل APK نسخه v1.1.0](https://github.com/HELBOYCODER/vpn-club/releases/latest)**
+👉 **[دانلود فایل APK نسخه v1.2.0](https://github.com/HELBOYCODER/vpn-club/releases/latest)**
 
 ---
 

@@ -25,8 +25,13 @@ public class VPNLaunchHelper {
     private static String writeMiniVPN(Context context) {
         String nativeAPI = NativeUtils.getNativeAPI();
         /* Q does not allow executing binaries written in temp directory anymore */
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            return new File(context.getApplicationInfo().nativeLibraryDir, "libovpnexec.so").getPath();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            File nativeExec = new File(context.getApplicationInfo().nativeLibraryDir, "libovpnexec.so");
+            if (nativeExec.exists() && nativeExec.canExecute()) {
+                return nativeExec.getPath();
+            }
+            VpnStatus.logWarning(R.string.cannot_find_exec, nativeExec.getPath());
+        }
 
         String[] abis = Build.SUPPORTED_ABIS;
 
