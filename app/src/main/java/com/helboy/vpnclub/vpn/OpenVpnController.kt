@@ -169,7 +169,8 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
                     _connectionState.value = VpnConnectionState.AUTHENTICATING
                     _statusMessage.value = "احراز هویت و دریافت IP..."
                 }
-                ConnectionStatus.LEVEL_CONNECTING_NO_SERVER_REPLIED_YET -> {
+                ConnectionStatus.LEVEL_CONNECTING_NO_SERVER_REPLY_YET,
+                ConnectionStatus.LEVEL_START -> {
                     _connectionState.value = VpnConnectionState.CONNECTING
                     _statusMessage.value = "در حال برقراری دست‌تکان..."
                 }
