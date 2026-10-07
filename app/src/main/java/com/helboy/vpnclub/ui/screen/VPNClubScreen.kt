@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -60,6 +61,7 @@ import com.helboy.vpnclub.ui.theme.CardBgElevated
 import com.helboy.vpnclub.ui.theme.DarkBg
 import com.helboy.vpnclub.ui.theme.NeonCyan
 import com.helboy.vpnclub.ui.theme.NeonIndigo
+import com.helboy.vpnclub.ui.theme.StatusAmber
 import com.helboy.vpnclub.ui.theme.StatusGreen
 import com.helboy.vpnclub.ui.theme.TextPrimary
 import com.helboy.vpnclub.ui.theme.TextSecondary
@@ -69,6 +71,7 @@ import com.helboy.vpnclub.ui.viewmodel.MainViewModel
 fun VPNClubScreen(
     viewModel: MainViewModel,
     onConnectRequested: () -> Unit,
+    onSmartConnectRequested: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val servers by viewModel.servers.collectAsState()
@@ -80,8 +83,11 @@ fun VPNClubScreen(
     val uploadSpeed by viewModel.uploadSpeed.collectAsState()
     val durationSeconds by viewModel.sessionDurationSeconds.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val isProbing by viewModel.isProbing.collectAsState()
+    val probeStatus by viewModel.probeStatus.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val countryFilter by viewModel.countryFilter.collectAsState()
+    val onlyIranCompatible by viewModel.onlyIranCompatible.collectAsState()
     val sortOption by viewModel.sortOption.collectAsState()
     val availableCountries by viewModel.availableCountries.collectAsState()
     val logEntries by viewModel.logEntries.collectAsState()
@@ -181,39 +187,56 @@ fun VPNClubScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Security & DNS Banner
+                // Iran Compatibility Mode Banner
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(14.dp))
                         .background(CardBgElevated)
-                        .border(1.dp, BorderDark, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .border(1.dp, BorderDark, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "🛡 احراز هویت خودکار (vpn / vpn) • بدون نشت DNS",
-                            color = NeonCyan,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "🇮🇷 سازگار با اینترنت ایران (ضد تراتل)",
+                                    color = StatusGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "حذف رنج‌های مسدود تسوکوبا • پورت‌های 995 و غیراستاندارد",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
 
-                        Text(
-                            text = "OpenVPN TUN",
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NeonCyan.copy(alpha = 0.12f))
+                                .border(1.dp, NeonCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "MSS 1280",
+                                color = NeonCyan,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Selected Server Card
                 SelectedServerCard(
@@ -221,7 +244,7 @@ fun VPNClubScreen(
                     onClick = { showServerSheet = true }
                 )
 
-                Spacer(modifier = Modifier.height(26.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 // Big Animated Connect Button
                 ConnectButton(
@@ -230,20 +253,57 @@ fun VPNClubScreen(
                     onClick = onConnectRequested
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Smart Fastest Connect Button
+                // Live Probe & Watchdog Feedback Pill
+                AnimatedVisibility(visible = isProbing || probeStatus.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardBg)
+                            .border(1.dp, if (isProbing) NeonCyan.copy(alpha = 0.5f) else BorderDark, RoundedCornerShape(12.dp))
+                            .padding(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isProbing) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = NeonCyan,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .rotate(refreshRotation)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = probeStatus,
+                                color = if (isProbing) NeonCyan else TextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Smart Iran Connect Button (with Auto Socket Probe & Failover)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(NeonIndigo.copy(alpha = 0.12f))
-                        .border(1.dp, NeonIndigo.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .background(NeonIndigo.copy(alpha = 0.18f))
+                        .border(1.5.dp, NeonCyan.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
                         .clickable {
-                            viewModel.autoConnectFastest()
-                            onConnectRequested()
+                            onSmartConnectRequested()
                         }
-                        .padding(vertical = 12.dp, horizontal = 16.dp)
+                        .padding(vertical = 14.dp, horizontal = 16.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -254,11 +314,11 @@ fun VPNClubScreen(
                             imageVector = Icons.Default.Bolt,
                             contentDescription = null,
                             tint = NeonCyan,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "⚡ اتصال هوشمند (بهترین پینگ و پهنای باند)",
+                            text = "⚡ جستجو و اتصال هوشمند (سازگار با ایران)",
                             color = TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
@@ -289,6 +349,10 @@ fun VPNClubScreen(
                     countries = availableCountries,
                     selectedCountry = countryFilter,
                     onCountrySelect = { viewModel.setCountryFilter(it) },
+                    onlyIranCompatible = onlyIranCompatible,
+                    onOnlyIranCompatibleToggle = { viewModel.setOnlyIranCompatible(!onlyIranCompatible) },
+                    isProbing = isProbing,
+                    onProbeRequested = { viewModel.probeVisibleServers() },
                     sortOption = sortOption,
                     onSortChange = { viewModel.setSortOption(it) },
                     onServerSelect = {

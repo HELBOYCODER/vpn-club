@@ -33,7 +33,9 @@ import com.helboy.vpnclub.ui.theme.BorderDark
 import com.helboy.vpnclub.ui.theme.CardBg
 import com.helboy.vpnclub.ui.theme.CardBgElevated
 import com.helboy.vpnclub.ui.theme.NeonCyan
+import com.helboy.vpnclub.ui.theme.StatusAmber
 import com.helboy.vpnclub.ui.theme.StatusGreen
+import com.helboy.vpnclub.ui.theme.StatusRed
 import com.helboy.vpnclub.ui.theme.TextPrimary
 import com.helboy.vpnclub.ui.theme.TextSecondary
 import com.helboy.vpnclub.ui.theme.TextTertiary
@@ -89,17 +91,54 @@ fun SelectedServerCard(
                 Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
-                    Text(
-                        text = server?.countryLong ?: "انتخاب سرور",
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = server?.countryLong ?: "انتخاب سرور",
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                        if (server != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            if (server.isIranCompatible) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(StatusGreen.copy(alpha = 0.15f))
+                                        .border(1.dp, StatusGreen.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "🇮🇷 سازگار با ایران",
+                                        color = StatusGreen,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else if (server.isTsukubaSubnet) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(StatusRed.copy(alpha = 0.15f))
+                                        .border(1.dp, StatusRed.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "⚠️ فیلتر در ایران",
+                                        color = StatusRed,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(3.dp))
 
                     Text(
-                        text = if (server != null) "${server.ip} • ${server.protocolDetected}" else "روی اینجا ضربه بزنید",
+                        text = if (server != null) "${server.ip} • ${server.protocolDetected}" else "جهت تغییر سرور ضربه بزنید",
                         color = TextSecondary,
                         fontSize = 12.sp
                     )

@@ -2,6 +2,7 @@ package com.helboy.vpnclub.data.model
 
 import android.util.Base64
 import java.nio.charset.StandardCharsets
+import java.util.regex.Pattern
 
 data class VpnServer(
     val hostName: String,
@@ -20,6 +21,32 @@ data class VpnServer(
     val message: String = "",
     val configDataBase64: String = ""
 ) {
+    // Dynamically tested reachability latency & port from the user's active device connection
+    var probedLatencyMs: Int? = null
+    var probedPort: Int? = null
+
+    val isTsukubaSubnet: Boolean
+        get() = ip.startsWith("219.100.37.") || ip.startsWith("219.100.") || ip.startsWith("130.158.")
+
+    val port: Int by lazy {
+        extractPortFromConfig()
+    }
+
+    val protocol: String by lazy {
+        extractProtocolFromConfig()
+    }
+
+    /**
+     * Determines whether this server is likely reachable on Iranian networks:
+     * - Excludes known blacklisted Tsukuba university subnets (219.100.* and 130.158.*)
+     * - Prioritizes TCP connections (especially port 995 MS-SSTP, non-standard high ports, and port 443 on non-Tsukuba IPs)
+     */
+    val isIranCompatible: Boolean
+        get() {
+            if (isTsukubaSubnet) return false
+            return protocol.equals("TCP", ignoreCase = true) || port == 995 || port > 1024
+        }
+
     val countryFlag: String
         get() {
             if (countryShort.length != 2) return "🌐"
@@ -44,34 +71,99 @@ data class VpnServer(
         }
 
     val pingFormatted: String
-        get() = if (ping > 0) "${ping} ms" else "نامشخص"
-
-    val protocolDetected: String
         get() {
-            return try {
-                val decoded = getDecodedOvpnConfig()
-                if (decoded.contains("proto udp", ignoreCase = true)) "UDP" else "TCP"
-            } catch (e: Exception) {
-                "TCP"
+            return if (probedLatencyMs != null && probedLatencyMs!! > 0) {
+                "${probedLatencyMs} ms (تست زنده)"
+            } else if (ping > 0) {
+                "${ping} ms"
+            } else {
+                "نامشخص"
             }
         }
 
-    fun getDecodedOvpnConfig(): String {
+    val protocolDetected: String
+        get() = "$protocol $port"
+
+    private fun extractPortFromConfig(): Int {
+        if (configDataBase64.isBlank()) return 443
+        return try {
+            val bytes = Base64.decode(configDataBase64, Base64.DEFAULT)
+            val str = String(bytes, StandardCharsets.UTF_8)
+            val matcher = Pattern.compile("""^\s*remote\s+[\w\.\-]+\s+(\d+)""", Pattern.MULTILINE).matcher(str)
+            if (matcher.find()) {
+                matcher.group(1)?.toIntOrNull() ?: 443
+            } else {
+                443
+            }
+        } catch (e: Exception) {
+            443
+        }
+    }
+
+    private fun extractProtocolFromConfig(): String {
+        if (configDataBase64.isBlank()) return "TCP"
+        return try {
+            val bytes = Base64.decode(configDataBase64, Base64.DEFAULT)
+            val str = String(bytes, StandardCharsets.UTF_8)
+            val matcher = Pattern.compile("""^\s*proto\s+(\w+)""", Pattern.MULTILINE).matcher(str)
+            if (matcher.find()) {
+                val proto = matcher.group(1)?.uppercase() ?: "TCP"
+                if (proto.contains("UDP")) "UDP" else "TCP"
+            } else {
+                "TCP"
+            }
+        } catch (e: Exception) {
+            "TCP"
+        }
+    }
+
+    /**
+     * Generates a sanitized and optimized OpenVPN configuration file:
+     * 1. Replaces remote domain names with the direct IPv4 to bypass Iranian DNS poisoning.
+     * 2. Supports customPort override (e.g. falling back to port 995 if 443 is filtered).
+     * 3. Injects cellular MTU and MSS clamping (mssfix 1280) to prevent packet drops on MCI/Irancell LTE.
+     * 4. Injects auto-credentials (auth-user-pass) and full gateway routing.
+     */
+    fun getDecodedOvpnConfig(customPort: Int? = null): String {
         if (configDataBase64.isBlank()) return ""
         val bytes = Base64.decode(configDataBase64, Base64.DEFAULT)
         var configStr = String(bytes, StandardCharsets.UTF_8)
 
-        // Ensure auth-user-pass directive is active so default credentials (vpn/vpn) are used
+        val targetPort = if (customPort != null && customPort > 0) customPort else port
+
+        // Enforce direct IP address and target port to bypass DNS poisoning and SNI filtering
+        configStr = configStr.replace(Regex("""^\s*remote\s+[\w\.\-]+\s+\d+""", RegexOption.MULTILINE), "remote $ip $targetPort")
+
+        // Ensure auth-user-pass directive is active so default credentials (vpn/vpn) are injected
         if (configStr.contains("#auth-user-pass")) {
             configStr = configStr.replace("#auth-user-pass", "auth-user-pass")
         } else if (!configStr.contains("auth-user-pass")) {
             configStr = configStr + "\nauth-user-pass\n"
         }
 
-        // Add compatibility options
+        // Add compatibility routing
         if (!configStr.contains("redirect-gateway")) {
             configStr = configStr + "\nredirect-gateway def1\n"
         }
+
+        // Anti-throttling & cellular MTU/MSS tuning directives for Iran networks
+        val tuningDirectives = """
+            
+# VPN CLUB Anti-Throttle & Cellular Tuning
+mssfix 1280
+tun-mtu 1400
+connect-retry 1 300
+connect-retry-max 1
+connect-timeout 8
+handshake-window 15
+resolv-retry 3
+nobind
+persist-key
+persist-tun
+data-ciphers AES-128-CBC:AES-256-CBC:AES-128-GCM:AES-256-GCM:BF-CBC
+""".trimIndent()
+
+        configStr = configStr + "\n" + tuningDirectives
 
         return configStr
     }

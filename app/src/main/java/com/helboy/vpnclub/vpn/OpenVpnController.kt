@@ -74,13 +74,14 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
         return VpnService.prepare(context)
     }
 
-    fun connect(server: VpnServer): Boolean {
+    fun connect(server: VpnServer, customPort: Int? = null): Boolean {
         try {
             _connectedServer.value = server
             _connectionState.value = VpnConnectionState.PREPARING
-            _statusMessage.value = "در حال تحلیل و ساخت پروفایل اتصال..."
+            val targetPort = customPort ?: server.port
+            _statusMessage.value = "در حال آماده‌سازی اتصال به ${server.countryLong} (پورت $targetPort)..."
 
-            val ovpnConfig = server.getDecodedOvpnConfig()
+            val ovpnConfig = server.getDecodedOvpnConfig(customPort)
             if (ovpnConfig.isBlank()) {
                 _connectionState.value = VpnConnectionState.ERROR
                 _statusMessage.value = "کانفیگ سرور نامعتبر یا خالی است"
@@ -92,12 +93,19 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
             configParser.parseConfig(reader)
 
             val profile = configParser.convertProfile()
-            profile.mName = "VPN CLUB — ${server.countryLong} (${server.ip})"
+            profile.mName = "VPN CLUB — ${server.countryLong} (${server.ip}:$targetPort)"
 
             // Auto-inject default VPNGate credentials (vpn / vpn)
             profile.mUsername = "vpn"
             profile.mPassword = "vpn"
             profile.mProfileCreator = context.packageName
+
+            // Ensure username/password authentication mode is enforced
+            if (profile.mAuthenticationType == VpnProfile.TYPE_CERTIFICATES) {
+                profile.mAuthenticationType = VpnProfile.TYPE_USERPASS_CERTIFICATES
+            } else if (profile.mAuthenticationType == 0 || profile.mAuthenticationType == VpnProfile.TYPE_STATICKEYS) {
+                profile.mAuthenticationType = VpnProfile.TYPE_USERPASS
+            }
 
             // Inject IPv6 ULA to avoid carrier network IPv6 routing faults
             val ula = Ipv6Ula.getOrDerive(context)
@@ -114,7 +122,7 @@ class OpenVpnController(private val context: Context) : VpnStatus.StateListener,
             ProfileManager.setTemporaryProfile(context, profile)
 
             _connectionState.value = VpnConnectionState.CONNECTING
-            _statusMessage.value = "در حال اتصال به ${server.countryLong}..."
+            _statusMessage.value = "در حال اتصال به ${server.countryLong} (پورت $targetPort)..."
 
             VPNLaunchHelper.startOpenVpn(profile, context, "VPNClub", true)
             return true

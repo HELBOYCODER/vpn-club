@@ -17,13 +17,15 @@ import com.helboy.vpnclub.ui.viewmodel.MainViewModel
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+    private var pendingVpnAction: (() -> Unit)? = null
 
     private val vpnPrepareLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.toggleConnection()
+            pendingVpnAction?.invoke() ?: viewModel.toggleConnection()
         }
+        pendingVpnAction = null
     }
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -50,9 +52,19 @@ class MainActivity : ComponentActivity() {
                     onConnectRequested = {
                         val prepareIntent = viewModel.vpnController.isVpnServicePrepared()
                         if (prepareIntent != null) {
+                            pendingVpnAction = { viewModel.toggleConnection() }
                             vpnPrepareLauncher.launch(prepareIntent)
                         } else {
                             viewModel.toggleConnection()
+                        }
+                    },
+                    onSmartConnectRequested = {
+                        val prepareIntent = viewModel.vpnController.isVpnServicePrepared()
+                        if (prepareIntent != null) {
+                            pendingVpnAction = { viewModel.smartConnectIran() }
+                            vpnPrepareLauncher.launch(prepareIntent)
+                        } else {
+                            viewModel.smartConnectIran()
                         }
                     }
                 )

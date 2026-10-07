@@ -1,5 +1,10 @@
 package com.helboy.vpnclub.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,11 +23,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,9 +38,11 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,9 +54,9 @@ import com.helboy.vpnclub.ui.theme.CardBgElevated
 import com.helboy.vpnclub.ui.theme.DarkBg
 import com.helboy.vpnclub.ui.theme.NeonCyan
 import com.helboy.vpnclub.ui.theme.NeonIndigo
+import com.helboy.vpnclub.ui.theme.StatusAmber
 import com.helboy.vpnclub.ui.theme.StatusGreen
 import com.helboy.vpnclub.ui.theme.StatusRed
-import com.helboy.vpnclub.ui.theme.StatusAmber
 import com.helboy.vpnclub.ui.theme.TextPrimary
 import com.helboy.vpnclub.ui.theme.TextSecondary
 import com.helboy.vpnclub.ui.theme.TextTertiary
@@ -65,12 +72,26 @@ fun ServerListBottomSheet(
     countries: List<Pair<String, String>>,
     selectedCountry: String?,
     onCountrySelect: (String?) -> Unit,
+    onlyIranCompatible: Boolean,
+    onOnlyIranCompatibleToggle: () -> Unit,
+    isProbing: Boolean,
+    onProbeRequested: () -> Unit,
     sortOption: SortOption,
     onSortChange: (SortOption) -> Unit,
     onServerSelect: (VpnServer) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val spinTransition = rememberInfiniteTransition(label = "spin")
+    val spinAngle by spinTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing)
+        ),
+        label = "angle"
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -90,7 +111,7 @@ fun ServerListBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.88f)
+                .fillMaxHeight(0.92f)
                 .padding(horizontal = 16.dp)
         ) {
             // Header
@@ -99,12 +120,19 @@ fun ServerListBottomSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "لیست سرورها (${servers.size} سرور)",
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "لیست سرورها (${servers.size} سرور)",
+                        color = TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (onlyIranCompatible) "فیلتر: فقط سرورهای سازگار با اینترنت ایران فعال است" else "نمایش تمام سرورهای شبکه",
+                        color = if (onlyIranCompatible) StatusGreen else TextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
 
                 IconButton(onClick = onDismiss) {
                     Icon(
@@ -121,7 +149,7 @@ fun ServerListBottomSheet(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
-                placeholder = { Text("جستجو بر اساس نام کشور یا آی‌پی...", color = TextTertiary, fontSize = 13.sp) },
+                placeholder = { Text("جستجو در نام کشور، آی‌پی یا پورت...", color = TextTertiary, fontSize = 13.sp) },
                 leadingIcon = {
                     Icon(imageVector = Icons.Default.Search, contentDescription = "جستجو", tint = TextTertiary)
                 },
@@ -147,23 +175,62 @@ fun ServerListBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Sort & Filter row
+            // Primary Iran Filters & Probe Button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Iran filter pill
+                FilterPill(
+                    label = if (onlyIranCompatible) "🇮🇷 فقط سازگار با ایران (فعال)" else "🌐 تمام سرورها",
+                    isSelected = onlyIranCompatible,
+                    accentColor = StatusGreen,
+                    onClick = onOnlyIranCompatibleToggle
+                )
+
+                // Live Probe Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isProbing) NeonCyan.copy(alpha = 0.2f) else CardBgElevated)
+                        .border(1.dp, if (isProbing) NeonCyan else BorderDark, RoundedCornerShape(10.dp))
+                        .clickable(enabled = !isProbing, onClick = onProbeRequested)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = if (isProbing) NeonCyan else TextSecondary,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .rotate(if (isProbing) spinAngle else 0f)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isProbing) "سنجش زنده..." else "⚡ تست زنده تاخیر از خط شما",
+                            color = if (isProbing) NeonCyan else TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 FilterPill(
                     label = "⚡ کمترین پینگ",
                     isSelected = sortOption == SortOption.PING,
                     onClick = { onSortChange(SortOption.PING) }
                 )
+
                 FilterPill(
                     label = "🚀 بالاترین سرعت",
                     isSelected = sortOption == SortOption.SPEED,
                     onClick = { onSortChange(SortOption.SPEED) }
                 )
+
                 FilterPill(
                     label = "👥 کاربران آنلاین",
                     isSelected = sortOption == SortOption.SESSIONS,
@@ -220,15 +287,16 @@ fun ServerListBottomSheet(
 private fun FilterPill(
     label: String,
     isSelected: Boolean,
+    accentColor: Color = NeonCyan,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) NeonCyan.copy(alpha = 0.18f) else CardBg)
+            .background(if (isSelected) accentColor.copy(alpha = 0.18f) else CardBg)
             .border(
                 1.dp,
-                if (isSelected) NeonCyan else BorderDark,
+                if (isSelected) accentColor else BorderDark,
                 RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
@@ -236,7 +304,7 @@ private fun FilterPill(
     ) {
         Text(
             text = label,
-            color = if (isSelected) NeonCyan else TextSecondary,
+            color = if (isSelected) accentColor else TextSecondary,
             fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
@@ -250,8 +318,10 @@ private fun ServerListItem(
     onClick: () -> Unit
 ) {
     val pingColor = when {
-        server.ping in 1..60 -> StatusGreen
-        server.ping in 61..140 -> StatusAmber
+        server.probedLatencyMs != null && server.probedLatencyMs!! in 1..250 -> StatusGreen
+        server.probedLatencyMs != null && server.probedLatencyMs!! > 250 -> StatusAmber
+        server.ping in 1..80 -> StatusGreen
+        server.ping in 81..180 -> StatusAmber
         else -> StatusRed
     }
 
@@ -306,6 +376,39 @@ private fun ServerListItem(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Iran Compatibility badge
+                        if (server.isIranCompatible) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(StatusGreen.copy(alpha = 0.15f))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (server.port == 995) "🇮🇷 SSTP/995" else "🇮🇷 سازگار با ایران",
+                                    color = StatusGreen,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (server.isTsukubaSubnet) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(StatusRed.copy(alpha = 0.15f))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⚠️ فیلتر در ایران",
+                                    color = StatusRed,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 

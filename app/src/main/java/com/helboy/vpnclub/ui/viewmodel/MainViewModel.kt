@@ -1,10 +1,12 @@
 package com.helboy.vpnclub.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.helboy.vpnclub.data.model.VpnServer
 import com.helboy.vpnclub.data.repository.VpnServerRepository
+import com.helboy.vpnclub.network.TcpReachabilityScanner
 import com.helboy.vpnclub.vpn.OpenVpnController
 import com.helboy.vpnclub.vpn.VpnConnectionState
 import kotlinx.coroutines.Job
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class SortOption {
+    IRAN_COMPATIBLE,
     PING,
     SPEED,
     SESSIONS
@@ -37,19 +40,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _isProbing = MutableStateFlow(false)
+    val isProbing: StateFlow<Boolean> = _isProbing.asStateFlow()
+
+    private val _probeStatus = MutableStateFlow("")
+    val probeStatus: StateFlow<String> = _probeStatus.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _countryFilter = MutableStateFlow<String?>(null)
     val countryFilter: StateFlow<String?> = _countryFilter.asStateFlow()
 
-    private val _sortOption = MutableStateFlow(SortOption.PING)
+    private val _onlyIranCompatible = MutableStateFlow(true)
+    val onlyIranCompatible: StateFlow<Boolean> = _onlyIranCompatible.asStateFlow()
+
+    private val _sortOption = MutableStateFlow(SortOption.IRAN_COMPATIBLE)
     val sortOption: StateFlow<SortOption> = _sortOption.asStateFlow()
 
     private val _sessionDurationSeconds = MutableStateFlow(0L)
     val sessionDurationSeconds: StateFlow<Long> = _sessionDurationSeconds.asStateFlow()
 
     private var timerJob: Job? = null
+    private var connectionWatchdogJob: Job? = null
 
     val connectionState = vpnController.connectionState
     val statusMessage = vpnController.statusMessage
@@ -63,12 +76,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _servers,
         _searchQuery,
         _countryFilter,
+        _onlyIranCompatible,
         _sortOption
-    ) { list, query, country, sort ->
+    ) { list, query, country, iranOnly, sort ->
         var res = list
 
+        if (iranOnly) {
+            res = res.filter { it.isIranCompatible }
+        }
+
         if (country != null) {
-            res = res.filter { it.countryLong.equals(country, ignoreCase = true) || it.countryShort.equals(country, ignoreCase = true) }
+            res = res.filter {
+                it.countryLong.equals(country, ignoreCase = true) ||
+                it.countryShort.equals(country, ignoreCase = true)
+            }
         }
 
         if (query.isNotBlank()) {
@@ -77,22 +98,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it.countryLong.lowercase().contains(q) ||
                 it.countryShort.lowercase().contains(q) ||
                 it.ip.contains(q) ||
-                it.hostName.lowercase().contains(q)
+                it.hostName.lowercase().contains(q) ||
+                it.port.toString().contains(q)
             }
         }
 
         when (sort) {
-            SortOption.PING -> res.sortedWith(
-                compareBy<VpnServer> { if (it.ping <= 0) 9999 else it.ping }
+            SortOption.IRAN_COMPATIBLE -> res.sortedWith(
+                compareByDescending<VpnServer> { if (it.isIranCompatible) 100 else 0 }
+                    .thenByDescending { if (it.port == 995) 50 else 0 }
+                    .thenBy { if (it.ping <= 0) 9999 else it.ping }
                     .thenByDescending { it.speed }
+            )
+            SortOption.PING -> res.sortedWith(
+                compareBy<VpnServer> {
+                    if (it.probedLatencyMs != null && it.probedLatencyMs!! > 0) it.probedLatencyMs!!
+                    else if (it.ping <= 0) 9999 else it.ping
+                }.thenByDescending { it.speed }
             )
             SortOption.SPEED -> res.sortedByDescending { it.speed }
             SortOption.SESSIONS -> res.sortedByDescending { it.numVpnSessions }
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val availableCountries: StateFlow<List<Pair<String, String>>> = _servers.combine(_servers) { list, _ ->
-        list.groupBy { it.countryLong }
+    val availableCountries: StateFlow<List<Pair<String, String>>> = _servers.combine(_onlyIranCompatible) { list, iranOnly ->
+        val effectiveList = if (iranOnly) list.filter { it.isIranCompatible } else list
+        effectiveList.groupBy { it.countryLong }
             .map { (country, items) ->
                 val flag = items.firstOrNull()?.countryFlag ?: "🌐"
                 Pair(country, flag)
@@ -109,6 +140,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state == VpnConnectionState.CONNECTED) {
+                    connectionWatchdogJob?.cancel()
+                    _probeStatus.value = "اتصال پایدار برقرار شد"
                     startTimer()
                 } else if (state == VpnConnectionState.DISCONNECTED || state == VpnConnectionState.ERROR) {
                     stopTimer()
@@ -141,8 +174,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _servers.value = list
 
                 if (_selectedServer.value == null && list.isNotEmpty()) {
-                    // Pick the fastest server by default
-                    _selectedServer.value = list.firstOrNull { it.ping > 0 } ?: list.first()
+                    // Pick the fastest IRAN-COMPATIBLE server by default
+                    val iranCompatibles = list.filter { it.isIranCompatible }
+                    _selectedServer.value = iranCompatibles.firstOrNull { it.ping > 0 }
+                        ?: iranCompatibles.firstOrNull()
+                        ?: list.firstOrNull()
                 }
             } catch (e: Exception) {
                 // Handled gracefully
@@ -164,6 +200,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _countryFilter.value = country
     }
 
+    fun setOnlyIranCompatible(value: Boolean) {
+        _onlyIranCompatible.value = value
+    }
+
     fun setSortOption(option: SortOption) {
         _sortOption.value = option
     }
@@ -172,26 +212,109 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (connectionState.value == VpnConnectionState.CONNECTED ||
             connectionState.value == VpnConnectionState.CONNECTING ||
             connectionState.value == VpnConnectionState.AUTHENTICATING) {
+            connectionWatchdogJob?.cancel()
             vpnController.disconnect()
             true
         } else {
-            val target = _selectedServer.value ?: _servers.value.firstOrNull()
+            val target = _selectedServer.value ?: _servers.value.firstOrNull { it.isIranCompatible } ?: _servers.value.firstOrNull()
             if (target != null) {
-                vpnController.connect(target)
+                vpnController.connect(target, target.probedPort)
             } else {
                 false
             }
         }
     }
 
-    fun autoConnectFastest(): Boolean {
-        val fastest = _servers.value.filter { it.ping > 0 }.minByOrNull { it.ping }
-            ?: _servers.value.firstOrNull()
-        if (fastest != null) {
-            _selectedServer.value = fastest
-            return vpnController.connect(fastest)
+    /**
+     * Smart Iran Auto-Connect:
+     * 1. Filters non-blocked Iran-compatible servers (ports 995, non-standard high ports, non-Tsukuba subnets).
+     * 2. Concurrently probes TCP socket reachability on candidate servers directly through the user's cellular/WiFi connection.
+     * 3. Selects the verified reachable server with the lowest latency.
+     * 4. Starts OpenVPN with anti-throttling & MTU tuning.
+     * 5. Runs an automatic failover watchdog (switches to the next candidate if not connected within 9 seconds).
+     */
+    fun smartConnectIran() {
+        if (connectionState.value == VpnConnectionState.CONNECTED ||
+            connectionState.value == VpnConnectionState.CONNECTING ||
+            connectionState.value == VpnConnectionState.AUTHENTICATING) {
+            connectionWatchdogJob?.cancel()
+            vpnController.disconnect()
+            return
         }
-        return false
+
+        viewModelScope.launch {
+            _isProbing.value = true
+            _probeStatus.value = "🔍 غربالگری سرورهای سازگار با اینترنت ایران..."
+
+            val candidates = _servers.value.filter { it.isIranCompatible }
+                .sortedWith(
+                    compareByDescending<VpnServer> { if (it.port == 995) 50 else 0 }
+                        .thenBy { if (it.ping <= 0) 9999 else it.ping }
+                        .thenByDescending { it.speed }
+                )
+
+            if (candidates.isEmpty()) {
+                _isProbing.value = false
+                _probeStatus.value = "سرور مناسبی در لیست یافت نشد"
+                return@launch
+            }
+
+            _probeStatus.value = "⚡ در حال سنجش زنده سوکت از اینترنت دستگاه شما..."
+            val probeResults = TcpReachabilityScanner.probeBatch(candidates, timeoutMs = 1800, maxConcurrency = 10)
+            val responsive = probeResults.filter { it.isReachable }.sortedBy { it.latencyMs }
+
+            _isProbing.value = false
+
+            val queue = if (responsive.isNotEmpty()) {
+                responsive.map { Pair(it.server, it.responsivePort) }
+            } else {
+                // If probes timed out, take the top 5 candidates directly
+                candidates.take(5).map { Pair(it, it.port) }
+            }
+
+            attemptConnectWithFailover(queue, attemptIndex = 0)
+        }
+    }
+
+    private fun attemptConnectWithFailover(queue: List<Pair<VpnServer, Int>>, attemptIndex: Int) {
+        if (attemptIndex >= queue.size) {
+            _probeStatus.value = "پاسخی از سرورهای انتخابی دریافت نشد"
+            return
+        }
+
+        val (targetServer, targetPort) = queue[attemptIndex]
+        _selectedServer.value = targetServer
+
+        val attemptNum = attemptIndex + 1
+        _probeStatus.value = "اتصال به ${targetServer.countryLong} (پورت $targetPort)... [تلاش $attemptNum از ${queue.size}]"
+
+        vpnController.connect(targetServer, targetPort)
+
+        connectionWatchdogJob?.cancel()
+        connectionWatchdogJob = viewModelScope.launch {
+            delay(9000L)
+            val currentState = vpnController.connectionState.value
+            if (currentState != VpnConnectionState.CONNECTED) {
+                Log.w("MainViewModel", "Server ${targetServer.ip}:$targetPort timed out after 9s, switching...")
+                vpnController.disconnect()
+                delay(600L)
+                attemptConnectWithFailover(queue, attemptIndex + 1)
+            }
+        }
+    }
+
+    /**
+     * Probes all visible servers in the current list to display real live latency badges.
+     */
+    fun probeVisibleServers() {
+        viewModelScope.launch {
+            _isProbing.value = true
+            _probeStatus.value = "در حال سنجش زنده تاخیر..."
+            val visible = filteredServers.value.take(15)
+            TcpReachabilityScanner.probeBatch(visible, timeoutMs = 1800, maxConcurrency = 10)
+            _isProbing.value = false
+            _probeStatus.value = "سنجش زنده پایان یافت"
+        }
     }
 
     fun formatDuration(seconds: Long): String {
@@ -207,6 +330,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        connectionWatchdogJob?.cancel()
         stopTimer()
         vpnController.release()
     }
