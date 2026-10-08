@@ -8,9 +8,9 @@ package com.helboy.vpnclub.data.model
  * - RISEUP: Riseup VPN (riseup.net), donation-funded, no account needed. Censorship-resistant
  *   OpenVPN with obfs support. Client cert is issued by a public API and is valid for 90 days.
  */
-enum class VpnProvider(val displayName: String, val description: String) {
-    VPNGATE("VPNGate (داوطلبین)", "سرورهای داوطلبین ژاپنی — رایگان، بدون نیاز به اکانت، پورت ۹۹۵ (SSTP) برای ایران"),
-    RISEUP("Riseup VPN", "سرویس رایگان ضد سانسور — بدون نیاز به ثبت‌نام، گواهی ۹۰ روزه از API عمومی");
+enum class VpnProvider(val displayName: String, val shortCode: String, val description: String) {
+    VPNGATE("VPNGate (داوطلبین)", "VPNGate", "سرورهای داوطلبین ژاپنی — رایگان، بدون نیاز به اکانت، پورت ۹۹۵ (SSTP) برای ایران"),
+    RISEUP("Riseup VPN", "Riseup", "سرویس رایگان ضد سانسور — بدون نیاز به ثبت‌نام، گواهی ۹۰ روزه از API عمومی");
 
     val isCertBased: Boolean
         get() = this == RISEUP
