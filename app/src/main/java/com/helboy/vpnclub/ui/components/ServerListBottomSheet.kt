@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.helboy.vpnclub.data.model.AuthMode
 import com.helboy.vpnclub.data.model.VpnServer
 import com.helboy.vpnclub.ui.theme.BorderDark
 import com.helboy.vpnclub.ui.theme.CardBg
@@ -389,7 +390,11 @@ private fun ServerListItem(
                                     .padding(horizontal = 5.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (server.port == 995) "🇮🇷 SSTP/995" else "🇮🇷 سازگار با ایران",
+                                    text = when {
+                                        server.authMode == AuthMode.CLIENT_CERT -> "🔒 ${server.provider.shortCode}"
+                                        server.port == 995 -> "🇮🇷 SSTP/995"
+                                        else -> "🇮🇷 سازگار با ایران"
+                                    },
                                     color = StatusGreen,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold

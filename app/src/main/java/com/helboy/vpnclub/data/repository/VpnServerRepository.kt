@@ -29,31 +29,51 @@ class VpnServerRepository(private val context: Context) {
         "https://www.vpngate.net/api/iphone/"
     )
 
+    private val riseupFetcher = RiseupProviderFetcher(client)
+
     suspend fun getServers(forceRefresh: Boolean = false): List<VpnServer> = withContext(Dispatchers.IO) {
         // If not force refreshing and cache exists and is fresh (< 2 hours), load from cache first
         if (!forceRefresh && cacheFile.exists() && cacheFile.length() > 1000) {
             val cachedList = parseCsvFile(cacheFile)
             if (cachedList.isNotEmpty()) {
-                return@withContext cachedList
+                return@withContext mergeProviders(cachedList, forceRefresh)
             }
         }
 
         // Try downloading from live mirrors
         val networkList = fetchFromMirrors()
         if (networkList.isNotEmpty()) {
-            return@withContext networkList
+            return@withContext mergeProviders(networkList, forceRefresh)
         }
 
         // If network failed, check cache
         if (cacheFile.exists() && cacheFile.length() > 1000) {
             val cachedList = parseCsvFile(cacheFile)
             if (cachedList.isNotEmpty()) {
-                return@withContext cachedList
+                return@withContext mergeProviders(cachedList, forceRefresh)
             }
         }
 
         // Ultimate fallback: bundled starter asset
-        loadFromAssets()
+        mergeProviders(loadFromAssets(), forceRefresh)
+    }
+
+    /**
+     * Merges VPNGate servers with the secondary free provider (Riseup).
+     * Riseup is fetched on every refresh; failures are non-fatal — VPNGate alone is still usable.
+     */
+    private suspend fun mergeProviders(vpngateList: List<VpnServer>, forceRefresh: Boolean): List<VpnServer> {
+        val combined = vpngateList.toMutableList()
+        try {
+            val riseup = riseupFetcher.fetchServers()
+            if (riseup.isNotEmpty()) {
+                Log.i(TAG, "Fetched ${riseup.size} Riseup servers")
+                combined.addAll(0, riseup)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Riseup provider unavailable: ${e.message}")
+        }
+        return combined
     }
 
     private fun fetchFromMirrors(): List<VpnServer> {

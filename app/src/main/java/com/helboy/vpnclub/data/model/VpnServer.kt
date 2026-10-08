@@ -19,11 +19,24 @@ data class VpnServer(
     val logType: String = "",
     val operator: String = "",
     val message: String = "",
-    val configDataBase64: String = ""
+    val configDataBase64: String = "",
+    val provider: VpnProvider = VpnProvider.VPNGATE,
+    val authMode: AuthMode = AuthMode.DEFAULT_USERPASS,
+    /** PEM blocks for cert-based providers (Riseup): <ca>, <cert>, <key> inline */
+    val caCertPem: String = "",
+    val clientCertPem: String = "",
+    val clientKeyPem: String = ""
 ) {
     // Dynamically tested reachability latency & port from the user's active device connection
     var probedLatencyMs: Int? = null
     var probedPort: Int? = null
+
+    /** True when this entry is SSTP-capable (MS-SSTP on port 995) — the most Iran-reliable transport. */
+    val isSstp: Boolean
+        get() = port == 995
+
+    val providerName: String
+        get() = provider.displayName
 
     val isTsukubaSubnet: Boolean
         get() = ip.startsWith("219.100.37.") || ip.startsWith("219.100.") || ip.startsWith("130.158.")
@@ -44,6 +57,8 @@ data class VpnServer(
     val isIranCompatible: Boolean
         get() {
             if (isTsukubaSubnet) return false
+            // Riseup is purpose-built for censorship resistance — always offer it in Iran mode.
+            if (provider.isCertBased) return true
             return protocol.equals("TCP", ignoreCase = true) || port == 995 || port > 1024
         }
 
@@ -123,8 +138,14 @@ data class VpnServer(
      * 2. Supports customPort override (e.g. falling back to port 995 if 443 is filtered).
      * 3. Injects cellular MTU and MSS clamping (mssfix 1280) to prevent packet drops on MCI/Irancell LTE.
      * 4. Injects auto-credentials (auth-user-pass) and full gateway routing.
+     * 5. For cert-based providers (Riseup), injects the inline <ca>/<cert>/<key> blocks.
      */
     fun getDecodedOvpnConfig(customPort: Int? = null): String {
+        // Cert-based providers have no VPNGate base64 blob — build the config from the PEM material.
+        if (authMode == AuthMode.CLIENT_CERT) {
+            return buildCertBasedConfig(customPort)
+        }
+
         if (configDataBase64.isBlank()) return ""
         val bytes = Base64.decode(configDataBase64, Base64.DEFAULT)
         var configStr = String(bytes, StandardCharsets.UTF_8)
@@ -164,6 +185,51 @@ data-ciphers-fallback AES-128-CBC
         configStr = configStr + "\n" + tuningDirectives
 
         return configStr
+    }
+
+    /**
+     * Builds a complete OpenVPN client config for cert-based providers (Riseup).
+     * Mirrors the official riseup-vpn-configurator template, adapted for inline PEM blocks
+     * and Iran cellular tuning.
+     */
+    private fun buildCertBasedConfig(customPort: Int? = null): String {
+        val targetPort = if (customPort != null && customPort > 0) customPort else port
+        val shortHost = hostName.substringBefore('.')
+
+        return """
+client
+dev tun
+
+remote $ip $targetPort
+proto tcp
+verify-x509-name $shortHost name
+
+cipher AES-256-GCM
+tls-version-min 1.2
+
+resolv-retry infinite
+keepalive 10 60
+nobind
+persist-key
+persist-tun
+verb 3
+
+remote-cert-tls server
+remote-cert-eku "TLS Web Server Authentication"
+
+redirect-gateway def1
+
+# VPN CLUB Anti-Throttle & Cellular Tuning
+mssfix 1280
+tun-mtu 1400
+
+<ca>
+$caCertPem</ca>
+<cert>
+$clientCertPem</cert>
+<key>
+$clientKeyPem</key>
+""".trimIndent()
     }
 
     companion object {

@@ -6,6 +6,7 @@ import android.net.VpnService
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.helboy.vpnclub.data.model.AuthMode
 import com.helboy.vpnclub.data.model.VpnServer
 import de.blinkt.openvpn.VpnProfile
 import de.blinkt.openvpn.core.ConfigParser
@@ -103,10 +104,12 @@ class OpenVpnController(private val context: Context) :
             profile.mName = "VPN CLUB — ${server.countryLong} (${server.ip}:$targetPort)"
 
             // 1. Auto-inject default VPNGate credentials (vpn / vpn) in profile and password cache
-            profile.mUsername = "vpn"
-            profile.mPassword = "vpn"
-            profile.mProfileCreator = context.packageName
-            PasswordCache.setCachedPassword(profile.getUUIDString(), PasswordCache.AUTHPASSWORD, "vpn")
+            //    Cert-based providers (Riseup) carry their own inline <cert>/<key> and need no password.
+            if (server.authMode != AuthMode.CLIENT_CERT) {
+                profile.mUsername = "vpn"
+                profile.mPassword = "vpn"
+                PasswordCache.setCachedPassword(profile.getUUIDString(), PasswordCache.AUTHPASSWORD, "vpn")
+            }
 
             // 2. OpenVPN 2.4.x SoftEther compatibility mode (critical for SoftEther 2013 servers)
             profile.mCompatMode = 20400 // VPN_PROFILE_COMPAT_MODE_24X
@@ -116,7 +119,12 @@ class OpenVpnController(private val context: Context) :
             profile.mCheckRemoteCN = false
 
             // 3. Ensure user-password authentication type is active
-            if (profile.mAuthenticationType == VpnProfile.TYPE_CERTIFICATES ||
+            //    Cert-based providers keep their certificate auth; do not downgrade them.
+            if (server.authMode == AuthMode.CLIENT_CERT) {
+                if (profile.mAuthenticationType != VpnProfile.TYPE_CERTIFICATES) {
+                    profile.mAuthenticationType = VpnProfile.TYPE_CERTIFICATES
+                }
+            } else if (profile.mAuthenticationType == VpnProfile.TYPE_CERTIFICATES ||
                 profile.mAuthenticationType == VpnProfile.TYPE_USERPASS_CERTIFICATES) {
                 profile.mAuthenticationType = VpnProfile.TYPE_USERPASS_CERTIFICATES
             } else {
