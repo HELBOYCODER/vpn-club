@@ -46,6 +46,7 @@ object HealthTester {
                 .openConnection(proxy) as HttpURLConnection
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
+            conn.setRequestProperty("User-Agent", "VPNClub/1.0")
             val start = System.currentTimeMillis()
             var read = 0L
             val buf = ByteArray(32 * 1024)
@@ -77,6 +78,7 @@ object HealthTester {
             conn.doOutput = true
             conn.setRequestMethod("POST")
             conn.setRequestProperty("Content-Type", "application/octet-stream")
+            conn.setRequestProperty("User-Agent", "VPNClub/1.0")
             val payload = ByteArray(bytes)
             java.security.SecureRandom().nextBytes(payload)
             val start = System.currentTimeMillis()
