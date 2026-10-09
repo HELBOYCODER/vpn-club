@@ -38,13 +38,14 @@ class VpnClubEngine(private val context: Context) {
 
     /** زیرساخت‌های پایدار — مخازن اشتراک همیشه‌به‌روز. */
     val defaultSubscriptions = listOf(
-        "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Splitted-By-Protocol/vless.txt",
-        "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Splitted-By-Protocol/vmess.txt",
-        "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Splitted-By-Protocol/trojan.txt",
-        "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Splitted-By-Protocol/ss.txt",
+        // تأیید شده با تست زنده ۲۰۲۶-۱۰-۰۹ (code=200 و کانفیگ واقعی)
+        "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
+        "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
+        "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt",
+        "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt",
         "https://raw.githubusercontent.com/mahdibland/ShadowsocksAggregator/master/Eternity.txt",
-        "https://raw.githubusercontent.com/freefq/free/master/v2",
-        "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt"
+        "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt",
+        "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt"
     )
 
     var subscriptions: List<String> = defaultSubscriptions
@@ -77,7 +78,9 @@ class VpnClubEngine(private val context: Context) {
             }
             val injected = if (cleanIps.isNotEmpty()) tlsConfigs.mapIndexed { i, c ->
                 val ip = cleanIps[i % cleanIps.size]
-                c.withDial(ip.ip, ip.port)
+                // پورت خود کانفیگ اگر یکی از پورت‌های کلادفلر باشد حفظ می‌شود (SNI/Host دست‌نخورده)
+                val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
+                c.withDial(ip.ip, port)
             } else emptyList()
 
             // ترکیب: کانفیگ‌های تزریق‌شده اول (اولویت عبور از فیلترینگ)، بعد بقیه
