@@ -28,11 +28,17 @@ class XrayCore(private val socksPort: Int = 10808) {
         override fun startup(): Long { return 0 }
     }
 
+    /**
+     * وقتی ست شود، هسته به‌جای آدرس واقعی کانفیگ به این آدرس وصل می‌شود
+     * (پروکسی محلی تکه‌کننده‌ی ClientHello برای عبور از DPI).
+     * قالب: "127.0.0.1:PORT"
+     */
+    @Volatile var dialOverride: String? = null
+
     /** شروع هسته برای یک کانفیگ. true = موفق */
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
         try {
-            Seq.setContext(null) // app context از فراخواننده ست می‌شود قبل از start اولین بار
             val json = buildConfig(config)
             val ctrl = Libv2ray.newCoreController(callback)
             ctrl.startLoop(json, 0)
@@ -91,8 +97,9 @@ class XrayCore(private val socksPort: Int = 10808) {
     private fun outboundFor(c: ProxyConfig): JSONObject {
         val settings = JSONObject().put("servers", JSONArray().put(
             JSONObject()
-                .put("address", c.dialHost)
-                .put("port", c.dialPort)
+                // dialOverride: عبور از DPI — اتصال از طریق پروکسی محلی تکه‌کننده
+                .put("address", dialOverride?.substringBefore(':') ?: c.dialHost)
+                .put("port", dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort)
                 .let { o ->
                     if (c.uuidOrUser.isNotEmpty()) o.put("users", JSONArray().put(
                         when (c.scheme) {

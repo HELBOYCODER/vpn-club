@@ -38,21 +38,42 @@ class VpnClubEngine(private val context: Context) {
 
     /** زیرساخت‌های پایدار — مخازن اشتراک همیشه‌به‌روز. */
     val defaultSubscriptions = listOf(
-        // تأیید شده با تست زنده ۲۰۲۶-۱۰-۰۹ (code=200 و کانفیگ واقعی)
+        // تأیید شده با تست زنده ۲۰۲۶-۱۰-۱۰ (code=200 و کانفیگ واقعی)
         "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
         "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt",
         "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt",
         "https://raw.githubusercontent.com/mahdibland/ShadowsocksAggregator/master/Eternity.txt",
         "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt",
-        "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt"
+        "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
+        // منابع کانال t.me/wbnet (تأییدشده با تست زنده)
+        "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt",
+        "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/protocols/vless.txt",
+        "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt",
+        "https://github.com/Delta-Kronecker/V2ray-Config/raw/refs/heads/main/config/protocols/vless.txt",
+        "https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/refs/heads/main/configs/proxy_configs.txt",
+        "https://raw.githubusercontent.com/luxxuria/harvester/main/speed_tested.txt",
+        "https://raw.githubusercontent.com/F0rc3Run/F0rc3Run/refs/heads/main/splitted-by-protocol/vless.txt",
+        "https://raw.githubusercontent.com/ShadowException/VPN/refs/heads/main/configs/VPN-cat",
+        "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/refs/heads/main/ByeWhiteLists2.txt",
+        "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt",
+        "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/1.txt",
+        "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/10.txt",
+        "https://raw.githubusercontent.com/prominbro/sub/refs/heads/main/212.txt",
+        "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
     )
 
     var subscriptions: List<String> = defaultSubscriptions
 
     /**
-     * چرخه‌ی کامل. از کوثروتین UI یا WorkManager صدا زده می‌شود (تطویل کامل در IO).
-     * @return بهترین کانفیگ سالم یا null اگر هیچ‌کدام سالم نبود.
+     * چرخه‌ی کامل. از کوثروتین UI یا WorkManager صدا زده می‌شود (کامل در IO).
+     *
+     * استراتژی ضدگیر (درخواست کارفرما): از کانفیگ‌هایی که پینگ TCP جواب دادند،
+     * «هر بار یکی را تصادفی» برمی‌داریم، روی آن یک IP تمیز سالم کلادفلر تزریق
+     * می‌کنیم و تست واقعی (دانلود/آپلود از روی تونل) می‌گیریم. اولین کاندیدی که
+     * تونل زنده داشت وصل می‌شویم — به‌جای تست ۴۰ کاندید پشت‌سرهم که زمان می‌گیرد.
+     *
+     * @return کانفیگ متصل‌شده یا null اگر هیچ‌کدام سالم نبود.
      */
     suspend fun runFullCycle(onState: (EngineState) -> Unit): ProxyConfig? = withContext(Dispatchers.IO) {
         try {
@@ -66,55 +87,84 @@ class VpnClubEngine(private val context: Context) {
                 return@withContext null
             }
 
-            // ── فاز ۲: اسکن IP کلادفلر ────────────────────────────────────────
+            // ── فاز ۲: اسکن IP تمیز کلادفلر ───────────────────────────────────
             onState(EngineState(Phase.SCANNING_CF, "اسکن IPهای تمیز کلادفلر…", configCount = configs.size))
-            val cleanIps = CloudflareScanner.scan(perRange = 16, ports = listOf(443, 2053))
-                .take(20)
-
-            // ── فاز ۳: تزریق IP تازه روی کانفیگ‌های TLS-دار ───────────────────
-            val tlsConfigs = configs.filter { c ->
-                val q = c.query.toMap()
-                q["tls"] == "tls" || q["security"] in listOf("tls", "reality")
+            val cleanIps = CloudflareScanner.scan(perRange = 12, ports = listOf(443))
+                .take(15)
+            if (cleanIps.isEmpty()) {
+                onState(EngineState(Phase.FAILED, "هیچ IP تمیز کلادفلر پیدا نشد", configCount = configs.size))
+                return@withContext null
             }
-            val injected = if (cleanIps.isNotEmpty()) tlsConfigs.mapIndexed { i, c ->
-                val ip = cleanIps[i % cleanIps.size]
-                // پورت خود کانفیگ اگر یکی از پورت‌های کلادفلر باشد حفظ می‌شود (SNI/Host دست‌نخورده)
-                val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
-                c.withDial(ip.ip, port)
-            } else emptyList()
 
-            // ترکیب: کانفیگ‌های تزریق‌شده اول (اولویت عبور از فیلترینگ)، بعد بقیه
-            val candidates = (injected + configs).take(MAX_CANDIDATES)
-
-            // ── فاز ۴: تست سلامت (پینگ + دانلود + آپلود) ──────────────────────
-            onState(EngineState(Phase.TESTING, "تست پینگ/دانلود/آپلود…",
+            // ── فاز ۳: غربال TCP سریع → استخر کاندیدهای «پینگ‌دار» ─────────────
+            onState(EngineState(Phase.TESTING, "غربال سریع پینگ…",
                 configCount = configs.size, cleanIpCount = cleanIps.size))
+            val rng = java.security.SecureRandom()
+            // تزریق IP تمیز روی کانفیگ‌های TLS-دار (هر بار IP متفاوت — دور شدن از IPهای شلوغ)
+            val injected = configs.mapIndexed { i, c ->
+                if (c.query.toMap()["security"] in listOf("tls", "reality") ||
+                    c.query.toMap()["tls"] == "tls") {
+                    val ip = cleanIps[i % cleanIps.size]
+                    val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
+                    c.withDial(ip.ip, port)
+                } else c
+            }
+            // اول کاندیدهای تزریق‌شده (اولویت عبور از فیلترینگ)، بعد خام‌ها
+            val pool = (injected + configs).shuffled(rng).take(200)
+            val pinged = pool.asSequence()
+                .filter { HealthTester.tcpPing(it.dialHost, it.dialPort, timeoutMs = 1_500) in 1..MAX_TCP_MS }
+                .take(30)
+                .toList()
+            if (pinged.isEmpty()) {
+                onState(EngineState(Phase.FAILED, "هیچ کانفیگی پینگ نداد",
+                    configCount = configs.size, cleanIpCount = cleanIps.size))
+                return@withContext null
+            }
+
+            // ── فاز ۴: تست واقعی (هر بار یکی رندوم + تونل + دانلود/آپلود) ─────
             val health = mutableMapOf<String, HealthResult>()
-            var tested = 0
-            for (c in candidates) {
-                // برای تست دانلود/آپلود واقعی، هسته را موقتاً با این کانفیگ بالا می‌آوریم
-                val coreOk = xray.start(c)
+            val candidates = mutableListOf<ProxyConfig>()
+            val queue = pinged.toMutableList()
+            var attempt = 0
+            while (queue.isNotEmpty() && attempt < MAX_TUNNEL_ATTEMPTS) {
+                // هر بار یک کانفیگ رندوم از صف — جلوگیری از گیر کردن روی یک سرور بد
+                val c = queue.removeAt(rng.nextInt(queue.size))
+                attempt++
+                onState(EngineState(Phase.TESTING, "تست تونل $attempt از ${pinged.size}…",
+                    configs.size, cleanIps.size, health.values.count { it.isUsable }))
+
+                // FragmentProxy: Xray به‌جای آدرس واقعی، از تکه‌کننده‌ی ClientHello عبور می‌کند
+                val frag = if (c.isInjected) {
+                    FragmentProxy(c.dialHost, c.dialPort).also { f ->
+                        if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else f.stop()
+                    }
+                } else null
+
+                val coreOk = try { xray.start(c) } catch (_: Exception) { false }
                 val result = if (coreOk)
                     HealthTester.testConfig(c, VpnClubService.SOCKS_PORT)
                 else
                     HealthResult(c, -1, 0.0, 0.0, "core_fail")
                 xray.stop()
+                frag?.stop()
+                xray.dialOverride = null
+
                 health[keyOf(c)] = result
-                tested++
-                if (tested % 5 == 0)
-                    onState(EngineState(Phase.TESTING, "تست $tested از ${candidates.size}",
-                        configs.size, cleanIps.size, health.values.count { it.isUsable }))
+                candidates.add(c)
+                if (result.isUsable) {
+                    // ✅ اولین کانفیگ سالم — وصل شو
+                    store.save(candidates, health, cleanIps, System.currentTimeMillis())
+                    onState(EngineState(Phase.CONNECTING, "کانفیگ سالم پیدا شد",
+                        configs.size, cleanIps.size, 1))
+                    return@withContext c
+                }
             }
 
-            // ── فاز ۵: ذخیره و انتخاب بهترین ──────────────────────────────────
-            val usable = health.values.filter { it.isUsable }.sortedByDescending { it.score }
+            // هیچ‌کدام سالم نبود
             store.save(candidates, health, cleanIps, System.currentTimeMillis())
-            val best = usable.firstOrNull()?.config
-            onState(EngineState(
-                if (best != null) Phase.CONNECTING else Phase.FAILED,
-                if (best != null) "بهترین کانفیگ پیدا شد" else "کانفیگ سالمی پیدا نشد",
-                configs.size, cleanIps.size, usable.size))
-            best
+            onState(EngineState(Phase.FAILED, "کانفیگ سالمی پیدا نشد ($attempt تلاش)",
+                configs.size, cleanIps.size, 0))
+            null
         } catch (e: Exception) {
             onState(EngineState(Phase.FAILED, "خطا: ${e.message}"))
             null
@@ -143,6 +193,8 @@ class VpnClubEngine(private val context: Context) {
 
     companion object {
         const val MAX_CANDIDATES = 40
+        const val MAX_TCP_MS = 2_500L
+        const val MAX_TUNNEL_ATTEMPTS = 25
         fun keyOf(c: ProxyConfig): String = "\${c.scheme}|\${c.host}|\${c.port}|\${c.uuidOrUser}"
     }
 }

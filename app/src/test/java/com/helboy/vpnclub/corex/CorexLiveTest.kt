@@ -80,6 +80,9 @@ class CorexLiveTest {
 object SubscriptionFetcherTestSources {
     val VERIFIED = listOf(
         "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
-        "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt"
+        "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt",
+        // منابع کانال wbnet
+        "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt",
+        "https://raw.githubusercontent.com/ShadowException/VPN/refs/heads/main/configs/VPN-cat"
     )
 }
