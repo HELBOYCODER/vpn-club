@@ -9,64 +9,47 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import com.helboy.vpnclub.ui.screen.VPNClubScreen
+import com.helboy.vpnclub.ui.screen.OneButtonScreen
 import com.helboy.vpnclub.ui.theme.VPNClubTheme
 import com.helboy.vpnclub.ui.viewmodel.MainViewModel
 
+/**
+ * تک‌دکمه: هر ضربه = روشن/خاموش. مجوز VPN فقط بار اول از سیستم گرفته می‌شود.
+ */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-    private var pendingVpnAction: (() -> Unit)? = null
 
-    private val vpnPrepareLauncher = registerForActivityResult(
+    private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            pendingVpnAction?.invoke() ?: viewModel.toggleConnection()
+            viewModel.startCycle()
         }
-        pendingVpnAction = null
     }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        // Permission result handled
-    }
+    ) { _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request notification permission on Android 13+ for VPN foreground service status
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         setContent {
             VPNClubTheme {
-                VPNClubScreen(
-                    viewModel = viewModel,
-                    onConnectRequested = {
-                        val prepareIntent = viewModel.vpnController.isVpnServicePrepared()
-                        if (prepareIntent != null) {
-                            pendingVpnAction = { viewModel.toggleConnection() }
-                            vpnPrepareLauncher.launch(prepareIntent)
-                        } else {
-                            viewModel.toggleConnection()
-                        }
-                    },
-                    onSmartConnectRequested = {
-                        val prepareIntent = viewModel.vpnController.isVpnServicePrepared()
-                        if (prepareIntent != null) {
-                            pendingVpnAction = { viewModel.smartConnectIran() }
-                            vpnPrepareLauncher.launch(prepareIntent)
-                        } else {
-                            viewModel.smartConnectIran()
-                        }
-                    }
+                val ui by viewModel.ui.collectAsState()
+                OneButtonScreen(
+                    ui = ui,
+                    onToggle = { viewModel.toggle({ vpnPermissionLauncher.launch(it) }, {}) }
                 )
             }
         }

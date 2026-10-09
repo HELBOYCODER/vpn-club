@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.helboy.vpnclub"
-        minSdk = 24
+        minSdk = 29
         targetSdk = 35
         versionCode = 4
         versionName = "1.3.0"
@@ -55,6 +55,10 @@ android {
 
 dependencies {
     implementation(project(":vpnLib"))
+
+    // هسته‌ی PattNG: Xray + hev-socks5-tunnel
+    implementation(files("libs/libv2ray.aar"))
+    implementation(files("libs/hev-htproxy.aar"))
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
