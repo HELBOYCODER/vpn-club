@@ -24,6 +24,7 @@ enum class Phase { IDLE, FETCHING, SCANNING_CF, TESTING, CONNECTING, CONNECTED, 
  */
 class VpnClubEngine(private val context: Context) {
 
+    init { DiagLogger.appContext = context.applicationContext }
     private val store = ProfileStore(context)
     private val fetcher = SubscriptionFetcher()
     private val xray = XrayCore(VpnClubService.SOCKS_PORT).also { it.setAppContext(context) }
@@ -185,6 +186,7 @@ class VpnClubEngine(private val context: Context) {
                     else
                         HealthResult(target, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(80)}")
                     android.util.Log.d("VpnClubEngine", "cand ${target.host}:${target.port}/${c.scheme}/${variant.id} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
+                    DiagLogger.log("${variant.id} | ${target.host}:${target.port}/${c.scheme} | ${result.error ?: "OK down=${result.downloadBps.toInt()}B/s up=${result.uploadBps.toInt()}B/s"}")
                     xray.stop()
                     frag.stop()
                     xray.dialOverride = null
