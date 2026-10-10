@@ -144,10 +144,20 @@ class VpnClubEngine(private val context: Context) {
             }
             // اول خام‌ها (مسیر واقعی سرور)، بعد تزریق‌شده‌ها
             val pool = (configs + injected).distinctBy { keyOf(it) }.shuffled(rng).take(200)
-            val pinged = pool.asSequence()
-                .filter { HealthTester.tcpPing(it.dialHost, it.dialPort, timeoutMs = 1_500) in 1..MAX_TCP_MS }
-                .take(30)
-                .toList()
+            // غربال TCP موازی — sequential با timeout 1.5s روی استخر ۲۰۰تایی خیلی کند است
+            val pingPool = java.util.concurrent.Executors.newFixedThreadPool(24)
+            val aliveC = java.util.concurrent.atomic.AtomicInteger()
+            val pingFutures = pool.map { c -> pingPool.submit(java.util.concurrent.Callable {
+                val ms = HealthTester.tcpPing(c.dialHost, c.dialPort, timeoutMs = 1_500)
+                if (ms in 1..MAX_TCP_MS) { aliveC.incrementAndGet(); c } else null
+            }) }
+            pingPool.shutdown()
+            val collected = ArrayList<ProxyConfig>()
+            for (f in pingFutures) {
+                val r = runCatching { f.get(10, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull()
+                if (r is ProxyConfig) collected.add(r)
+            }
+            val pinged = collected.take(30)
             if (pinged.isEmpty()) {
                 onState(EngineState(Phase.FAILED, "هیچ کانفیگی پینگ نداد",
                     configCount = configs.size, cleanIpCount = cleanIps.size))
@@ -173,12 +183,12 @@ class VpnClubEngine(private val context: Context) {
                     // Variant IPv6 → آدرس کانفیگ را IPv6 کن
                     val target = if (variant.ipv6) {
                         val v6 = IranVariants.randomIpv6(variant.ipv6Prefix!!)
-                        c.withDial(v6, c.dialPort)
+                        c.withDial(v6, c.port)
                     } else c
                     xray.setVariant(variant)
 
                     // FragmentProxy محلی در کنار finalmask هسته (دو لایه)
-                    val frag = FragmentProxy(target.dialHost, target.dialPort).also { f ->
+                    val frag = FragmentProxy(target.dialHost ?: target.host, target.dialPort ?: target.port).also { f ->
                         if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else xray.dialOverride = null
                     }
 
@@ -186,9 +196,11 @@ class VpnClubEngine(private val context: Context) {
                     val result = if (coreOk)
                         HealthTester.testConfig(target, VpnClubService.SOCKS_PORT)
                     else
-                        HealthResult(target, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(80)}")
+                        HealthResult(target, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(300)}")
                     android.util.Log.d("VpnClubEngine", "cand ${target.host}:${target.port}/${c.scheme}/${variant.id} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
                     DiagLogger.log("${variant.id} | ${target.host}:${target.port}/${c.scheme} | ${result.error ?: "OK down=${result.downloadBps.toInt()}B/s up=${result.uploadBps.toInt()}B/s"}")
+                    if (result.error?.startsWith("core_fail") == true)
+                        DiagLogger.log("CONFIG_JSON: ${xray.lastConfigJson.take(600)}")
                     xray.stop()
                     frag.stop()
                     xray.dialOverride = null
@@ -253,6 +265,6 @@ class VpnClubEngine(private val context: Context) {
         const val MAX_CANDIDATES = 40
         const val MAX_TCP_MS = 2_500L
         const val MAX_TUNNEL_ATTEMPTS = 25
-        fun keyOf(c: ProxyConfig): String = "\${c.scheme}|\${c.host}|\${c.port}|\${c.uuidOrUser}"
+        fun keyOf(c: ProxyConfig): String = "${c.scheme}|${c.host}|${c.port}|${c.uuidOrUser}"
     }
 }

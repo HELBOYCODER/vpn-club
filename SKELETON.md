@@ -29,7 +29,7 @@ VpnClubService (foreground): CurrentConfigHolder.load + loadVariant → xray.sta
 | mci-ipv6-ff | همراه‌اول | IPv6 رندوم `2a06:98c1:312x::` | chrome | خالی | خالی | tlshello-0-len | h2,http/1.1 |
 | irancell-ff | ایرانسل | IP تمیز CF | **unsafe** | خالی | **semi-python** | tlshello-0-len | **http/1.1** (ws) |
 
-finalmask JSON (پریست دقیق PattNG): fragment tlshello lengths [0,104,1] delay[0] maxSplit0 + fragment 1-1 lengths[114,1] delay[1] maxSplit11.
+finalmask JSON (فرمت فورک patterniha — تاییدشده با باینری): هر fragment با **`length`/`delay`/`maxSplit` به‌صورت رشته‌ی تکی**، نه آرایه `lengths`. مثلا: fragment1: packets `tlshello`, length `104`; fragment2: packets `1-1`, length `114`. آرایه `lengths` → `LengthMin can't be 0` → parse fail.
 
 ## 3. نکات بحرانی (هرگز خراب نشود)
 
@@ -41,6 +41,13 @@ finalmask JSON (پریست دقیق PattNG): fragment tlshello lengths [0,104,1]
 6. variant برنده باید هم در تست و هم در VpnClubService اعمال شود (current_variant.id).
 7. هسته `.so` = patterniha/Xray-core 2026-10-08 — finalmask/ECH ساپورت می‌شود.
 8. GH release: اول tag ref بساز، بعد release، بعد asset؛ بدنه‌ی فارسی/ایموجی بلند نده (silent fail).
+9. **deviceId برای initCoreEnv** = base64 URL_SAFE/NO_PADDING/NO_WRAP یک آرایه‌ی ۳۲ بیتی (ANDROID_ID) — مثل v2rayNG. UUID hex → خطای «BaseKey must be...» در هسته (باگ v1.5.2).
+10. **فرمت outbound فورک FLAT است** (address/port/id در سطح settings، نه servers[]/vnext).
+11. **`keyOf` و هر string template — مراقب escape خورده‌ی `\${...}` باشد**: template literal escape‌شده همه را یکسان می‌کند → distinctBy فقط ۱ نگه می‌دارد → pool=1 (باگ v1.5.2).
+12. **Executors.submit با lambda نوع مختلط → Runnable انتخاب می‌شود و نتیجه دور ریخته می‌شود** → همیشه `submit(java.util.concurrent.Callable { ... })` صریح (باگ v1.5.2 — aliveCnt=152 ولی pinged=0).
+13. غربال TCP باید موازی (thread pool 24) باشد — sequential روی 200 کانفیگ عملاً هیچ‌وقت کامل نمی‌شود.
+14. **VpnClubService حتما در AndroidManifest ثبت شود** (BIND_VPN_SERVICE + VpnService intent-filter) — نبودِ آن → «Unable to start service ... not found» و TUN هرگز بالا نمی‌آید (باگ v1.5.2).
+15. redroid: `Cannot create interface` در Vpn.establish محدودیت redroid است (TUN نمی‌سازد) — باگ اپ نیست؛ engine تا سطح سرویس سبز است.
 
 ## 4. فایل‌ها
 
@@ -57,7 +64,8 @@ finalmask JSON (پریست دقیق PattNG): fragment tlshello lengths [0,104,1]
 | v1.4.2 | 0da5bd5 | **FIX ریشه‌ای: initCoreEnv + geoip assets + ذخیره لینک تزریقی** | «کار نکرد» (جزئیات نامشخص) |
 | v1.5.0 | fef88da | پروفایل‌های ایران (ECH/IPv6/F&F) | «کار نکرد» — نیاز به diag |
 | v1.5.1 | 13335b5 | DiagLogger + نمایش خطای دقیق در UI | منتظر تست کارفرما |
-| v1.5.2 | 0d663d7 | **سرور ساب خودمان روی CF Worker** (vpnclub-sub، 17 منبع، 5000 کانفیگ، کش 30د) به‌عنوان منبع اول | منتظر تست کارفرما |
+| v1.5.2 | 0d663d7 | سرور ساب خودمان روی CF Worker (vpnclub-sub، 17 منبع، 5000 کانفیگ، کش 30د) به‌عنوان منبع اول | باگ‌های 9–14 (پایین) |
+| v1.5.3 | (در حال ریلیز) | **FIX ریشه‌ای redroid: finalmask رشته‌ای + BaseKey درست + keyOf de-escape + submit Callable + پینگ موازی + VpnClubService در manifest** | redroid: هسته OK + تونل تست واقعی OK (دانلود 158KB/s)؛ TUN سراسری فقط روی گوشی واقعی (redroid TUN نمی‌سازد) |
 
 ## 7. زیرساخت سرور (Cloudflare — اکانت کارفرما)
 

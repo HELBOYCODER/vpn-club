@@ -44,20 +44,22 @@ object IranVariants {
         "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
 
     /**
-     * finalMask ی tlshello-0-len — پریست دقیق PattNG:
-     * fragment اول: tlshello، lengths 0/104/1، delay 0؛ fragment دوم: packets 1-1، length 114، delay 1.
+     * finalMask ی tlshello-0-len (متد F&F) — فرمت فورک patterniha/Xray-core:
+     * fragment اول: packets tlshello، length 104؛ fragment دوم: packets 1-1، length 114.
+     * توجه: length/delay/maxSplit رشته‌ی تکی هستند — آرایه‌ی "lengths" توسط هسته رد می‌شود
+     * (خطای "LengthMin can't be 0" — اثبات‌شده روی redroid با باینری واقعی).
      */
     fun fmTlsHello(): JSONObject = JSONObject().put("tcp", JSONArray().put(
         JSONObject().put("type", "fragment").put("settings", JSONObject()
             .put("packets", "tlshello")
-            .put("lengths", JSONArray(listOf("0", "104", "1")))
-            .put("delays", JSONArray(listOf("0")))
+            .put("length", "104")
+            .put("delay", "0")
             .put("maxSplit", "0"))
     ).put(
         JSONObject().put("type", "fragment").put("settings", JSONObject()
             .put("packets", "1-1")
-            .put("lengths", JSONArray(listOf("114", "1")))
-            .put("delays", JSONArray(listOf("1")))
+            .put("length", "114")
+            .put("delay", "1")
             .put("maxSplit", "11"))
     ))
 

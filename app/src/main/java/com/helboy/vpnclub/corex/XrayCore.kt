@@ -94,7 +94,7 @@ class XrayCore(private val socksPort: Int = 10808) {
                     }
                 }
             }
-            val deviceId = java.util.UUID.randomUUID().toString().replace("-", "")
+            val deviceId = deviceIdForXudp()
             Libv2ray.initCoreEnv(assetDir.absolutePath, deviceId)
         } catch (e: Exception) {
             envInitialized.set(false)
@@ -147,28 +147,24 @@ class XrayCore(private val socksPort: Int = 10808) {
     }
 
     private fun outboundFor(c: ProxyConfig): JSONObject {
-        val settings = JSONObject().put("servers", JSONArray().put(
-            JSONObject()
-                // dialOverride: عبور از DPI — اتصال از طریق پروکسی محلی تکه‌کننده
-                .put("address", dialOverride?.substringBefore(':') ?: c.dialHost)
-                .put("port", dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort)
-                .let { o ->
-                    if (c.uuidOrUser.isNotEmpty()) o.put("users", JSONArray().put(
-                        when (c.scheme) {
-                            "vless" -> JSONObject()
-                                .put("id", c.uuidOrUser)
-                                .put("flow", c.query.firstOrNull { it.first == "flow" }?.second ?: "")
-                                .put("encryption", "none")
-                            "vmess" -> JSONObject()
-                                .put("id", c.uuidOrUser)
-                                .put("alterId", (c.query.firstOrNull { it.first == "alterId" }?.second ?: "0").toIntOrNull() ?: 0)
-                                .put("security", c.query.firstOrNull { it.first == "encryption" }?.second ?: "auto")
-                            "trojan" -> JSONObject().put("password", c.uuidOrUser)
-                            else -> JSONObject().put("user", c.uuidOrUser)
-                        }
-                    )) else o
-                }
-        ))
+        val q0 = c.query.toMap()
+        val addr = dialOverride?.substringBefore(':') ?: c.dialHost
+        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
+        // فرمت فورک patterniha: settings تخت (address/port/id روی خود settings) — مثل CoreOutboundBuilder PattNG.
+        // (فرمت استاندارد servers[] در این فورک parse نمی‌شود — باگ «config error» روی redroid)
+        val settings = JSONObject()
+            .put("address", addr)
+            .put("port", port)
+        when (c.scheme) {
+            "vless" -> settings.put("id", c.uuidOrUser)
+                .put("flow", q0["flow"] ?: "")
+                .put("encryption", "none")
+            "vmess" -> settings.put("id", c.uuidOrUser)
+                .put("alterId", (q0["alterId"] ?: "0").toIntOrNull() ?: 0)
+                .put("security", q0["encryption"] ?: "auto")
+            "trojan" -> settings.put("password", c.uuidOrUser)
+            else -> settings.put("user", c.uuidOrUser)
+        }
 
         val stream = JSONObject()
         val q = c.query.toMap()
@@ -239,11 +235,10 @@ class XrayCore(private val socksPort: Int = 10808) {
 
         if (c.scheme == "ss") {
             // shadowsocks فرمت settings متفاوت دارد
-            out.put("settings", JSONObject().put("servers", JSONArray().put(
-                JSONObject()
-                    .put("address", c.dialHost).put("port", c.dialPort)
-                    .put("method", c.query.toMap()["method"] ?: "aes-256-gcm")
-                    .put("password", c.uuidOrUser))))
+            out.put("settings", JSONObject()
+                .put("address", c.dialHost).put("port", c.dialPort)
+                .put("method", c.query.toMap()["method"] ?: "aes-256-gcm")
+                .put("password", c.uuidOrUser))
         }
         return out
     }
@@ -254,4 +249,19 @@ class XrayCore(private val socksPort: Int = 10808) {
     }
 
     @Volatile private var appContext: android.content.Context? = null
+
+    /**
+     * BaseKey ی XUDP — باید base64 بی‌پدینگِ یک بایت‌آرایه‌ی ۳۲ بیتی باشد
+     * (دقیقاً مثل v2rayNG: ANDROID_ID → ۳۲ بایت → base64 URL_SAFE بدون padding).
+     * UUID خالی → خطای "BaseKey must be ..." در هسته.
+     */
+    private fun deviceIdForXudp(): String = try {
+        val ctx = appContext
+        val androidId = if (ctx != null)
+            android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+                ?: "vpnclubfallback"
+        else "vpnclubfallback"
+        val bytes = androidId.toByteArray(Charsets.UTF_8).copyOf(32)
+        android.util.Base64.encodeToString(bytes, android.util.Base64.NO_PADDING or android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
+    } catch (_: Exception) { "" }
 }
