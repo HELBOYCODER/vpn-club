@@ -47,6 +47,8 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     private val variantCache: Map<String, IranVariants.Variant> get() =
         activeVariant?.let { mapOf("" to it) } ?: emptyMap()
+    /** direct accessor — variantCache is keyed by "", c.tag is a random fragment like "US-1" so never matches */
+    private val effectiveVariant: IranVariants.Variant? get() = activeVariant
     /** شروع هسته برای یک کانفیگ. true = موفق */
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
@@ -193,8 +195,7 @@ class XrayCore(private val socksPort: Int = 10808) {
         val tlsEnabled = q["tls"] == "tls" || q["security"] == "tls" || c.scheme == "trojan"
         if (tlsEnabled) {
             // پروفایل ایران — اگر این کانفیگ یک Variant داشت، تنظیماتش را اعمال کن
-            val variantTag = c.tag
-            val variant = variantCache[variantTag]
+            val variant = effectiveVariant
             val tls = JSONObject()
                 .put("serverName", c.sniHost)
                 .put("allowInsecure", q["allowInsecure"] == "1")
