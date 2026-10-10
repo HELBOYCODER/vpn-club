@@ -56,7 +56,17 @@ finalmask JSON (پریست دقیق PattNG): fragment tlshello lengths [0,104,1]
 | v1.4.1 | 81a46fc | منابع wbnet + رندوم‌گیری + FragmentProxy | همان مشکل |
 | v1.4.2 | 0da5bd5 | **FIX ریشه‌ای: initCoreEnv + geoip assets + ذخیره لینک تزریقی** | «کار نکرد» (جزئیات نامشخص) |
 | v1.5.0 | fef88da | پروفایل‌های ایران (ECH/IPv6/F&F) | «کار نکرد» — نیاز به diag |
-| v1.5.1 | (فعلی) | DiagLogger + نمایش خطای دقیق در UI | منتظر تست کارفرما |
+| v1.5.1 | 13335b5 | DiagLogger + نمایش خطای دقیق در UI | منتظر تست کارفرما |
+| v1.5.2 | 0d663d7 | **سرور ساب خودمان روی CF Worker** (vpnclub-sub، 17 منبع، 5000 کانفیگ، کش 30د) به‌عنوان منبع اول | منتظر تست کارفرما |
+
+## 7. زیرساخت سرور (Cloudflare — اکانت کارفرما)
+
+- **Worker:** `vpnclub-sub` → https://vpnclub-sub.quilt-refract.workers.dev (کد: `/home/agentuser/projects/vpnclub-worker/`)
+  - `/sub` متن خام، `/sub?base64=1`، `/health`
+  - ۱۷ منبع را سمت سرور می‌کشد، base64 را دیکود می‌کند، دی‌داپ، سقف ۵۰۰۰، کش KV ۳۰ دقیقه
+  - KV: `vpnclub-subs` (id c2667955269745908b42ccc90f61b354)
+- توکن CF و اکانت‌آیدی در `~/.config/vpnclub/cf.env` (chmod 600، هرگز در چت/ریپو)
+- دیپلوی مجدد: `cd ~/projects/vpnclub-worker && source ~/.config/vpnclub/cf.env && npx wrangler deploy`
 
 ## 6. پروتکل عیب‌یابی (وقتی «کار نکرد»)
 
