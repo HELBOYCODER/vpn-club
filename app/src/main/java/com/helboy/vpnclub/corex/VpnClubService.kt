@@ -33,6 +33,8 @@ class VpnClubService : VpnService() {
                 val cfg = CurrentConfigHolder.load(this)
                 if (cfg == null) { stopSelf(); START_NOT_STICKY }
                 else {
+                    // پروفایل ایران (ECH / IPv6 / F&F) — همان که در تست موفق بود
+                    xray?.setVariant(CurrentConfigHolder.loadVariant(this))
                     val coreOk = xray?.start(cfg) == true
                     val tunOk = coreOk && tun?.start(this, SOCKS_PORT) == true
                     updateNotification(if (tunOk) "متصل — VPN CLUB" else "اتصال ناموفق")

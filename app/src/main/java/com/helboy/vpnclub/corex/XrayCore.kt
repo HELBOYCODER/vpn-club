@@ -36,12 +36,24 @@ class XrayCore(private val socksPort: Int = 10808) {
      */
     @Volatile var dialOverride: String? = null
 
+    /**
+     * پروفایل ایرانِ فعال برای هر کانفیگ (کلید = tag کانفیگ).
+     * [XrayCore.setVariant] قبل از [start] آن را ست می‌کند.
+     */
+    @Volatile private var activeVariant: IranVariants.Variant? = null
+
+    /** ست‌کردن پروفایل ایران برای کانفیگ بعدی. */
+    fun setVariant(v: IranVariants.Variant?) { activeVariant = v }
+
+    private val variantCache: Map<String, IranVariants.Variant> get() =
+        activeVariant?.let { mapOf("" to it) } ?: emptyMap()
     /** شروع هسته برای یک کانفیگ. true = موفق */
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
         try {
             initCoreEnv()
             val json = buildConfig(config)
+            lastConfigJson = json
             val ctrl = Libv2ray.newCoreController(callback)
             ctrl.startLoop(json, 0)
             controller = ctrl
@@ -58,6 +70,10 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     /** آخرین خطای هسته — برای دیباگ و نمایش وضعیت. */
     @Volatile var lastError: String = ""
+        private set
+
+    /** آخرین JSON کانفیگ — برای دیباگ. */
+    @Volatile var lastConfigJson: String = ""
         private set
 
     /**
@@ -180,11 +196,21 @@ class XrayCore(private val socksPort: Int = 10808) {
         // TLS: همیشه با SNI واقعی (دامنه اصلی)، روی IP تزریق‌شده
         val tlsEnabled = q["tls"] == "tls" || q["security"] == "tls" || c.scheme == "trojan"
         if (tlsEnabled) {
-            stream.put("security", "tls").put("tlsSettings", JSONObject()
+            // پروفایل ایران — اگر این کانفیگ یک Variant داشت، تنظیماتش را اعمال کن
+            val variantTag = c.tag
+            val variant = variantCache[variantTag]
+            val tls = JSONObject()
                 .put("serverName", c.sniHost)
                 .put("allowInsecure", q["allowInsecure"] == "1")
-                .put("fingerprint", q["fp"] ?: "chrome")
-                .put("alpn", JSONArray((q["alpn"] ?: "h2,http/1.1").split(","))))
+                .put("fingerprint", variant?.fingerprint ?: q["fp"] ?: "chrome")
+                .put("alpn", JSONArray((variant?.alpn ?: q["alpn"] ?: "h2,http/1.1").split(",")))
+            // ECH — روش همراه‌اول ۱
+            val ech = variant?.echConfigList
+            if (!ech.isNullOrBlank()) tls.put("echConfigList", ech)
+            // cipherSuites — روش ایرانسل (semi-python)
+            val cs = variant?.cipherSuites
+            if (!cs.isNullOrBlank()) tls.put("cipherSuites", cs)
+            stream.put("security", "tls").put("tlsSettings", tls)
         }
         val reality = q["security"] == "reality"
         if (reality) {
@@ -205,6 +231,9 @@ class XrayCore(private val socksPort: Int = 10808) {
             "hysteria2", "hy2" -> "hysteria2"
             else -> "vless"
         }
+
+        // finalmask — تکه‌بندی داخل هسته (فورک patterniha/Xray-core) — روش F&F
+        activeVariant?.finalMask?.let { stream.put("finalmask", it) }
 
         val out = JSONObject().put("protocol", protocol).put("settings", settings).put("streamSettings", stream)
 

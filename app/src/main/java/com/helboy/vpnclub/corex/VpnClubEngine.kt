@@ -152,50 +152,54 @@ class VpnClubEngine(private val context: Context) {
             }
 
             // ── فاز ۴: تست واقعی (هر بار یکی رندوم + تونل + دانلود/آپلود) ─────
+            // هر کانفیگ با همه‌ی پروفایل‌های ایران (MCI-ECH → MCI-IPv6 → Irancell) امتحان می‌شود
+            val variants = IranVariants.all()
             val candidates = mutableListOf<ProxyConfig>()
             val queue = pinged.toMutableList()
             var attempt = 0
             var lastErr = ""
-            while (queue.isNotEmpty() && attempt < MAX_TUNNEL_ATTEMPTS) {
+            outer@ while (queue.isNotEmpty() && attempt < MAX_TUNNEL_ATTEMPTS) {
                 // هر بار یک کانفیگ رندوم از صف — جلوگیری از گیر کردن روی یک سرور بد
                 val c = queue.removeAt(rng.nextInt(queue.size))
-                attempt++
-                onState(EngineState(Phase.TESTING, "تست تونل $attempt از ${pinged.size}…",
+                onState(EngineState(Phase.TESTING, "تست تونل…",
                     configs.size, cleanIps.size, candidates.size))
 
-                // FragmentProxy: Xray به‌جای آدرس واقعی، از تکه‌کننده‌ی ClientHello عبور می‌کند
-                val frag = FragmentProxy(c.dialHost, c.dialPort).also { f ->
-                    if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else xray.dialOverride = null
-                }
+                for (variant in variants) {
+                    attempt++
+                    if (attempt > MAX_TUNNEL_ATTEMPTS) break@outer
+                    // Variant IPv6 → آدرس کانفیگ را IPv6 کن
+                    val target = if (variant.ipv6) {
+                        val v6 = IranVariants.randomIpv6(variant.ipv6Prefix!!)
+                        c.withDial(v6, c.dialPort)
+                    } else c
+                    xray.setVariant(variant)
 
-                val coreOk = try { xray.start(c) } catch (e: Exception) { false }
-                val result = if (coreOk)
-                    HealthTester.testConfig(c, VpnClubService.SOCKS_PORT)
-                else
-                    HealthResult(c, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(80)}")
-                android.util.Log.d("VpnClubEngine", "cand ${c.host}:${c.port}/${c.scheme} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
-                if (result.error?.startsWith("core_fail") == true && frag.isRunning) {
-                    // شاید تکه‌کننده مشکل داشت — یک بار بدون آن هم امتحان کنیم
-                    xray.stop(); frag.stop(); xray.dialOverride = null
-                    val ok2 = try { xray.start(c) } catch (_: Exception) { false }
-                    if (ok2) {
-                        val r2 = HealthTester.testConfig(c, VpnClubService.SOCKS_PORT)
-                        if (r2.isUsable) { storeResult(candidates + c, cleanIps); return@withContext c }
-                        lastErr = r2.error ?: ""
+                    // FragmentProxy محلی در کنار finalmask هسته (دو لایه)
+                    val frag = FragmentProxy(target.dialHost, target.dialPort).also { f ->
+                        if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else xray.dialOverride = null
                     }
-                } else {
+
+                    val coreOk = try { xray.start(target) } catch (_: Exception) { false }
+                    val result = if (coreOk)
+                        HealthTester.testConfig(target, VpnClubService.SOCKS_PORT)
+                    else
+                        HealthResult(target, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(80)}")
+                    android.util.Log.d("VpnClubEngine", "cand ${target.host}:${target.port}/${c.scheme}/${variant.id} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
+                    xray.stop()
+                    frag.stop()
+                    xray.dialOverride = null
+                    xray.setVariant(null)
+
+                    candidates.add(target)
+                    if (result.isUsable) {
+                        // ✅ اولین ترکیب سالم — ذخیره‌ی کانفیگ با این پروفایل و وصل شو
+                        storeResult(candidates, cleanIps)
+                        lastVariantId = variant.id
+                        onState(EngineState(Phase.CONNECTING, "کانفیگ سالم پیدا شد (${variant.id})",
+                            configs.size, cleanIps.size, 1))
+                        return@withContext target
+                    }
                     lastErr = result.error ?: ""
-                }
-                xray.stop()
-                frag.stop()
-                xray.dialOverride = null
-                candidates.add(c)
-                if (result.isUsable) {
-                    // ✅ اولین کانفیگ سالم — وصل شو
-                    storeResult(candidates, cleanIps)
-                    onState(EngineState(Phase.CONNECTING, "کانفیگ سالم پیدا شد",
-                        configs.size, cleanIps.size, 1))
-                    return@withContext c
                 }
             }
 
@@ -214,9 +218,9 @@ class VpnClubEngine(private val context: Context) {
         store.save(candidates, candidates.associate { keyOf(it) to HealthResult(it, 0, 0.0, 0.0) }, cleanIps, System.currentTimeMillis())
     }
 
-    /** اتصال به کانفیگ مشخص — پس از تست سلامت. */
-    fun connectTo(context: Context, config: ProxyConfig): Boolean {
-        CurrentConfigHolder.save(context, config)
+    /** اتصال به کانفیگ مشخص — پس از تست سلامت (با پروفایل ایران). */
+    fun connectTo(context: Context, config: ProxyConfig, variantId: String? = null): Boolean {
+        CurrentConfigHolder.save(context, config, variantId)
         VpnClubService.start(context)
         return true
     }
@@ -229,10 +233,17 @@ class VpnClubEngine(private val context: Context) {
     /** چرخه‌ی خودکار کامل: پیدا کردن بهترین و اتصال. */
     suspend fun autoConnect(onState: (EngineState) -> Unit): Boolean {
         val best = runFullCycle(onState) ?: return false
-        connectTo(context, best)
-        onState(EngineState(Phase.CONNECTED, "متصل شد — بهترین کانفیگ", usableCount = 1))
+        val vid = lastVariantId
+        best.dialHost // keep
+        CurrentConfigHolder.save(context, best, vid)
+        VpnClubService.start(context)
+        onState(EngineState(Phase.CONNECTED, "متصل شد — پروفایل $vid", usableCount = 1))
         return true
     }
+
+    /** شناسه‌ی آخرین پروفایل موفق (در runFullCycle ست می‌شود). */
+    @Volatile var lastVariantId: String? = null
+        private set
 
     companion object {
         const val MAX_CANDIDATES = 40
