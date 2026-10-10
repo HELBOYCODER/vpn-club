@@ -21,6 +21,7 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     private var controller: CoreController? = null
     private val lock = Any()
+    private val envInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val callback = object : CoreCallbackHandler {
         override fun onEmitStatus(p0: Long, p1: String?): Long { return 0 }
@@ -39,14 +40,49 @@ class XrayCore(private val socksPort: Int = 10808) {
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
         try {
+            initCoreEnv()
             val json = buildConfig(config)
             val ctrl = Libv2ray.newCoreController(callback)
             ctrl.startLoop(json, 0)
             controller = ctrl
-            true
+            // منتظر بالا آمدن SOCKS listener بمانیم (تا ۵ ثانیه)
+            val deadline = System.currentTimeMillis() + 5_000
+            while (!isRunning && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            isRunning
         } catch (e: Exception) {
+            lastError = e.message ?: e.javaClass.simpleName
             stop()
             false
+        }
+    }
+
+    /** آخرین خطای هسته — برای دیباگ و نمایش وضعیت. */
+    @Volatile var lastError: String = ""
+        private set
+
+    /**
+     * راه‌اندازی یک‌باره‌ی محیط هسته (الزام libv2ray):
+     * کپی geoip.dat/geosite.dat از assets به دایرکتوری assets خصوصی + initCoreEnv.
+     * بدون این، startLoop exception می‌دهد (مخصوصاً با قوانین geoip:ir).
+     */
+    private fun initCoreEnv() {
+        if (!envInitialized.compareAndSet(false, true)) return
+        try {
+            val ctx = appContext ?: return
+            val assetDir = ctx.getDir("assets", android.content.Context.MODE_PRIVATE)
+            for (name in listOf("geoip.dat", "geosite.dat")) {
+                val f = java.io.File(assetDir, name)
+                if (!f.exists() || f.length() == 0L) {
+                    ctx.assets.open(name).use { input ->
+                        f.outputStream().use { input.copyTo(it) }
+                    }
+                }
+            }
+            val deviceId = java.util.UUID.randomUUID().toString().replace("-", "")
+            Libv2ray.initCoreEnv(assetDir.absolutePath, deviceId)
+        } catch (e: Exception) {
+            envInitialized.set(false)
+            lastError = "env: ${e.message}"
         }
     }
 
@@ -185,5 +221,8 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     fun setAppContext(context: android.content.Context) {
         Seq.setContext(context.applicationContext)
+        appContext = context.applicationContext
     }
+
+    @Volatile private var appContext: android.content.Context? = null
 }

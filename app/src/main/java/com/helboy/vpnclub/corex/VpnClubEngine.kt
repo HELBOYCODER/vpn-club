@@ -68,12 +68,12 @@ class VpnClubEngine(private val context: Context) {
     /**
      * چرخه‌ی کامل. از کوثروتین UI یا WorkManager صدا زده می‌شود (کامل در IO).
      *
-     * استراتژی ضدگیر (درخواست کارفرما): از کانفیگ‌هایی که پینگ TCP جواب دادند،
-     * «هر بار یکی را تصادفی» برمی‌داریم، روی آن یک IP تمیز سالم کلادفلر تزریق
-     * می‌کنیم و تست واقعی (دانلود/آپلود از روی تونل) می‌گیریم. اولین کاندیدی که
-     * تونل زنده داشت وصل می‌شویم — به‌جای تست ۴۰ کاندید پشت‌سرهم که زمان می‌گیرد.
+     * استراتژی ضدگیر: از کانفیگ‌هایی که پینگ TCP جواب دادند، «هر بار یکی را تصادفی»
+     * برمی‌داریم و تست واقعی (دانلود/آپلود از روی تونل) می‌گیریم. اولین کاندیدی که
+     * تونل زنده داشت وصل می‌شویم.
      *
-     * @return کانفیگ متصل‌شده یا null اگر هیچ‌کدام سالم نبود.
+     * تزریق IP فقط برای کانفیگ‌هایی که دامنه‌شان واقعاً پشت کلادفلر است انجام می‌شود
+     * (resolve واقعی) — تزریق کور روی همه، کانفیگ‌های سالم غیر-CF را خراب می‌کند.
      */
     suspend fun runFullCycle(onState: (EngineState) -> Unit): ProxyConfig? = withContext(Dispatchers.IO) {
         try {
@@ -100,17 +100,47 @@ class VpnClubEngine(private val context: Context) {
             onState(EngineState(Phase.TESTING, "غربال سریع پینگ…",
                 configCount = configs.size, cleanIpCount = cleanIps.size))
             val rng = java.security.SecureRandom()
-            // تزریق IP تمیز روی کانفیگ‌های TLS-دار (هر بار IP متفاوت — دور شدن از IPهای شلوغ)
-            val injected = configs.mapIndexed { i, c ->
-                if (c.query.toMap()["security"] in listOf("tls", "reality") ||
-                    c.query.toMap()["tls"] == "tls") {
+            val q: (ProxyConfig) -> Map<String, String> = { it.query.toMap() }
+            val tlsOf: (ProxyConfig) -> Boolean = { c ->
+                q(c)["security"] in listOf("tls", "reality") || q(c)["tls"] == "tls" || c.scheme == "trojan"
+            }
+
+            // تشخیص واقعی پشت-کلادفلر بودن: resolve دامنه‌ها (کش در همان حلقه ساخته می‌شود)
+            val cfNets = listOf(
+                "173.245.48", "103.21.244", "103.22.200", "103.31.4", "141.101.64",
+                "108.162.192", "190.93.240", "188.114.96", "197.234.240", "198.41.128",
+                "162.158", "131.0.72"
+            )
+            val cfHosts = HashMap<String, Boolean>()
+            fun isBehindCf(c: ProxyConfig): Boolean {
+                val h = c.host
+                if (h !in cfHosts) {
+                    cfHosts[h] = try {
+                        val addrs = java.net.InetAddress.getAllByName(h)
+                        // اگر هر آدرس در رنج‌های CF بود → پشت کلادفلر
+                        addrs.any { a ->
+                            val ip = a.hostAddress ?: return@any false
+                            val parts = ip.split(".").mapNotNull { it.toIntOrNull() }
+                            parts.size == 4 && cfNets.any { net ->
+                                val n = net.split(".").map { it.toInt() }
+                                (parts[0] == n[0] && parts[1] == n[1] && parts[2] == n[2])
+                            } || parts[0] == 104 || parts[0] == 172 && parts[1] in 64..71
+                        }
+                    } catch (_: Exception) { false }
+                }
+                return cfHosts[h]!!
+            }
+
+            // تزریق IP تمیز فقط روی کانفیگ‌های TLS پشت کلادفلر
+            val injected = configs.filter { tlsOf(it) }.mapIndexed { i, c ->
+                if (isBehindCf(c)) {
                     val ip = cleanIps[i % cleanIps.size]
                     val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
                     c.withDial(ip.ip, port)
                 } else c
             }
-            // اول کاندیدهای تزریق‌شده (اولویت عبور از فیلترینگ)، بعد خام‌ها
-            val pool = (injected + configs).shuffled(rng).take(200)
+            // اول خام‌ها (مسیر واقعی سرور)، بعد تزریق‌شده‌ها
+            val pool = (configs + injected).distinctBy { keyOf(it) }.shuffled(rng).take(200)
             val pinged = pool.asSequence()
                 .filter { HealthTester.tcpPing(it.dialHost, it.dialPort, timeoutMs = 1_500) in 1..MAX_TCP_MS }
                 .take(30)
@@ -122,53 +152,66 @@ class VpnClubEngine(private val context: Context) {
             }
 
             // ── فاز ۴: تست واقعی (هر بار یکی رندوم + تونل + دانلود/آپلود) ─────
-            val health = mutableMapOf<String, HealthResult>()
             val candidates = mutableListOf<ProxyConfig>()
             val queue = pinged.toMutableList()
             var attempt = 0
+            var lastErr = ""
             while (queue.isNotEmpty() && attempt < MAX_TUNNEL_ATTEMPTS) {
                 // هر بار یک کانفیگ رندوم از صف — جلوگیری از گیر کردن روی یک سرور بد
                 val c = queue.removeAt(rng.nextInt(queue.size))
                 attempt++
                 onState(EngineState(Phase.TESTING, "تست تونل $attempt از ${pinged.size}…",
-                    configs.size, cleanIps.size, health.values.count { it.isUsable }))
+                    configs.size, cleanIps.size, candidates.size))
 
                 // FragmentProxy: Xray به‌جای آدرس واقعی، از تکه‌کننده‌ی ClientHello عبور می‌کند
-                val frag = if (c.isInjected) {
-                    FragmentProxy(c.dialHost, c.dialPort).also { f ->
-                        if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else f.stop()
-                    }
-                } else null
+                val frag = FragmentProxy(c.dialHost, c.dialPort).also { f ->
+                    if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else xray.dialOverride = null
+                }
 
-                val coreOk = try { xray.start(c) } catch (_: Exception) { false }
+                val coreOk = try { xray.start(c) } catch (e: Exception) { false }
                 val result = if (coreOk)
                     HealthTester.testConfig(c, VpnClubService.SOCKS_PORT)
                 else
-                    HealthResult(c, -1, 0.0, 0.0, "core_fail")
+                    HealthResult(c, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(80)}")
+                android.util.Log.d("VpnClubEngine", "cand ${c.host}:${c.port}/${c.scheme} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
+                if (result.error?.startsWith("core_fail") == true && frag.isRunning) {
+                    // شاید تکه‌کننده مشکل داشت — یک بار بدون آن هم امتحان کنیم
+                    xray.stop(); frag.stop(); xray.dialOverride = null
+                    val ok2 = try { xray.start(c) } catch (_: Exception) { false }
+                    if (ok2) {
+                        val r2 = HealthTester.testConfig(c, VpnClubService.SOCKS_PORT)
+                        if (r2.isUsable) { storeResult(candidates + c, cleanIps); return@withContext c }
+                        lastErr = r2.error ?: ""
+                    }
+                } else {
+                    lastErr = result.error ?: ""
+                }
                 xray.stop()
-                frag?.stop()
+                frag.stop()
                 xray.dialOverride = null
-
-                health[keyOf(c)] = result
                 candidates.add(c)
                 if (result.isUsable) {
                     // ✅ اولین کانفیگ سالم — وصل شو
-                    store.save(candidates, health, cleanIps, System.currentTimeMillis())
+                    storeResult(candidates, cleanIps)
                     onState(EngineState(Phase.CONNECTING, "کانفیگ سالم پیدا شد",
                         configs.size, cleanIps.size, 1))
                     return@withContext c
                 }
             }
 
-            // هیچ‌کدام سالم نبود
-            store.save(candidates, health, cleanIps, System.currentTimeMillis())
-            onState(EngineState(Phase.FAILED, "کانفیگ سالمی پیدا نشد ($attempt تلاش)",
+            // هیچ‌کدام سالم نبود — پیام با جزئیات
+            storeResult(candidates, cleanIps)
+            onState(EngineState(Phase.FAILED, "کانفیگ سالمی پیدا نشد ($attempt تلاش، آخرین خطا: $lastErr)",
                 configs.size, cleanIps.size, 0))
             null
         } catch (e: Exception) {
             onState(EngineState(Phase.FAILED, "خطا: ${e.message}"))
             null
         }
+    }
+
+    private fun storeResult(candidates: List<ProxyConfig>, cleanIps: List<CloudflareScanner.CleanIp>) {
+        store.save(candidates, candidates.associate { keyOf(it) to HealthResult(it, 0, 0.0, 0.0) }, cleanIps, System.currentTimeMillis())
     }
 
     /** اتصال به کانفیگ مشخص — پس از تست سلامت. */
