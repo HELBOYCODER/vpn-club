@@ -39,6 +39,8 @@ class VpnClubEngine(private val context: Context) {
 
     /** زیرساخت‌های پایدار — مخازن اشتراک همیشه‌به‌روز. */
     val defaultSubscriptions = listOf(
+        // سرور خودمان (Cloudflare Worker) — جمع‌کننده‌ی همه‌ی مخازن، همیشه در دسترس، اولویت اول
+        "https://vpnclub-sub.quilt-refract.workers.dev/sub",
         // تأیید شده با تست زنده ۲۰۲۶-۱۰-۱۰ (code=200 و کانفیگ واقعی)
         "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
         "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
