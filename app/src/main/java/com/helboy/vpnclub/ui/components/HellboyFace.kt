@@ -42,8 +42,11 @@ import kotlin.math.sqrt
  *
  *  - خاموش: چهره کم‌نور و آرام نفس می‌کشد
  *  - در حال اتصال: ذرات بین «گوی» و «چهره» می‌چرخند (فکر کردن)
- *  - متصل: چهره کامل، **لبخند** می‌زند، چشم‌ها می‌درخشند، شعله‌ها با دانلود شعله‌ورتر می‌شوند
- *  - ناموفق: چهره **ناراحت** (گوشه‌های لب پایین)، تیره‌تر با لرزش
+ *  - متصل: ذرات با انیمیشن به چهره‌ی **لبخند** مورف می‌شوند، چشم‌ها می‌درخشند، شعله‌ها با دانلود
+ *  - ناموفق: مورف به چهره‌ی **ناراحت**، تیره‌تر با لرزش
+ *
+ * هر ذره سه رنگ دارد (خنثی/لبخند/ناراحت، از سه عکس هم‌قاب — tools/make_face_particles.py).
+ * اگر فقط عکس خنثی موجود باشد، فقط تغییر شکل ملایم لب اعمال می‌شود.
  */
 @Composable
 fun HellboyFace(
@@ -65,9 +68,12 @@ fun HellboyFace(
 
     // ۱ = چهره کامل، ۰ = گوی
     val form by animateFloatAsState(if (busy) 0.35f else 1f, tween(1100), label = "form")
-    // +۱ لبخند، ۰ خنثی، −۱ ناراحت
-    val mood by animateFloatAsState(when { connected -> 1f; failed -> -1f; else -> 0f },
-        spring(dampingRatio = 0.5f, stiffness = 60f), label = "mood")
+    // وزن هر حالت (۰..۱) — مورف نرم ۱.۴ ثانیه‌ای
+    val smileW by animateFloatAsState(if (connected) 1f else 0f, tween(1400), label = "smile")
+    val sadW by animateFloatAsState(if (failed) 1f else 0f, tween(1400), label = "sad")
+    val mood = smileW - sadW
+    // «انرژی گذار»: وقتی در حال مورف است ذرات اطراف دهان موج برمی‌دارند
+    val morph = (if (connected) 1f - smileW else smileW) + (if (failed) 1f - sadW else sadW)
     val light by animateFloatAsState(when { connected -> 1f; busy -> 0.85f; failed -> 0.6f; else -> 0.62f }, tween(800), label = "light")
     val fire by animateFloatAsState(if (connected) 0.35f + 0.65f * level(downBps) else if (busy) 0.6f else 0.2f, tween(500), label = "fire")
     val spark by animateFloatAsState(if (connected) level(upBps) else 0f, tween(300), label = "spark")
@@ -82,6 +88,11 @@ fun HellboyFace(
     }
 
     val pos = remember { FloatArray(data.n * 2) }
+    val sorted = remember { FloatArray(data.n * 2) }
+    val qIdx = remember { IntArray(data.n) }
+    val bucketCount = remember { IntArray(125) }
+    val bucketStart = remember { IntArray(125) }
+    val bucketFill = remember { IntArray(125) }
     val sparks = remember { FloatArray(160) }
     val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND } }
 
@@ -112,9 +123,15 @@ fun HellboyFace(
                 // ── حالت چهره: لب (لبخند/ناراحت) ──
                 val mdx = (u - MOUTH_U) / MOUTH_W
                 val mdy = (v - MOUTH_V) / MOUTH_H
-                if (abs(mdx) < 1.6f && abs(mdy) < 1.8f) {
+                if (!data.hasExpressions && abs(mdx) < 1.6f && abs(mdy) < 1.8f) {
                     val fall = (1f - (mdy * mdy) / 3.3f).coerceAtLeast(0f) * (1f - (mdx * mdx) / 2.6f).coerceAtLeast(0f)
                     v += -mood * MOUTH_CURVE * (mdx * mdx - 0.35f) * fall
+                }
+                // موج مورف: از دهان به بیرون پخش می‌شود
+                if (morph > 0.01f) {
+                    val dd = sqrt(mdx * mdx * MOUTH_W * MOUTH_W + mdy * mdy * MOUTH_H * MOUTH_H)
+                    val amp = morph * 0.010f * (1f - (dd / 0.35f)).coerceAtLeast(0f)
+                    v += amp * sin(dd * 60f - t * 14f); u += amp * 0.6f * cos(dd * 50f - t * 12f)
                 }
                 // شعله‌ها (بالای سر) با دانلود زنده‌تر
                 if (data.flame[i]) {
@@ -148,24 +165,23 @@ fun HellboyFace(
             drawIntoCanvas { c ->
                 val nc = c.nativeCanvas
                 paint.strokeWidth = S / 175f
-                for (b in 0 until data.bucketCount) {
-                    val cnt = data.bucketLen[b]; if (cnt == 0) continue
-                    paint.color = shade(data.bucketColor[b], light, mood)
-                    nc.drawPoints(pos, data.bucketStart[b] * 2, cnt * 2, paint)
+                // رنگ هر ذره = ترکیب سه حالت؛ هر فریم در ۱۲۵ سطل رنگ دسته‌بندی و با drawPoints رسم می‌شود
+                val w0 = (1f - smileW - sadW).coerceAtLeast(0f)
+                bucketCount.fill(0)
+                for (i in 0 until data.n) {
+                    val q = data.quant(i, w0, smileW, sadW)
+                    qIdx[i] = q; bucketCount[q]++
                 }
-                // خط لب درخشان تا حالت چهره خوانا باشد
-                val ma = (0.25f + 0.75f * abs(mood)) * form
-                if (ma > 0.05f) {
-                    paint.color = Color(1f, 0.78f, 0.45f, ma * 0.9f).toArgbInt()
-                    paint.strokeWidth = S / 130f
-                    val pts = FloatArray(44)
-                    for (k in 0 until 22) {
-                        val dx = -1.15f + 2.3f * k / 21f
-                        val u = MOUTH_U + dx * MOUTH_W
-                        val v = MOUTH_V - mood * MOUTH_CURVE * (dx * dx - 0.35f) + 0.004f
-                        pts[k * 2] = cx + (u - 0.5f) * S * breathe; pts[k * 2 + 1] = cy + (v - 0.5f) * S * breathe
-                    }
-                    nc.drawPoints(pts, paint)
+                var acc = 0
+                for (b in 0 until 125) { bucketStart[b] = acc; acc += bucketCount[b]; bucketFill[b] = bucketStart[b] }
+                for (i in 0 until data.n) {
+                    val k = bucketFill[qIdx[i]]++
+                    sorted[k * 2] = pos[i * 2]; sorted[k * 2 + 1] = pos[i * 2 + 1]
+                }
+                for (b in 0 until 125) {
+                    val cnt = bucketCount[b]; if (cnt == 0) continue
+                    paint.color = shade(QCOLOR[b], light, mood)
+                    nc.drawPoints(sorted, bucketStart[b] * 2, cnt * 2, paint)
                 }
                 if (sparkN > 0) {
                     paint.color = Color(0xFFFFC46B).toArgbInt(); paint.strokeWidth = S / 150f
@@ -200,50 +216,65 @@ private const val MOUTH_U = 0.446f
 private const val MOUTH_V = 0.609f
 private const val MOUTH_W = 0.085f
 private const val MOUTH_H = 0.030f
-private const val MOUTH_CURVE = 0.026f
+private const val MOUTH_CURVE = 0.012f
 private val EYES = listOf(0.337f to 0.450f, 0.472f to 0.428f)
 
-/** ذرات چهره، گروه‌بندی‌شده بر اساس رنگ (برای رسم سریع با drawPoints). */
+/** رنگ مرکز هر سطل (۵ سطح در هر کانال). */
+private val QCOLOR = IntArray(125) { q ->
+    val r = q / 25; val g = (q / 5) % 5; val b = q % 5
+    (0xFF shl 24) or ((r * 255 / 4) shl 16) or ((g * 255 / 4) shl 8) or (b * 255 / 4)
+}
+
+/** ذرات چهره: موقعیت ثابت + سه رنگ (خنثی/لبخند/ناراحت). */
 private class FaceData(
     val n: Int, val u: FloatArray, val v: FloatArray, val flame: BooleanArray,
     val sx: FloatArray, val sy: FloatArray, val sz: FloatArray,
-    val bucketCount: Int, val bucketStart: IntArray, val bucketLen: IntArray, val bucketColor: IntArray,
+    /** rgb[i*9 + e*3 + c]  e: 0 خنثی، 1 لبخند، 2 ناراحت */
+    private val rgb: FloatArray,
+    val hasExpressions: Boolean,
 ) {
+    fun quant(i: Int, w0: Float, w1: Float, w2: Float): Int {
+        val o = i * 9
+        val r = rgb[o] * w0 + rgb[o + 3] * w1 + rgb[o + 6] * w2
+        val g = rgb[o + 1] * w0 + rgb[o + 4] * w1 + rgb[o + 7] * w2
+        val b = rgb[o + 2] * w0 + rgb[o + 5] * w1 + rgb[o + 8] * w2
+        val qr = (r * 4f + 0.5f).toInt().coerceIn(0, 4)
+        val qg = (g * 4f + 0.5f).toInt().coerceIn(0, 4)
+        val qb = (b * 4f + 0.5f).toInt().coerceIn(0, 4)
+        return qr * 25 + qg * 5 + qb
+    }
+
     companion object {
         fun load(ctx: android.content.Context): FaceData = try {
             val bytes = ctx.assets.open("hellboy_particles.bin").use { it.readBytes() }
-            val n = ((bytes[0].toInt() and 0xFF) shl 8) or (bytes[1].toInt() and 0xFF)
-            // کوانتیزه‌ی رنگ به ۴×۴×۴ سطل
-            data class P(val u: Float, val v: Float, val r: Int, val g: Int, val b: Int, val q: Int)
-            val ps = (0 until n).map { i ->
-                val o = 2 + i * 5
-                val r = bytes[o + 2].toInt() and 0xFF; val g = bytes[o + 3].toInt() and 0xFF; val b = bytes[o + 4].toInt() and 0xFF
-                P((bytes[o].toInt() and 0xFF) / 255f, (bytes[o + 1].toInt() and 0xFF) / 255f, r, g, b,
-                    (r / 64) * 16 + (g / 64) * 4 + (b / 64))
-            }.sortedBy { it.q }
-            val u = FloatArray(n) { ps[it].u }; val v = FloatArray(n) { ps[it].v }
-            val flame = BooleanArray(n) { ps[it].v < 0.30f && ps[it].g > 110 && ps[it].r > 180 }
+            val v2 = bytes.size > 4 && bytes[0] == 'H'.code.toByte() && bytes[1] == 'B'.code.toByte() &&
+                bytes[2] == 'X'.code.toByte() && bytes[3] == '1'.code.toByte()
+            val hdr = if (v2) 4 else 0
+            val n = ((bytes[hdr].toInt() and 0xFF) shl 8) or (bytes[hdr + 1].toInt() and 0xFF)
+            val rec = if (v2) 11 else 5
+            val u = FloatArray(n); val v = FloatArray(n); val rgb = FloatArray(n * 9); val flame = BooleanArray(n)
+            var differs = false
+            for (i in 0 until n) {
+                val o = hdr + 2 + i * rec
+                u[i] = (bytes[o].toInt() and 0xFF) / 255f; v[i] = (bytes[o + 1].toInt() and 0xFF) / 255f
+                for (e in 0 until 3) for (c in 0 until 3) {
+                    val src = if (v2) o + 2 + e * 3 + c else o + 2 + c
+                    rgb[i * 9 + e * 3 + c] = (bytes[src].toInt() and 0xFF) / 255f
+                }
+                if (v2 && (rgb[i * 9] != rgb[i * 9 + 3] || rgb[i * 9 + 1] != rgb[i * 9 + 4])) differs = true
+                flame[i] = v[i] < 0.30f && rgb[i * 9] > 0.70f && rgb[i * 9 + 1] > 0.43f
+            }
             val golden = PI * (3 - sqrt(5.0))
             val sx = FloatArray(n); val sy = FloatArray(n); val sz = FloatArray(n)
             for (i in 0 until n) {
-                val y = 1 - (i * 7919 % n) / (n - 1f) * 2   // جای تصادفی ولی ثابت روی کره
+                val y = 1 - (i * 7919 % n) / (n - 1f) * 2
                 val rr = sqrt(1 - y * y); val th = golden * i
                 sx[i] = (cos(th) * rr).toFloat(); sy[i] = y; sz[i] = (sin(th) * rr).toFloat()
             }
-            val qs = ps.map { it.q }.distinct()
-            val start = IntArray(qs.size); val len = IntArray(qs.size); val col = IntArray(qs.size)
-            var idx = 0
-            qs.forEachIndexed { k, q ->
-                start[k] = idx
-                val group = ps.filter { it.q == q }
-                len[k] = group.size; idx += group.size
-                val r = group.sumOf { it.r } / group.size; val g = group.sumOf { it.g } / group.size; val b = group.sumOf { it.b } / group.size
-                col[k] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-            }
-            FaceData(n, u, v, flame, sx, sy, sz, qs.size, start, len, col)
+            FaceData(n, u, v, flame, sx, sy, sz, rgb, differs)
         } catch (_: Exception) {
             FaceData(0, FloatArray(0), FloatArray(0), BooleanArray(0), FloatArray(0), FloatArray(0), FloatArray(0),
-                0, IntArray(0), IntArray(0), IntArray(0))
+                FloatArray(0), false)
         }
     }
 }
