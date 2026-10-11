@@ -63,7 +63,9 @@ class VpnClubEngine(private val context: Context) {
         "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/1.txt",
         "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/10.txt",
         "https://raw.githubusercontent.com/prominbro/sub/refs/heads/main/212.txt",
-        "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
+        "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt",
+        // ZeroNet verified (tier 0, امضاشده) — تست واقعی ~۷۱٪ تونل سالم
+        "https://cdn.jsdelivr.net/gh/zeghostwriter/ZeroNet@crowd-data/verified.txt"
     )
 
     var subscriptions: List<String> = defaultSubscriptions
