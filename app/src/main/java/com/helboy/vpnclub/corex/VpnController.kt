@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -45,7 +46,12 @@ object VpnController {
         val needsPermission: Boolean = false
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default +
+        kotlinx.coroutines.CoroutineExceptionHandler { _, t ->
+            DiagLogger.log("CONTROLLER_EXC ${t.javaClass.simpleName}: ${t.message}")
+            _state.update { it.copy(testing = false) }
+        })
+    @Volatile private var switching = false
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -100,8 +106,8 @@ object VpnController {
         mainJob = scope.launch {
             setState(Phase.CONNECTING, "اتصال به ${label(entry)}…")
             if (!activate(entry)) {
-                setState(Phase.FAILED, "اتصال به این سرور ناموفق بود")
-                _state.update { it.copy(connected = false) }
+                if (_state.value.connected) setState(Phase.CONNECTED, "اتصال به این سرور ناموفق بود؛ سرور قبلی حفظ شد")
+                else setState(Phase.FAILED, "اتصال به این سرور ناموفق بود")
             }
         }
     }
@@ -132,7 +138,7 @@ object VpnController {
         if (saved.isNotEmpty()) {
             setState(Phase.TESTING, "بازبینی سرورهای منتخب قبلی…")
             for (e in saved) {
-                if (!scope.isActive) return
+                if (!currentCoroutineContext().isActive) return
                 val fresh = engine.retest(e) ?: continue
                 upsert(fresh)
                 if (connectFirst(fresh)) { fillServers(connectIfNone = false); return }
@@ -184,6 +190,26 @@ object VpnController {
 
     /** سرویس را روی این سرور بالا می‌آورد و صحت جریان داده را می‌سنجد. */
     private suspend fun activate(e: ServerEntry): Boolean {
+        val prev = if (_state.value.connected) _state.value.current else null
+        switching = true
+        try {
+            if (tryActivate(e)) return true
+        } finally { switching = false }
+        // شکست: یا به سرور قبلی برگرد، یا تونل بی‌دیتا را کامل ببند
+        if (prev != null) {
+            CurrentConfigHolder.save(app, prev)
+            VpnClubService.start(app)
+            withTimeoutOrNull(20_000) {
+                VpnClubService.status.first { (it.state == SvcState.UP && it.serverId == prev.id) || it.state == SvcState.FAILED }
+            }
+        } else {
+            VpnClubService.stop(app)
+            CurrentConfigHolder.clear(app)
+        }
+        return false
+    }
+
+    private suspend fun tryActivate(e: ServerEntry): Boolean {
         CurrentConfigHolder.save(app, e)
         VpnClubService.start(app)
         val st = withTimeoutOrNull(20_000) {
@@ -193,7 +219,6 @@ object VpnController {
         }
         if (st == null || st.state != SvcState.UP || st.serverId != e.id) {
             DiagLogger.log("ACTIVATE fail ${e.config.host} -> ${st?.state} ${st?.message}")
-            if (!_state.value.connected) { VpnClubService.stop(app) }
             return false
         }
         // همان‌جا یک درخواست واقعی از داخل تونل
@@ -213,7 +238,8 @@ object VpnController {
         val sinceKeep = if (_state.value.connected && _state.value.connectedSince > 0) _state.value.connectedSince else now
         _state.update { it.copy(phase = Phase.CONNECTED, message = "", connected = true, current = e,
             connectedSince = sinceKeep, latencyMs = lat) }
-        startStats(); startWatchdog()
+        startStats()
+        if (watchJob?.isActive != true) startWatchdog()
         return true
     }
 
@@ -246,7 +272,7 @@ object VpnController {
             var fails = 0
             while (isActive) {
                 delay(10_000)
-                if (!_state.value.connected) continue
+                if (!_state.value.connected || switching) continue
                 val lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
                 if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
                 fails++
@@ -263,9 +289,14 @@ object VpnController {
         val cur = _state.value.current
         _state.update { it.copy(message = "قطعی تشخیص داده شد — تعویض سرور…") }
         DiagLogger.log("FAILOVER from ${cur?.config?.host}")
+        // بدون اینترنت واقعی، سرورها را «ناسالم» حساب نکن و لیست را پاک نکن
+        if (HealthTester.tcpPing("1.1.1.1", 443, 2_500) < 0 && HealthTester.tcpPing("8.8.8.8", 443, 2_500) < 0) {
+            _state.update { it.copy(message = "اینترنت قطع است — منتظر بازگشت شبکه…") }
+            return
+        }
         val others = _state.value.servers.filter { it.id != cur?.id }
         for (e in others) {
-            if (!scope.isActive) return
+            if (!currentCoroutineContext().isActive) return
             val fresh = engine.retest(e)
             if (fresh == null) { drop(e); continue }
             if (activate(fresh)) return
@@ -285,8 +316,10 @@ object VpnController {
 
     private fun report(p: VpnClubEngine.Progress) {
         _state.update {
+            // وقتی وصلیم، تست پس‌زمینه نباید فاز/پیام اصلی را عوض کند
             it.copy(
-                phase = p.phase, message = p.message,
+                phase = if (it.connected) it.phase else p.phase,
+                message = if (it.connected) it.message else p.message,
                 configCount = if (p.configCount > 0) p.configCount else it.configCount,
                 cleanIpCount = if (p.cleanIpCount > 0) p.cleanIpCount else it.cleanIpCount
             )

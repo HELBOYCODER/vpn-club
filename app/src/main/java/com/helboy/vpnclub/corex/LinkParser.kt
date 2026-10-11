@@ -38,7 +38,7 @@ object LinkParser {
         val uri = URI(link)
         val host = cleanHost(uri.host) ?: return null
         val port = uri.port.takeIf { it > 0 } ?: return null
-        val uuid = uri.userInfo?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+        val uuid = uri.userInfo ?: "" // URI.userInfo از قبل decode شده؛ decode دوباره + را به فاصله تبدیل می‌کرد
         val q = uri.rawQuery.orEmpty().split("&")
             .filter { it.contains('=') }
             .map { p ->

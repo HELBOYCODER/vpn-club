@@ -263,9 +263,11 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     /** ALPN: پروفایل ایران > لینک > پیش‌فرض (ws/httpupgrade فقط http/1.1). */
     private fun alpnFor(net: String, variantAlpn: String?, linkAlpn: String?): List<String> {
+        // ws/httpupgrade با h2 کار نمی‌کنند (Upgrade فقط روی HTTP/1.1) — بعد از انتخاب اعمال می‌شود
+        if (net == "ws" || net == "httpupgrade") return listOf("http/1.1")
         val chosen = variantAlpn?.takeIf { it.isNotBlank() } ?: linkAlpn?.takeIf { it.isNotBlank() }
         if (chosen != null) return chosen.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        return if (net == "ws" || net == "httpupgrade") listOf("http/1.1") else listOf("h2", "http/1.1")
+        return listOf("h2", "http/1.1")
     }
 
     fun setAppContext(context: android.content.Context) {

@@ -22,7 +22,12 @@ object DiagLogger {
 
     @Volatile var appContext: Context? = null
 
-    fun log(msg: String) {
+    /** اسرار (uuid/رمز/کلید) از لاگ حذف می‌شوند — لاگ قابل کپی/اشتراک است. */
+    private fun redact(m: String): String = m
+        .replace(Regex("\"(id|password|user|publicKey|shortId)\"\\s*:\\s*\"[^\"]*\""), "\"$1\":\"***\"")
+
+    fun log(rawMsg: String) {
+        val msg = redact(rawMsg)
         try {
             val ctx = appContext ?: return
             val f = File(ctx.filesDir, "diag.log")

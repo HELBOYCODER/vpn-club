@@ -32,7 +32,9 @@ class Tun2Socks(private val context: Context) {
             val builder = service.Builder()
                 .setMtu(mtu)
                 .addAddress(VPN_IP, 30)
+                .addAddress(VPN_IP6, 126)
                 .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0) // نشت IPv6 را می‌بندد
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("8.8.8.8")
                 .setSession("VPN CLUB")
@@ -69,6 +71,7 @@ class Tun2Socks(private val context: Context) {
     companion object {
         private const val TAG = "Tun2Socks"
         private const val VPN_IP = "26.26.26.1"
+        private const val VPN_IP6 = "fd00:26::1"
 
         /**
          * آمار زنده‌ی تونل: Pair(آپلود، دانلود) بر حسب بایت تجمعی، یا null.
@@ -84,6 +87,7 @@ class Tun2Socks(private val context: Context) {
 tunnel:
   mtu: $mtu
   ipv4: $VPN_IP
+  ipv6: '$VPN_IP6'
 
 socks5:
   port: $socksPort

@@ -8,6 +8,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.security.SecureRandom
@@ -83,6 +85,9 @@ class VpnClubEngine(private val context: Context) {
     )
 
     @Volatile private var learnedVariant: String? = null
+
+    /** testXray و پورت ۱۰۸۰۹ مشترک است؛ هر تست باید انحصاری باشد. */
+    private val testLock = Mutex()
 
     fun savedServers(): List<ServerEntry> = store.loadServers()
     fun saveServers(list: List<ServerEntry>) = store.saveServers(list)
@@ -182,7 +187,7 @@ class VpnClubEngine(private val context: Context) {
     // ─────────────────────────────────────────────────────────────────────────
 
     /** تست یک ServerEntry آماده (برای بازبینی لیست ذخیره‌شده). null = ناسالم. */
-    suspend fun retest(e: ServerEntry): ServerEntry? = withContext(Dispatchers.IO) {
+    suspend fun retest(e: ServerEntry): ServerEntry? = withContext(Dispatchers.IO) { testLock.withLock {
         val tunnel = TunnelLauncher.launch(testXray, e) ?: return@withContext null
         try {
             val r = HealthTester.testTunnel(TEST_PORT)
@@ -191,7 +196,7 @@ class VpnClubEngine(private val context: Context) {
             else e.copy(latencyMs = r.latencyMs, downBps = r.downBps, upBps = r.upBps,
                 testedAt = System.currentTimeMillis())
         } finally { tunnel.stop() }
-    }
+    } }
 
     /**
      * کاندیدها را به‌ترتیب تست می‌کند تا [want] سرور سالم پیدا شود.
@@ -222,6 +227,7 @@ class VpnClubEngine(private val context: Context) {
                 disc.totalParsed, disc.cleanIps.size, tested, found))
 
             val variants = IranVariants.order(settings.carrierMode, learnedVariant)
+                .filter { !it.needsCf || cand.behindCf }
                 .let { if (learnedVariant != null) it.take(MAX_ATTEMPTS_LEARNED) else it }
 
             for (v in variants) {
@@ -229,10 +235,12 @@ class VpnClubEngine(private val context: Context) {
                 if (v.needsCf && !cand.behindCf) continue
                 val dial = pickDial(cand, v, disc.cleanIps, cleanCursor++, rng)
                 val entry = ServerEntry(dial, v.id, v.useFrag)
-                val tunnel = TunnelLauncher.launch(testXray, entry)
-                val res = if (tunnel == null)
-                    HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${testXray.lastError.take(160)}")
-                else try { HealthTester.testTunnel(TEST_PORT) } finally { tunnel.stop() }
+                val res = testLock.withLock {
+                    val tunnel = TunnelLauncher.launch(testXray, entry)
+                    if (tunnel == null)
+                        HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${testXray.lastError.take(160)}")
+                    else try { HealthTester.testTunnel(TEST_PORT) } finally { tunnel.stop() }
+                }
                 DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
                     (res.error ?: "OK lat=${res.latencyMs}ms down=${res.downBps.toInt()}B/s up=${res.upBps.toInt()}B/s"))
                 if (res.error?.startsWith("core_fail") == true)
