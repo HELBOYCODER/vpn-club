@@ -90,9 +90,9 @@ fun HellboyFace(
     val pos = remember { FloatArray(data.n * 2) }
     val sorted = remember { FloatArray(data.n * 2) }
     val qIdx = remember { IntArray(data.n) }
-    val bucketCount = remember { IntArray(125) }
-    val bucketStart = remember { IntArray(125) }
-    val bucketFill = remember { IntArray(125) }
+    val bucketCount = remember { IntArray(QN) }
+    val bucketStart = remember { IntArray(QN) }
+    val bucketFill = remember { IntArray(QN) }
     val sparks = remember { FloatArray(160) }
     val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND } }
 
@@ -164,8 +164,8 @@ fun HellboyFace(
 
             drawIntoCanvas { c ->
                 val nc = c.nativeCanvas
-                paint.strokeWidth = S / 175f
-                // رنگ هر ذره = ترکیب سه حالت؛ هر فریم در ۱۲۵ سطل رنگ دسته‌بندی و با drawPoints رسم می‌شود
+                paint.strokeWidth = S / 150f
+                // رنگ هر ذره = ترکیب سه حالت؛ هر فریم در ۵۱۲ سطل رنگ دسته‌بندی و با drawPoints رسم می‌شود
                 val w0 = (1f - smileW - sadW).coerceAtLeast(0f)
                 bucketCount.fill(0)
                 for (i in 0 until data.n) {
@@ -173,12 +173,12 @@ fun HellboyFace(
                     qIdx[i] = q; bucketCount[q]++
                 }
                 var acc = 0
-                for (b in 0 until 125) { bucketStart[b] = acc; acc += bucketCount[b]; bucketFill[b] = bucketStart[b] }
+                for (b in 0 until QN) { bucketStart[b] = acc; acc += bucketCount[b]; bucketFill[b] = bucketStart[b] }
                 for (i in 0 until data.n) {
                     val k = bucketFill[qIdx[i]]++
                     sorted[k * 2] = pos[i * 2]; sorted[k * 2 + 1] = pos[i * 2 + 1]
                 }
-                for (b in 0 until 125) {
+                for (b in 0 until QN) {
                     val cnt = bucketCount[b]; if (cnt == 0) continue
                     paint.color = shade(QCOLOR[b], light, mood)
                     nc.drawPoints(sorted, bucketStart[b] * 2, cnt * 2, paint)
@@ -219,10 +219,13 @@ private const val MOUTH_H = 0.030f
 private const val MOUTH_CURVE = 0.012f
 private val EYES = listOf(0.337f to 0.450f, 0.472f to 0.428f)
 
-/** رنگ مرکز هر سطل (۵ سطح در هر کانال). */
-private val QCOLOR = IntArray(125) { q ->
-    val r = q / 25; val g = (q / 5) % 5; val b = q % 5
-    (0xFF shl 24) or ((r * 255 / 4) shl 16) or ((g * 255 / 4) shl 8) or (b * 255 / 4)
+/** کوانتیزه‌ی رنگ: ۸ سطح در هر کانال (۵۱۲ سطل) — دقت رنگ کافی برای جزئیات چهره. */
+private const val QL = 8
+private const val QN = QL * QL * QL
+private val QCOLOR = IntArray(QN) { q ->
+    val m = QL - 1
+    val r = q / (QL * QL); val g = (q / QL) % QL; val b = q % QL
+    (0xFF shl 24) or ((r * 255 / m) shl 16) or ((g * 255 / m) shl 8) or (b * 255 / m)
 }
 
 /** ذرات چهره: موقعیت ثابت + سه رنگ (خنثی/لبخند/ناراحت). */
@@ -238,10 +241,11 @@ private class FaceData(
         val r = rgb[o] * w0 + rgb[o + 3] * w1 + rgb[o + 6] * w2
         val g = rgb[o + 1] * w0 + rgb[o + 4] * w1 + rgb[o + 7] * w2
         val b = rgb[o + 2] * w0 + rgb[o + 5] * w1 + rgb[o + 8] * w2
-        val qr = (r * 4f + 0.5f).toInt().coerceIn(0, 4)
-        val qg = (g * 4f + 0.5f).toInt().coerceIn(0, 4)
-        val qb = (b * 4f + 0.5f).toInt().coerceIn(0, 4)
-        return qr * 25 + qg * 5 + qb
+        val m = QL - 1
+        val qr = (r * m + 0.5f).toInt().coerceIn(0, m)
+        val qg = (g * m + 0.5f).toInt().coerceIn(0, m)
+        val qb = (b * m + 0.5f).toInt().coerceIn(0, m)
+        return (qr * QL + qg) * QL + qb
     }
 
     companion object {
