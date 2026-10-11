@@ -246,8 +246,7 @@ class VpnClubEngine(private val context: Context) {
                             val applicable = IranVariants.order(settings.carrierMode, learnedVariant)
                                 .filter { !it.needsCf || cand.behindCf }
                             val variants = if (allVariants) applicable
-                                else if (learnedVariant != null) applicable.take(1)
-                                else listOf(applicable[rng.nextInt(applicable.size)])
+                                else applicable.take(1) // اولین = آخرین موفق یا (در حالت خودکار) مستقیم
                             for (v in variants) {
                                 if (!currentCoroutineContext().isActive || expired()) break
                                 val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)

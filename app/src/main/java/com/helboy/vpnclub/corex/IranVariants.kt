@@ -125,7 +125,9 @@ object IranVariants {
             "mci" -> all.filter { it.carrier == "mci" } + all.filter { it.carrier != "mci" }
             "irancell" -> all.filter { it.carrier == "irancell" } + all.filter { it.carrier != "irancell" }
             "plain" -> listOf(PLAIN) + all.filter { it.id != "plain" }
-            else -> all
+            // خودکار: «مستقیم» اول (لاگ واقعی کاربر: همه‌ی موفقیت‌ها plain بودند و ECH/IPv6/Fragment
+            // تقریباً همیشه no_response) و بقیه فقط به‌عنوان جایگزین
+            else -> listOf(PLAIN) + all.filter { it.id != "plain" }
         }
         val pf = base.firstOrNull { it.id == preferredFirst } ?: return base
         return listOf(pf) + base.filter { it.id != pf.id }
