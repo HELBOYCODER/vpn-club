@@ -68,6 +68,10 @@ finalmask JSON (فرمت فورک patterniha — تاییدشده با باین�
 | v1.5.3 | ae3f552 | **FIX ریشه‌ای redroid: finalmask رشته‌ای + BaseKey درست + keyOf de-escape + submit Callable + پینگ موازی + VpnClubService در manifest** | redroid: هسته OK + تونل تست واقعی OK (دانلود 158KB/s)؛ TUN سراسری فقط روی گوشی واقعی (redroid TUN نمی‌سازد) |
 | v1.5.4 | (در حال ریلیز) | **FIX بحرانی: ایران-variant هرگز اعمال نمی‌شد** — variantCache["" → variant] با c.tag رندوم (US-1) هیچ‌وقت match نمی‌کرد → ECH/fragment/cipherSuites روی ایران صفر بود؛ فیکس: effectiveVariant=activeVariant مستقیم | منتظر تست |
 
+| v2.0.0 | (ریلیز) | بازنویسی: حلقهٔ TUN (اپ از تونل مستثنی)، تست=سرویس (ServerEntry/TunnelLauncher)، ذخیرهٔ JSON، ۱۰ سرور منتخب + failover (VpnController)، UI سه‌تبی | منتظر تست |
+
+**v2.0.0 معماری:** VpnController (singleton) ← VpnClubEngine (discover/findServers روی پورت تست 10809) ← VpnClubService (10808، thread جدا). CI نسخه را از app/build.gradle.kts می‌خواند و ریلیز می‌سازد.
+
 ## 7. زیرساخت سرور (Cloudflare — اکانت کارفرما)
 
 - **Worker:** `vpnclub-sub` → https://vpnclub-sub.quilt-refract.workers.dev (کد: `/home/agentuser/projects/vpnclub-worker/`)

@@ -21,7 +21,12 @@ class Tun2Socks(private val context: Context) {
     private var tun: ParcelFileDescriptor? = null
 
     /** راه‌اندازی تونل — پس از گرفتن مجوز VpnService. */
-    fun start(service: VpnService, socksPort: Int, mtu: Int = 1500): Boolean {
+    fun start(
+        service: VpnService,
+        socksPort: Int,
+        mtu: Int = 1500,
+        bypassApps: Set<String> = emptySet()
+    ): Boolean {
         stop()
         return try {
             val builder = service.Builder()
@@ -32,10 +37,13 @@ class Tun2Socks(private val context: Context) {
                 .addDnsServer("8.8.8.8")
                 .setSession("VPN CLUB")
                 .setBlocking(true)
-            // ponytail: split-tunnel/per-app در نسخه‌ی بعد؛ الان همه‌ی ترافیک داخل تونل.
+            // ── باگ ریشه‌ای ≤ v1.6.0: سوکت‌های خروجی خود Xray (و FragmentProxy) هم وارد TUN
+            // می‌شدند → حلقه‌ی مسیریابی → «متصل» ولی هیچ دیتایی رد نمی‌شد.
+            // با کنار گذاشتن خود اپ از تونل، ارتباط هسته با سرور مستقیم می‌رود.
+            runCatching { builder.addDisallowedApplication(context.packageName) }
+            for (pkg in bypassApps) runCatching { builder.addDisallowedApplication(pkg) }
             val fd = builder.establish() ?: return false
             tun = fd
-            service.protect(fd.fd)
 
             val cfg = File(context.filesDir, "hev-socks5-tunnel.yaml")
             cfg.writeText(buildHevConfig(mtu, socksPort))
@@ -58,8 +66,19 @@ class Tun2Socks(private val context: Context) {
     val isRunning: Boolean
         get() = try { TProxyService.TProxyIsRunning() } catch (_: Throwable) { false }
 
-    /** آمار زنده: [rxBytes, txBytes] یا null. */
-    fun stats(): LongArray? = try { TProxyService.TProxyGetStats() } catch (_: Throwable) { null }
+    companion object {
+        private const val TAG = "Tun2Socks"
+        private const val VPN_IP = "26.26.26.1"
+
+        /**
+         * آمار زنده‌ی تونل: Pair(آپلود، دانلود) بر حسب بایت تجمعی، یا null.
+         * hev: [tx_packets, tx_bytes, rx_packets, rx_bytes] (tx = از دستگاه به سمت شبکه).
+         */
+        fun bytes(): Pair<Long, Long>? = try {
+            val s = TProxyService.TProxyGetStats()
+            if (s != null && s.size >= 4) s[1] to s[3] else null
+        } catch (_: Throwable) { null }
+    }
 
     private fun buildHevConfig(mtu: Int, socksPort: Int): String = """
 tunnel:
@@ -77,8 +96,5 @@ misc:
   log-level: warn
 """.trimIndent()
 
-    companion object {
-        private const val TAG = "Tun2Socks"
-        private const val VPN_IP = "26.26.26.1"
-    }
+
 }

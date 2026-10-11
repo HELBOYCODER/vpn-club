@@ -1,47 +1,45 @@
 package com.helboy.vpnclub.corex
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.net.InetAddress
+import java.security.SecureRandom
+import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** فاز چرخه‌ی موتور — برای نمایش وضعیت در UI. */
 enum class Phase { IDLE, FETCHING, SCANNING_CF, TESTING, CONNECTING, CONNECTED, FAILED }
 
 /**
- * موتور اصلی VPN Club — «همه چیز خودکار، کاربر فقط یک دکمه».
+ * موتور کشف و انتخاب سرور (بدون وابستگی به سرویس VPN):
  *
- * چرخه‌ی کامل (هر بار که کاربر روشن می‌کند و به‌صورت دوره‌ای در پس‌زمینه):
- *
- *   ۱. واکشی همزمان همه‌ی مخازن (اشتراک‌ها + VPNGate + منابع عمومی)
- *   ۲. پارس و حذف تکراری‌ها
- *   ۳. اسکن IP تمیز کلادفلر
- *   ۴. تزریق IPهای تازه روی کانفیگ‌های TLS-دار (رفتار پتنگ برای اینترنت ایران)
- *   ۵. تست سلامت (پینگ + دانلود + آپلود) روی همه‌ی کاندیدها — در پس‌زمینه
- *   ۶. نگه‌داشتن فقط کانفیگ‌های «سالم» و انتخاب سریع‌ترین
- *   ۷. اتصال به بهترین کاندید
- *
- * کانفیگی که فقط پینگ دارد ولی دانلود/آپلودش صفر است، از لیست حذف می‌شود.
+ *   ۱. دریافت همزمان همه‌ی لینک‌های ساب + اسکن IP تمیز کلادفلر (موازی)
+ *   ۲. پارس، حذف نوع‌های پشتیبانی‌نشده و تکراری‌ها
+ *   ۳. غربال TCP موازی + تشخیص «پشت کلادفلر بودن»
+ *   ۴. تست واقعی تونل (تاخیر + دانلود + آپلود) روی پورت جدا (۱۰۸۰۹) تا سرویس فعال مزاحم نشود
+ *   ۵. هر سرور سالم فوراً گزارش می‌شود؛ هدف: ۱۰ سرور منتخب
  */
 class VpnClubEngine(private val context: Context) {
 
     init { DiagLogger.appContext = context.applicationContext }
-    private val store = ProfileStore(context)
+
     private val fetcher = SubscriptionFetcher()
-    private val xray = XrayCore(VpnClubService.SOCKS_PORT).also { it.setAppContext(context) }
+    private val store = ServerStore(context)
+    private val settings = AppSettings.of(context)
+    private val testXray = XrayCore(TEST_PORT).also { it.setAppContext(context) }
 
-    data class EngineState(
-        val phase: Phase = Phase.IDLE,
-        val message: String = "",
-        val configCount: Int = 0,
-        val cleanIpCount: Int = 0,
-        val usableCount: Int = 0
-    )
-
-    /** زیرساخت‌های پایدار — مخازن اشتراک همیشه‌به‌روز. */
+    /** مخازن اشتراک — سرور خودمان اول، بعد منابع تأییدشده. */
     val defaultSubscriptions = listOf(
-        // سرور خودمان (Cloudflare Worker) — جمع‌کننده‌ی همه‌ی مخازن، همیشه در دسترس، اولویت اول
         "https://vpnclub-sub.quilt-refract.workers.dev/sub",
-        // تأیید شده با تست زنده ۲۰۲۶-۱۰-۱۰ (code=200 و کانفیگ واقعی)
         "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
         "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt",
@@ -49,7 +47,6 @@ class VpnClubEngine(private val context: Context) {
         "https://raw.githubusercontent.com/mahdibland/ShadowsocksAggregator/master/Eternity.txt",
         "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt",
         "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
-        // منابع کانال t.me/wbnet (تأییدشده با تست زنده)
         "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt",
         "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/protocols/vless.txt",
         "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt",
@@ -64,209 +61,226 @@ class VpnClubEngine(private val context: Context) {
         "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/10.txt",
         "https://raw.githubusercontent.com/prominbro/sub/refs/heads/main/212.txt",
         "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt",
-        // ZeroNet verified (tier 0, امضاشده) — تست واقعی ~۷۱٪ تونل سالم
         "https://cdn.jsdelivr.net/gh/zeghostwriter/ZeroNet@crowd-data/verified.txt"
     )
 
-    var subscriptions: List<String> = defaultSubscriptions
+    /** یک سرور آماده‌ی تست. */
+    data class Candidate(val config: ProxyConfig, val behindCf: Boolean, val tcpMs: Long)
+
+    class Discovery(
+        val candidates: List<Candidate>,
+        val cleanIps: List<CloudflareScanner.CleanIp>,
+        val totalParsed: Int
+    )
+
+    data class Progress(
+        val phase: Phase,
+        val message: String,
+        val configCount: Int = 0,
+        val cleanIpCount: Int = 0,
+        val tested: Int = 0,
+        val found: Int = 0
+    )
+
+    @Volatile private var learnedVariant: String? = null
+
+    fun savedServers(): List<ServerEntry> = store.loadServers()
+    fun saveServers(list: List<ServerEntry>) = store.saveServers(list)
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // کشف: ساب‌ها + IP تمیز + غربال TCP
+    // ─────────────────────────────────────────────────────────────────────────
+    suspend fun discover(onState: (Progress) -> Unit): Discovery? = withContext(Dispatchers.IO) {
+        onState(Progress(Phase.FETCHING, "دریافت لینک‌های ساب و اسکن IP تمیز…"))
+
+        // دریافت ساب‌ها و اسکن کلادفلر همزمان
+        val (raws, cleanIps) = coroutineScope {
+            val subs = async { fetcher.fetchAll(defaultSubscriptions) }
+            val ips = async { findCleanIps(onState) }
+            subs.await() to ips.await()
+        }
+
+        val parsed = raws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
+            .filter { XrayCore.isSupported(it) }
+            .distinctBy { ServerEntry(it).serverKey }
+        if (parsed.isEmpty()) {
+            onState(Progress(Phase.FAILED, "هیچ کانفیگ قابل‌استفاده‌ای از ساب‌ها گرفته نشد. اینترنت را بررسی کنید."))
+            return@withContext null
+        }
+        currentCoroutineContext().ensureActive()
+
+        onState(Progress(Phase.TESTING, "غربال سریع ${parsed.size} سرور…",
+            configCount = parsed.size, cleanIpCount = cleanIps.size))
+        val sample = if (parsed.size > MAX_PREFILTER) parsed.shuffled(SecureRandom()).take(MAX_PREFILTER) else parsed
+        val alive = prefilter(sample)
+        if (alive.isEmpty()) {
+            onState(Progress(Phase.FAILED, "هیچ سروری به TCP پاسخ نداد (اینترنت قطع است؟)",
+                configCount = parsed.size, cleanIpCount = cleanIps.size))
+            return@withContext null
+        }
+        // اولویت: کمترین پینگ، با تناوب بین سرورهای پشت کلادفلر (قابل تزریق IP تمیز) و بقیه
+        val cf = alive.filter { it.behindCf }.sortedBy { it.tcpMs }
+        val other = alive.filter { !it.behindCf }.sortedBy { it.tcpMs }
+        val ordered = ArrayList<Candidate>()
+        var i = 0
+        while (i < cf.size || i < other.size) {
+            if (i < cf.size) ordered.add(cf[i])
+            if (i < other.size) ordered.add(other[i])
+            i++
+        }
+        Discovery(ordered.take(MAX_CANDIDATES), cleanIps, parsed.size)
+    }
+
+    /** IP تمیز: اول کش قبلی را بازبینی کن، اگر کم بود اسکن تازه. */
+    private fun findCleanIps(onState: (Progress) -> Unit): List<CloudflareScanner.CleanIp> {
+        val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
+        var all = cached
+        if (cached.size < 8) {
+            val fresh = CloudflareScanner.scan(perRange = 14, ports = listOf(443), timeoutMs = 2_500)
+            all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }
+        }
+        val top = all.take(24)
+        if (top.isNotEmpty()) store.saveCleanIps(top)
+        onState(Progress(Phase.SCANNING_CF, "${top.size} IP تمیز کلادفلر", cleanIpCount = top.size))
+        return top
+    }
+
+    /** غربال TCP موازی + resolve برای تشخیص کلادفلر. سقف زمانی کل: ۳۰ ثانیه. */
+    private fun prefilter(configs: List<ProxyConfig>): List<Candidate> {
+        val pool = Executors.newFixedThreadPool(64)
+        val dnsCache = ConcurrentHashMap<String, Pair<String?, Boolean>>() // host → (ip, behindCf)
+        val futures = configs.map { c ->
+            pool.submit(Callable {
+                val (ip, cf) = dnsCache.getOrPut(c.host) { resolveHost(c.host) }
+                if (ip == null) return@Callable null
+                val ms = HealthTester.tcpPing(ip, c.port, timeoutMs = 1_800)
+                if (ms in 1..MAX_TCP_MS) Candidate(c, cf, ms) else null
+            })
+        }
+        pool.shutdown()
+        val deadline = System.currentTimeMillis() + 30_000
+        val out = ArrayList<Candidate>()
+        for (f in futures) {
+            val left = (deadline - System.currentTimeMillis()).coerceAtLeast(50)
+            val r = runCatching { f.get(left, TimeUnit.MILLISECONDS) }.getOrNull()
+            if (r != null) out.add(r)
+        }
+        pool.shutdownNow()
+        return out
+    }
+
+    private fun resolveHost(host: String): Pair<String?, Boolean> = try {
+        val addrs = InetAddress.getAllByName(host)
+        val v4 = addrs.firstOrNull { it.address.size == 4 }?.hostAddress
+        val ip = v4 ?: addrs.firstOrNull()?.hostAddress
+        val cf = addrs.any { a -> a.address.size == 4 && CloudflareScanner.isCfIp(a.hostAddress ?: "") }
+        ip to cf
+    } catch (_: Exception) { null to false }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // تست تونل واقعی
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** تست یک ServerEntry آماده (برای بازبینی لیست ذخیره‌شده). null = ناسالم. */
+    suspend fun retest(e: ServerEntry): ServerEntry? = withContext(Dispatchers.IO) {
+        val tunnel = TunnelLauncher.launch(testXray, e) ?: return@withContext null
+        try {
+            val r = HealthTester.testTunnel(TEST_PORT)
+            DiagLogger.log("RETEST ${e.config.host}:${e.config.port} ${e.variantId} -> ${r.error ?: "OK"}")
+            if (!r.ok) null
+            else e.copy(latencyMs = r.latencyMs, downBps = r.downBps, upBps = r.upBps,
+                testedAt = System.currentTimeMillis())
+        } finally { tunnel.stop() }
+    }
 
     /**
-     * چرخه‌ی کامل. از کوثروتین UI یا WorkManager صدا زده می‌شود (کامل در IO).
-     *
-     * استراتژی ضدگیر: از کانفیگ‌هایی که پینگ TCP جواب دادند، «هر بار یکی را تصادفی»
-     * برمی‌داریم و تست واقعی (دانلود/آپلود از روی تونل) می‌گیریم. اولین کاندیدی که
-     * تونل زنده داشت وصل می‌شویم.
-     *
-     * تزریق IP فقط برای کانفیگ‌هایی که دامنه‌شان واقعاً پشت کلادفلر است انجام می‌شود
-     * (resolve واقعی) — تزریق کور روی همه، کانفیگ‌های سالم غیر-CF را خراب می‌کند.
+     * کاندیدها را به‌ترتیب تست می‌کند تا [want] سرور سالم پیدا شود.
+     * هر سرور سالم بلافاصله با [onFound] گزارش می‌شود (اتصال بدون انتظار برای کل فرایند).
      */
-    suspend fun runFullCycle(onState: (EngineState) -> Unit): ProxyConfig? = withContext(Dispatchers.IO) {
-        try {
-            // ── فاز ۱: واکشی مخازن ────────────────────────────────────────────
-            onState(EngineState(Phase.FETCHING, "دریافت مخازن…"))
-            val raws = fetcher.fetchAll(subscriptions)
-            val configs = raws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
-                .distinctBy { "${it.host}:${it.port}:${it.uuidOrUser}" }
-            if (configs.isEmpty()) {
-                onState(EngineState(Phase.FAILED, "هیچ کانفیگی از مخازن گرفته نشد"))
-                return@withContext null
-            }
+    suspend fun findServers(
+        disc: Discovery,
+        want: Int,
+        skipKeys: Set<String>,
+        onFound: suspend (ServerEntry) -> Unit,
+        onState: (Progress) -> Unit
+    ): Int = withContext(Dispatchers.IO) {
+        val t0 = System.currentTimeMillis()
+        var found = 0
+        var tested = 0
+        var cleanCursor = 0
+        val rng = SecureRandom()
 
-            // ── فاز ۲: اسکن IP تمیز کلادفلر ───────────────────────────────────
-            onState(EngineState(Phase.SCANNING_CF, "اسکن IPهای تمیز کلادفلر…", configCount = configs.size))
-            val cleanIps = CloudflareScanner.scan(perRange = 12, ports = listOf(443))
-                .take(15)
-            if (cleanIps.isEmpty()) {
-                onState(EngineState(Phase.FAILED, "هیچ IP تمیز کلادفلر پیدا نشد", configCount = configs.size))
-                return@withContext null
-            }
+        for (cand in disc.candidates) {
+            if (!currentCoroutineContext().isActive) break
+            if (found >= want) break
+            val elapsed = System.currentTimeMillis() - t0
+            if (elapsed > HARD_BUDGET_MS || (elapsed > SOFT_BUDGET_MS && found >= 5)) break
+            if (ServerEntry(cand.config).serverKey in skipKeys) continue
 
-            // ── فاز ۳: غربال TCP سریع → استخر کاندیدهای «پینگ‌دار» ─────────────
-            onState(EngineState(Phase.TESTING, "غربال سریع پینگ…",
-                configCount = configs.size, cleanIpCount = cleanIps.size))
-            val rng = java.security.SecureRandom()
-            val q: (ProxyConfig) -> Map<String, String> = { it.query.toMap() }
-            val tlsOf: (ProxyConfig) -> Boolean = { c ->
-                q(c)["security"] in listOf("tls", "reality") || q(c)["tls"] == "tls" || c.scheme == "trojan"
-            }
+            tested++
+            onState(Progress(Phase.TESTING, "تست تونل واقعی… (${tested}/${disc.candidates.size})",
+                disc.totalParsed, disc.cleanIps.size, tested, found))
 
-            // تشخیص واقعی پشت-کلادفلر بودن: resolve دامنه‌ها (کش در همان حلقه ساخته می‌شود)
-            val cfNets = listOf(
-                "173.245.48", "103.21.244", "103.22.200", "103.31.4", "141.101.64",
-                "108.162.192", "190.93.240", "188.114.96", "197.234.240", "198.41.128",
-                "162.158", "131.0.72"
-            )
-            val cfHosts = HashMap<String, Boolean>()
-            fun isBehindCf(c: ProxyConfig): Boolean {
-                val h = c.host
-                if (h !in cfHosts) {
-                    cfHosts[h] = try {
-                        val addrs = java.net.InetAddress.getAllByName(h)
-                        // اگر هر آدرس در رنج‌های CF بود → پشت کلادفلر
-                        addrs.any { a ->
-                            val ip = a.hostAddress ?: return@any false
-                            val parts = ip.split(".").mapNotNull { it.toIntOrNull() }
-                            parts.size == 4 && cfNets.any { net ->
-                                val n = net.split(".").map { it.toInt() }
-                                (parts[0] == n[0] && parts[1] == n[1] && parts[2] == n[2])
-                            } || parts[0] == 104 || parts[0] == 172 && parts[1] in 64..71
-                        }
-                    } catch (_: Exception) { false }
-                }
-                return cfHosts[h]!!
-            }
+            val variants = IranVariants.order(settings.carrierMode, learnedVariant)
+                .let { if (learnedVariant != null) it.take(MAX_ATTEMPTS_LEARNED) else it }
 
-            // تزریق IP تمیز فقط روی کانفیگ‌های TLS پشت کلادفلر
-            val injected = configs.filter { tlsOf(it) }.mapIndexed { i, c ->
-                if (isBehindCf(c)) {
-                    val ip = cleanIps[i % cleanIps.size]
-                    val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
-                    c.withDial(ip.ip, port)
-                } else c
-            }
-            // اول خام‌ها (مسیر واقعی سرور)، بعد تزریق‌شده‌ها
-            val pool = (configs + injected).distinctBy { keyOf(it) }.shuffled(rng).take(200)
-            // غربال TCP موازی — sequential با timeout 1.5s روی استخر ۲۰۰تایی خیلی کند است
-            val pingPool = java.util.concurrent.Executors.newFixedThreadPool(24)
-            val aliveC = java.util.concurrent.atomic.AtomicInteger()
-            val pingFutures = pool.map { c -> pingPool.submit(java.util.concurrent.Callable {
-                val ms = HealthTester.tcpPing(c.dialHost, c.dialPort, timeoutMs = 1_500)
-                if (ms in 1..MAX_TCP_MS) { aliveC.incrementAndGet(); c } else null
-            }) }
-            pingPool.shutdown()
-            val collected = ArrayList<ProxyConfig>()
-            for (f in pingFutures) {
-                val r = runCatching { f.get(10, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull()
-                if (r is ProxyConfig) collected.add(r)
-            }
-            val pinged = collected.take(30)
-            if (pinged.isEmpty()) {
-                onState(EngineState(Phase.FAILED, "هیچ کانفیگی پینگ نداد",
-                    configCount = configs.size, cleanIpCount = cleanIps.size))
-                return@withContext null
-            }
-
-            // ── فاز ۴: تست واقعی (هر بار یکی رندوم + تونل + دانلود/آپلود) ─────
-            // هر کانفیگ با همه‌ی پروفایل‌های ایران (MCI-ECH → MCI-IPv6 → Irancell) امتحان می‌شود
-            val variants = IranVariants.all()
-            val candidates = mutableListOf<ProxyConfig>()
-            val queue = pinged.toMutableList()
-            var attempt = 0
-            var lastErr = ""
-            outer@ while (queue.isNotEmpty() && attempt < MAX_TUNNEL_ATTEMPTS) {
-                // هر بار یک کانفیگ رندوم از صف — جلوگیری از گیر کردن روی یک سرور بد
-                val c = queue.removeAt(rng.nextInt(queue.size))
-                onState(EngineState(Phase.TESTING, "تست تونل…",
-                    configs.size, cleanIps.size, candidates.size))
-
-                for (variant in variants) {
-                    attempt++
-                    if (attempt > MAX_TUNNEL_ATTEMPTS) break@outer
-                    // Variant IPv6 → آدرس کانفیگ را IPv6 کن
-                    val target = if (variant.ipv6) {
-                        val v6 = IranVariants.randomIpv6(variant.ipv6Prefix!!)
-                        c.withDial(v6, c.port)
-                    } else c
-                    xray.setVariant(variant)
-
-                    // FragmentProxy محلی در کنار finalmask هسته (دو لایه)
-                    val frag = FragmentProxy(target.dialHost ?: target.host, target.dialPort ?: target.port).also { f ->
-                        if (f.start()) xray.dialOverride = "127.0.0.1:${f.port}" else xray.dialOverride = null
-                    }
-
-                    val coreOk = try { xray.start(target) } catch (_: Exception) { false }
-                    val result = if (coreOk)
-                        HealthTester.testConfig(target, VpnClubService.SOCKS_PORT)
-                    else
-                        HealthResult(target, -1, 0.0, 0.0, "core_fail: ${xray.lastError.take(300)}")
-                    android.util.Log.d("VpnClubEngine", "cand ${target.host}:${target.port}/${c.scheme}/${variant.id} -> ${result.error ?: "OK down=${result.downloadBps.toInt()}Bps"}")
-                    DiagLogger.log("${variant.id} | ${target.host}:${target.port}/${c.scheme} | ${result.error ?: "OK down=${result.downloadBps.toInt()}B/s up=${result.uploadBps.toInt()}B/s"}")
-                    if (result.error?.startsWith("core_fail") == true)
-                        DiagLogger.log("CONFIG_JSON: ${xray.lastConfigJson.take(600)}")
-                    xray.stop()
-                    frag.stop()
-                    xray.dialOverride = null
-                    xray.setVariant(null)
-
-                    candidates.add(target)
-                    if (result.isUsable) {
-                        // ✅ اولین ترکیب سالم — ذخیره‌ی کانفیگ با این پروفایل و وصل شو
-                        storeResult(candidates, cleanIps)
-                        lastVariantId = variant.id
-                        onState(EngineState(Phase.CONNECTING, "کانفیگ سالم پیدا شد (${variant.id})",
-                            configs.size, cleanIps.size, 1))
-                        return@withContext target
-                    }
-                    lastErr = result.error ?: ""
+            for (v in variants) {
+                if (!currentCoroutineContext().isActive) break
+                if (v.needsCf && !cand.behindCf) continue
+                val dial = pickDial(cand, v, disc.cleanIps, cleanCursor++, rng)
+                val entry = ServerEntry(dial, v.id, v.useFrag)
+                val tunnel = TunnelLauncher.launch(testXray, entry)
+                val res = if (tunnel == null)
+                    HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${testXray.lastError.take(160)}")
+                else try { HealthTester.testTunnel(TEST_PORT) } finally { tunnel.stop() }
+                DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
+                    (res.error ?: "OK lat=${res.latencyMs}ms down=${res.downBps.toInt()}B/s up=${res.upBps.toInt()}B/s"))
+                if (res.error?.startsWith("core_fail") == true)
+                    DiagLogger.log("CONFIG_JSON: ${testXray.lastConfigJson.take(500)}")
+                if (res.ok) {
+                    learnedVariant = v.id
+                    found++
+                    onFound(entry.copy(latencyMs = res.latencyMs, downBps = res.downBps,
+                        upBps = res.upBps, testedAt = System.currentTimeMillis()))
+                    break
                 }
             }
-
-            // هیچ‌کدام سالم نبود — پیام با جزئیات
-            storeResult(candidates, cleanIps)
-            onState(EngineState(Phase.FAILED, "کانفیگ سالمی پیدا نشد ($attempt تلاش، آخرین خطا: $lastErr)",
-                configs.size, cleanIps.size, 0))
-            null
-        } catch (e: Exception) {
-            onState(EngineState(Phase.FAILED, "خطا: ${e.message}"))
-            null
         }
+        found
     }
 
-    private fun storeResult(candidates: List<ProxyConfig>, cleanIps: List<CloudflareScanner.CleanIp>) {
-        store.save(candidates, candidates.associate { keyOf(it) to HealthResult(it, 0, 0.0, 0.0) }, cleanIps, System.currentTimeMillis())
+    /** آدرس dial برای یک ترکیب (کاندید × پروفایل): IP تمیز / IPv6 کلادفلر / آدرس اصلی. */
+    private fun pickDial(
+        cand: Candidate, v: IranVariants.Variant,
+        cleanIps: List<CloudflareScanner.CleanIp>, cursor: Int, rng: SecureRandom
+    ): ProxyConfig {
+        val c = cand.config
+        if (!cand.behindCf || !injectable(c)) return c
+        if (v.ipv6 && v.ipv6Prefix != null) return c.withDial(IranVariants.randomIpv6(v.ipv6Prefix, rng), c.port)
+        if (v.id == "plain" && cursor % 3 == 2) return c // هر چند بار آدرس اصلی را هم امتحان کن
+        if (cleanIps.isEmpty()) return c
+        val ip = cleanIps[cursor % cleanIps.size]
+        val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
+        return c.withDial(ip.ip, port)
     }
 
-    /** اتصال به کانفیگ مشخص — پس از تست سلامت (با پروفایل ایران). */
-    fun connectTo(context: Context, config: ProxyConfig, variantId: String? = null): Boolean {
-        CurrentConfigHolder.save(context, config, variantId)
-        VpnClubService.start(context)
-        return true
+    /** تزریق IP فقط وقتی معنی دارد که ترنسپورت از CDN رد شود و TLS باشد (نه Reality/TCP خام). */
+    private fun injectable(c: ProxyConfig): Boolean {
+        val q = c.query.toMap()
+        val sec = q["security"] ?: if (q["tls"] == "tls" || c.scheme == "trojan") "tls" else ""
+        if (sec != "tls") return false
+        val net = q["type"] ?: q["network"] ?: "tcp"
+        return net in setOf("ws", "grpc", "xhttp", "splithttp", "httpupgrade")
     }
-
-    fun disconnect(context: Context) {
-        VpnClubService.stop(context)
-        CurrentConfigHolder.clear(context)
-    }
-
-    /** چرخه‌ی خودکار کامل: پیدا کردن بهترین و اتصال. */
-    suspend fun autoConnect(onState: (EngineState) -> Unit): Boolean {
-        val best = runFullCycle(onState) ?: return false
-        val vid = lastVariantId
-        best.dialHost // keep
-        CurrentConfigHolder.save(context, best, vid)
-        VpnClubService.start(context)
-        onState(EngineState(Phase.CONNECTED, "متصل شد — پروفایل $vid", usableCount = 1))
-        return true
-    }
-
-    /** شناسه‌ی آخرین پروفایل موفق (در runFullCycle ست می‌شود). */
-    @Volatile var lastVariantId: String? = null
-        private set
 
     companion object {
-        const val MAX_CANDIDATES = 40
+        const val TEST_PORT = 10809
         const val MAX_TCP_MS = 2_500L
-        const val MAX_TUNNEL_ATTEMPTS = 25
-        fun keyOf(c: ProxyConfig): String = "${c.scheme}|${c.host}|${c.port}|${c.uuidOrUser}"
+        const val MAX_PREFILTER = 700
+        const val MAX_CANDIDATES = 160
+        const val MAX_ATTEMPTS_LEARNED = 2
+        const val SOFT_BUDGET_MS = 150_000L
+        const val HARD_BUDGET_MS = 270_000L
+        const val TARGET_SERVERS = 10
     }
 }

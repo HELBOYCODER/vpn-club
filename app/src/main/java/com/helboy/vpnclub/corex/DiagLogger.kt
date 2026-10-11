@@ -12,6 +12,14 @@ import java.util.Locale
  * آخرین ۲۰۰ خط نگه داشته می‌شود.
  */
 object DiagLogger {
+    /** آخرین n خط لاگ. */
+    fun tail(n: Int): List<String> = try {
+        val ctx = appContext
+        if (ctx == null) emptyList() else File(ctx.filesDir, "diag.log").readLines().takeLast(n)
+    } catch (_: Exception) { emptyList() }
+
+    fun clear() { try { appContext?.let { File(it.filesDir, "diag.log").delete() } } catch (_: Exception) {} }
+
     @Volatile var appContext: Context? = null
 
     fun log(msg: String) {

@@ -55,6 +55,8 @@ object HealthTester {
                     val n = input.read(buf)
                     if (n < 0) break
                     read += n
+                    // سقف کل زمان: تونل کند هم با نرخ واقعی‌اش سنجیده می‌شود، نه گیر کردن
+                    if (System.currentTimeMillis() - start > timeoutMs) break
                 }
             }
             val sec = (System.currentTimeMillis() - start) / 1000.0
@@ -89,6 +91,43 @@ object HealthTester {
         } catch (_: Exception) {
             0.0
         }
+    }
+
+    /**
+     * تاخیر واقعی از داخل تونل: زمان یک درخواست کوچک HTTPS (generate_204).
+     * @return میلی‌ثانیه یا -۱
+     */
+    fun tunnelLatency(socksPort: Int, timeoutMs: Int = 6_000): Long {
+        return try {
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
+            val conn = URL("https://cp.cloudflare.com/generate_204")
+                .openConnection(proxy) as HttpURLConnection
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("User-Agent", "VPNClub/2.0")
+            val start = System.currentTimeMillis()
+            val code = conn.responseCode
+            conn.disconnect()
+            if (code in 200..399) System.currentTimeMillis() - start else -1L
+        } catch (_: Exception) { -1L }
+    }
+
+    data class TunnelResult(val latencyMs: Long, val downBps: Double, val upBps: Double, val error: String?) {
+        val ok: Boolean get() = error == null
+    }
+
+    /**
+     * تست سریع تونل: تاخیر → دانلود ۱ مگ (سقف ۸ ثانیه) → آپلود کوچک.
+     * کانفیگ فقط-پینگ (دانلود صفر) رد می‌شود.
+     */
+    fun testTunnel(socksPort: Int, withUpload: Boolean = true): TunnelResult {
+        val lat = tunnelLatency(socksPort)
+        if (lat < 0) return TunnelResult(-1, 0.0, 0.0, "no_response")
+        val down = downloadThroughProxy(socksPort, bytes = 1_000_000, timeoutMs = 8_000)
+        if (down < HealthResult.MIN_DOWNLOAD_BPS) return TunnelResult(lat, down, 0.0, "dead_tunnel")
+        val up = if (withUpload) uploadThroughProxy(socksPort, bytes = 200_000, timeoutMs = 8_000) else 0.0
+        return TunnelResult(lat, down, up, null)
     }
 
     /**

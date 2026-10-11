@@ -13,6 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -131,5 +134,11 @@ fun ClubPowerButton(
                 radius = r * 0.7f, center = c,
             )
         }
+        Icon(
+            imageVector = Icons.Rounded.PowerSettingsNew,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size * 0.3f),
+        )
     }
 }

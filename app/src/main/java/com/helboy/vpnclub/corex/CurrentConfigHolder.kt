@@ -1,39 +1,26 @@
 package com.helboy.vpnclub.corex
 
 import android.content.Context
+import org.json.JSONObject
 import java.io.File
 
 /**
- * کانفیگ انتخاب‌شده‌ی فعلی + پروفایل ایران (ECH / IPv6 / F&F) — بین سرویس و UI مشترک.
+ * سرور فعلی (کانفیگ + IP تزریقی + پروفایل ایران + حالت fragment) — بین سرویس و UI مشترک.
  *
- * نکته: لینک تزریق‌شده (dial override) ذخیره می‌شود، نه raw خام —
- * وگرنه IP تمیز کلادفلر هنگام راه‌اندازی سرویس گم می‌شود.
- * پروفایل ایران هم جدا ذخیره می‌شود چون فقط در JSON هسته ست می‌شود (نه در لینک).
+ * به‌جای لینک اشتراک، JSON ذخیره می‌شود: لینک بازسازی‌شده SNI را (وقتی sni/host صریح
+ * نبود) به IP تبدیل می‌کرد و IPv6 را بدون براکت می‌نوشت → parse شکست می‌خورد (باگ ≤ v1.6.0).
  */
 object CurrentConfigHolder {
 
-    private fun file(ctx: Context) = File(ctx.filesDir, "current_config.link")
-    private fun variantFile(ctx: Context) = File(ctx.filesDir, "current_variant.id")
+    private fun file(ctx: Context) = File(ctx.filesDir, "current_server.json")
 
-    fun save(ctx: Context, config: ProxyConfig, variantId: String? = null) {
-        // اگر تزریق شده، لینک بازسازی‌شده با dial جدید — وگرنه raw اصلی
-        file(ctx).writeText(config.toShareLink())
-        if (variantId.isNullOrBlank()) variantFile(ctx).delete()
-        else variantFile(ctx).writeText(variantId)
+    fun save(ctx: Context, entry: ServerEntry) {
+        try { file(ctx).writeText(entry.toJson().toString()) } catch (_: Exception) {}
     }
 
-    fun load(ctx: Context): ProxyConfig? = try {
-        LinkParser.parse(file(ctx).readText().trim())
+    fun load(ctx: Context): ServerEntry? = try {
+        ServerEntry.fromJson(JSONObject(file(ctx).readText()))
     } catch (_: Exception) { null }
 
-    /** پروفایل ایرانِ ذخیره‌شده (اگر اتصال از مسیر موتور آمده باشد). */
-    fun loadVariant(ctx: Context): IranVariants.Variant? = try {
-        val id = variantFile(ctx).readText().trim()
-        IranVariants.all().firstOrNull { it.id == id }
-    } catch (_: Exception) { null }
-
-    fun clear(ctx: Context) {
-        file(ctx).delete()
-        variantFile(ctx).delete()
-    }
+    fun clear(ctx: Context) { file(ctx).delete() }
 }

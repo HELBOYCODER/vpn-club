@@ -36,9 +36,9 @@ object LinkParser {
     /** vless://uuid@host:port?k=v&k2=v2#tag — همچنین trojan و hysteria2 */
     private fun parseQueryStyle(link: String, scheme: String): ProxyConfig? {
         val uri = URI(link)
-        val host = uri.host ?: return null
+        val host = cleanHost(uri.host) ?: return null
         val port = uri.port.takeIf { it > 0 } ?: return null
-        val uuid = uri.userInfo ?: ""
+        val uuid = uri.userInfo?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
         val q = uri.rawQuery.orEmpty().split("&")
             .filter { it.contains('=') }
             .map { p ->
@@ -57,14 +57,19 @@ object LinkParser {
         val payloadB64 = link.removePrefix("vmess://")
         val json = String(Base64.getMimeDecoder().decode(payloadB64))
         val o = JSONObject(json)
-        val host = o.optString("add").takeIf { it.isNotEmpty() } ?: return null
+        val host = cleanHost(o.optString("add")) ?: return null
         val port = o.optString("port").toIntOrNull() ?: return null
         val q = buildList {
             o.optString("tls").takeIf { it.isNotEmpty() }?.let { add("tls" to it) }
             o.optString("sni").takeIf { it.isNotEmpty() }?.let { add("sni" to it) }
             o.optString("host").takeIf { it.isNotEmpty() }?.let { add("host" to it) }
             o.optString("path").takeIf { it.isNotEmpty() }?.let { add("path" to it) }
-            o.optString("type").takeIf { it.isNotEmpty() }?.let { add("type" to it) }
+            // در vmess-json: net = شبکه (ws/grpc/…)، type = نوع هدر (none/http)
+            val net = o.optString("net").ifEmpty { "tcp" }
+            add("type" to net)
+            o.optString("type").takeIf { it.isNotEmpty() && it != "none" }?.let { add("headerType" to it) }
+            o.optString("alpn").takeIf { it.isNotEmpty() }?.let { add("alpn" to it) }
+            o.optString("fp").takeIf { it.isNotEmpty() }?.let { add("fp" to it) }
             o.optString("scy").takeIf { it.isNotEmpty() }?.let { add("encryption" to it) }
             o.optString("alterId").takeIf { it.isNotEmpty() }?.let { add("alterId" to it) }
         }
@@ -102,7 +107,7 @@ object LinkParser {
 
         val colon = hostport.lastIndexOf(':')
         if (colon < 0) return null
-        val host = hostport.take(colon).trim('[', ']')
+        val host = cleanHost(hostport.take(colon)) ?: return null
         val port = hostport.substring(colon + 1).toIntOrNull() ?: return null
 
         return ProxyConfig(
@@ -113,7 +118,7 @@ object LinkParser {
 
     private fun parseSocks(link: String, scheme: String): ProxyConfig? {
         val uri = URI(link)
-        val host = uri.host ?: return null
+        val host = cleanHost(uri.host) ?: return null
         val port = uri.port.takeIf { it > 0 } ?: return null
         return ProxyConfig(
             scheme = scheme, host = host, port = port,
@@ -121,5 +126,7 @@ object LinkParser {
         )
     }
 
-    private fun Base64.getMimeDecoder() = Base64.getMimeDecoder()
+    /** آدرس IPv6 در URI داخل [ ] می‌آید؛ هسته و Socket بدون براکت می‌خواهند. */
+    private fun cleanHost(h: String?): String? =
+        h?.trim()?.trim('[', ']')?.takeIf { it.isNotEmpty() }
 }

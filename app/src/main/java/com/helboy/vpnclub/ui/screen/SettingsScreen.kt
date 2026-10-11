@@ -1,0 +1,261 @@
+package com.helboy.vpnclub.ui.screen
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.helboy.vpnclub.corex.AppSettings
+import com.helboy.vpnclub.corex.DiagLogger
+import com.helboy.vpnclub.ui.components.ClubCard
+import com.helboy.vpnclub.ui.fa
+import com.helboy.vpnclub.ui.theme.DarkBg
+import com.helboy.vpnclub.ui.theme.NeonCyan
+import com.helboy.vpnclub.ui.theme.StatusRed
+import com.helboy.vpnclub.ui.theme.TextPrimary
+import com.helboy.vpnclub.ui.theme.TextSecondary
+import com.helboy.vpnclub.ui.theme.TextTertiary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+
+private const val REPO = "helboycoder/vpn-club"
+
+/** تنظیمات: پروفایل شبکه، تونل تفکیکی، تعویض خودکار، لاگ تشخیصی، به‌روزرسانی. */
+@Composable
+fun SettingsScreen(settings: AppSettings) {
+    val ctx = LocalContext.current
+    var carrier by remember { mutableStateOf(settings.carrierMode) }
+    var bypassIran by remember { mutableStateOf(settings.bypassIran) }
+    var failover by remember { mutableStateOf(settings.autoFailover) }
+    var autoLaunch by remember { mutableStateOf(settings.autoConnectOnLaunch) }
+    var showApps by remember { mutableStateOf(false) }
+    var showLog by remember { mutableStateOf(false) }
+    var bypassCount by remember { mutableStateOf(settings.bypassApps.size) }
+    var updateText by remember { mutableStateOf("") }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("تنظیمات", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("پروفایل شبکه", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("روش عبور از فیلتر برای اپراتور شما. «خودکار» همه را به‌ترتیب امتحان می‌کند.",
+                    color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("auto" to "خودکار", "mci" to "همراه اول", "irancell" to "ایرانسل", "plain" to "مستقیم")
+                        .forEach { (id, label) ->
+                            FilterChip(
+                                selected = carrier == id,
+                                onClick = { carrier = id; settings.carrierMode = id },
+                                label = { Text(label, fontSize = 12.sp) },
+                            )
+                        }
+                }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SwitchRow("ترافیک داخل ایران مستقیم", "سایت‌ها و سرویس‌های ایرانی بدون VPN (سریع‌تر)",
+                    bypassIran) { bypassIran = it; settings.bypassIran = it }
+                SwitchRow("تعویض خودکار سرور", "با قطعی، فوراً به سرور بعدیِ ۱۰ منتخب می‌رود",
+                    failover) { failover = it; settings.autoFailover = it }
+                SwitchRow("اتصال خودکار هنگام باز شدن", "به‌محض ورود به برنامه وصل می‌شود",
+                    autoLaunch) { autoLaunch = it; settings.autoConnectOnLaunch = it }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth().clickable { showApps = true }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("تونل تفکیکی (اپ‌های مستثنی)", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text("اپ‌هایی که بدون VPN کار کنند، مثل بانک‌ها", color = TextSecondary, fontSize = 12.sp)
+                }
+                Text(bypassCount.fa(), color = NeonCyan, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("عیب‌یابی", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("لاگ هر تست (سرور، پروفایل، خطا) روی همین گوشی ذخیره می‌شود.",
+                    color = TextSecondary, fontSize = 12.sp)
+                OutlinedButton(onClick = { showLog = true }) { Text("نمایش لاگ تشخیصی") }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("دربارهٔ برنامه", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("VPN CLUB نسخهٔ ${versionName(ctx)}", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = {
+                            updateText = "در حال بررسی…"
+                            scope.launch {
+                                val r = checkUpdate(versionName(ctx))
+                                updateText = r.first; updateUrl = r.second
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = DarkBg),
+                    ) { Text("بررسی به‌روزرسانی") }
+                    updateUrl?.let { u ->
+                        TextButton(onClick = {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }) { Text("دانلود", color = NeonCyan) }
+                    }
+                }
+                if (updateText.isNotEmpty()) Text(updateText, color = TextSecondary, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+
+    if (showApps) AppPickerDialog(ctx, settings, onClose = { showApps = false; bypassCount = settings.bypassApps.size })
+    if (showLog) LogDialog(onClose = { showLog = false })
+}
+
+@Composable
+private fun SwitchRow(title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(sub, color = TextTertiary, fontSize = 11.sp)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+private data class AppItem(val pkg: String, val label: String)
+
+@Composable
+private fun AppPickerDialog(ctx: Context, settings: AppSettings, onClose: () -> Unit) {
+    var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    var selected by remember { mutableStateOf(settings.bypassApps) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        apps = withContext(Dispatchers.IO) {
+            val pm = ctx.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            pm.queryIntentActivities(intent, 0)
+                .map { AppItem(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+                .filter { it.pkg != ctx.packageName }
+                .distinctBy { it.pkg }
+                .sortedBy { it.label.lowercase() }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = { TextButton(onClick = { settings.bypassApps = selected; onClose() }) { Text("ذخیره", color = NeonCyan) } },
+        dismissButton = { TextButton(onClick = onClose) { Text("لغو") } },
+        title = { Text("اپ‌های خارج از تونل") },
+        text = {
+            if (apps.isEmpty()) Text("در حال بارگذاری…")
+            else LazyColumn(Modifier.height(380.dp)) {
+                items(apps, key = { it.pkg }) { a ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            selected = if (a.pkg in selected) selected - a.pkg else selected + a.pkg
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = a.pkg in selected, onCheckedChange = {
+                            selected = if (a.pkg in selected) selected - a.pkg else selected + a.pkg
+                        })
+                        Text(a.label, fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun LogDialog(onClose: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var lines by remember { mutableStateOf(DiagLogger.tail(60)) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = {
+            TextButton(onClick = { clipboard.setText(AnnotatedString(lines.joinToString("\n"))) }) {
+                Text("کپی", color = NeonCyan)
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { DiagLogger.clear(); lines = emptyList() }) { Text("پاک‌کردن", color = StatusRed) }
+                TextButton(onClick = onClose) { Text("بستن") }
+            }
+        },
+        title = { Text("لاگ تشخیصی") },
+        text = {
+            Column(Modifier.height(360.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    if (lines.isEmpty()) "لاگی ثبت نشده." else lines.joinToString("\n"),
+                    fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+                )
+            }
+        },
+    )
+}
+
+private fun versionName(ctx: Context): String = try {
+    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?"
+} catch (_: Exception) { "?" }
+
+/** (پیام، لینک دانلود) */
+private suspend fun checkUpdate(current: String): Pair<String, String?> = withContext(Dispatchers.IO) {
+    try {
+        val conn = java.net.URL("https://api.github.com/repos/$REPO/releases/latest")
+            .openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 8_000; conn.readTimeout = 8_000
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("User-Agent", "VPNClub")
+        val o = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+        val tag = o.optString("tag_name").removePrefix("v")
+        val url = o.optString("html_url")
+        if (tag.isEmpty()) "نسخه‌ای یافت نشد" to null
+        else if (tag == current) "نسخهٔ شما به‌روز است ($current)" to null
+        else "نسخهٔ جدید $tag موجود است" to url
+    } catch (e: Exception) { "بررسی ناموفق بود — اینترنت را چک کنید" to null }
+}

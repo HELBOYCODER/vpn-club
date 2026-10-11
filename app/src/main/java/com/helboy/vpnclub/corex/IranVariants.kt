@@ -82,22 +82,54 @@ object IranVariants {
         val finalMask: JSONObject? = null,
         val alpn: String = "h2,http/1.1",
         val ipv6: Boolean = false,
-        val ipv6Prefix: String? = null
+        val ipv6Prefix: String? = null,
+        /** FragmentProxy محلی (تکه‌کردن ClientHello) — برای plain خاموش. */
+        val useFrag: Boolean = true,
+        /** فقط برای سرور پشت کلادفلر معنی دارد (ECH / IPv6 کلادفلر). */
+        val needsCf: Boolean = false,
+        val label: String = id
     )
 
     /** کل لیست — به ترتیب اولویت: MCI اول (ECH > IPv6)، بعد ایرانسل. */
     fun all(rng: java.security.SecureRandom = java.security.SecureRandom()): List<Variant> = listOf(
         // همراه اول ۱ — ECH
         Variant("mci-ech", "mci", echConfigList = ECH_CONFIG, cipherSuites = null,
-            fingerprint = "chrome", finalMask = null, alpn = "h2,http/1.1"),
+            fingerprint = "chrome", finalMask = null, alpn = "h2,http/1.1",
+            needsCf = true, label = "همراه اول · ECH"),
         // همراه اول ۲ — IPv6 + F&F (دامنه‌ی فیلترشده)
         Variant("mci-ipv6-ff", "mci", echConfigList = null, cipherSuites = null,
             fingerprint = "chrome", finalMask = fmTlsHello(), alpn = "h2,http/1.1",
-            ipv6 = true, ipv6Prefix = IPV6_PREFIXES[rng.nextInt(IPV6_PREFIXES.size)]),
+            ipv6 = true, ipv6Prefix = IPV6_PREFIXES[rng.nextInt(IPV6_PREFIXES.size)],
+            needsCf = true, label = "همراه اول · IPv6"),
         // ایرانسل — F&F با semi-python و unsafe
         Variant("irancell-ff", "irancell", echConfigList = null, cipherSuites = CIPHER_SEMI_PYTHON,
-            fingerprint = "unsafe", finalMask = fmTlsHello(), alpn = "http/1.1")
+            fingerprint = "unsafe", finalMask = fmTlsHello(), alpn = "http/1.1",
+            label = "ایرانسل · Fragment"),
+        // بدون هیچ ترفندی — برای وای‌فای/شبکه‌هایی که فیلتر شدید ندارند (سریع‌ترین مسیر)
+        PLAIN
     )
+
+    /** اتصال ساده بدون ترفند. alpn=null یعنی همان مقدار لینک. */
+    val PLAIN = Variant("plain", "none", fingerprint = "chrome", alpn = "",
+        useFrag = false, label = "مستقیم")
+
+    fun byId(id: String?): Variant? = if (id.isNullOrBlank()) null else all().firstOrNull { it.id == id }
+
+    /**
+     * ترتیب امتحان پروفایل‌ها بر اساس انتخاب کاربر (auto / mci / irancell / plain).
+     * [preferredFirst] = آخرین پروفایلی که کار کرده (یادگیری حین اجرا).
+     */
+    fun order(mode: String, preferredFirst: String? = null): List<Variant> {
+        val all = all()
+        val base = when (mode) {
+            "mci" -> all.filter { it.carrier == "mci" } + all.filter { it.carrier != "mci" }
+            "irancell" -> all.filter { it.carrier == "irancell" } + all.filter { it.carrier != "irancell" }
+            "plain" -> listOf(PLAIN) + all.filter { it.id != "plain" }
+            else -> all
+        }
+        val pf = base.firstOrNull { it.id == preferredFirst } ?: return base
+        return listOf(pf) + base.filter { it.id != pf.id }
+    }
 
     /**
      * آدرس IPv6 رندوم در پیشوند — برای روش همراه‌اول ۲.

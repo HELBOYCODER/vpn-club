@@ -121,8 +121,24 @@ object CloudflareScanner {
 
             val start = System.currentTimeMillis()
             tls.startHandshake()
-            val elapsed = System.currentTimeMillis() - start
-            if (tls.session != null) elapsed else -1L
+            if (tls.session == null) return -1L
+            // اثبات «لبه‌ی واقعی کلادفلر»: درخواست HTTP واقعی و دیدن colo= در پاسخ.
+            // هندشیک به‌تنهایی کافی نیست؛ بعضی IPها TLS می‌دهند ولی دیتا را قطع می‌کنند.
+            val out = tls.outputStream
+            out.write(("GET /cdn-cgi/trace HTTP/1.1\r\nHost: $TEST_SNI\r\n" +
+                "User-Agent: VPNClub/2.0\r\nConnection: close\r\n\r\n").toByteArray())
+            out.flush()
+            val buf = ByteArray(1024)
+            val sb = StringBuilder()
+            val input = tls.inputStream
+            while (sb.length < 900) {
+                val n = input.read(buf)
+                if (n < 0) break
+                sb.append(String(buf, 0, n))
+                if (sb.contains("colo=")) break
+            }
+            if (!sb.contains("colo=")) return -1L
+            System.currentTimeMillis() - start
         } catch (_: Exception) {
             -1L
         } finally {
@@ -137,6 +153,32 @@ object CloudflareScanner {
         override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
         override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
     })
+
+    /** آیا این IPv4 در رنج‌های رسمی کلادفلر است؟ (تطبیق دقیق CIDR) */
+    fun isCfIp(ip: String): Boolean {
+        val parts = ip.split(".")
+        if (parts.size != 4 || parts.any { it.toIntOrNull() == null }) return false
+        val v = ipToInt(ip)
+        return CF_RANGES_V4.any { cidr ->
+            val base = ipToInt(cidr.substringBefore('/'))
+            val prefix = cidr.substringAfter('/').toInt()
+            val mask = (0xFFFFFFFFL shl (32 - prefix)) and 0xFFFFFFFFL
+            (v and mask) == (base and mask)
+        }
+    }
+
+    /** بازبینی سریع IPهای کش‌شده‌ی قبلی (بدون اسکن کامل). */
+    fun revalidate(cached: List<CleanIp>, timeoutMs: Int = 2_000): List<CleanIp> {
+        if (cached.isEmpty()) return emptyList()
+        val pool = Executors.newFixedThreadPool(16)
+        val futures = cached.map { c -> pool.submit(java.util.concurrent.Callable {
+            val ms = probeTls(c.ip, c.port, timeoutMs)
+            if (ms > 0) CleanIp(c.ip, c.port, ms) else null
+        }) }
+        pool.shutdown()
+        val ok = futures.mapNotNull { f -> runCatching { f.get(timeoutMs + 3_000L, TimeUnit.MILLISECONDS) }.getOrNull() }
+        return ok.sortedBy { it.tlsMs }
+    }
 
     private fun ipToInt(ip: String): Long =
         ip.split(".").fold(0L) { acc, p -> (acc shl 8) or (p.toLong() and 0xFF) }

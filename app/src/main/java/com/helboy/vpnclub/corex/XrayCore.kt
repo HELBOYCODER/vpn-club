@@ -21,7 +21,6 @@ class XrayCore(private val socksPort: Int = 10808) {
 
     private var controller: CoreController? = null
     private val lock = Any()
-    private val envInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val callback = object : CoreCallbackHandler {
         override fun onEmitStatus(p0: Long, p1: String?): Long { return 0 }
@@ -45,10 +44,8 @@ class XrayCore(private val socksPort: Int = 10808) {
     /** ست‌کردن پروفایل ایران برای کانفیگ بعدی. */
     fun setVariant(v: IranVariants.Variant?) { activeVariant = v }
 
-    private val variantCache: Map<String, IranVariants.Variant> get() =
-        activeVariant?.let { mapOf("" to it) } ?: emptyMap()
-    /** direct accessor — variantCache is keyed by "", c.tag is a random fragment like "US-1" so never matches */
     private val effectiveVariant: IranVariants.Variant? get() = activeVariant
+
     /** شروع هسته برای یک کانفیگ. true = موفق */
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
@@ -84,6 +81,7 @@ class XrayCore(private val socksPort: Int = 10808) {
      * بدون این، startLoop exception می‌دهد (مخصوصاً با قوانین geoip:ir).
      */
     private fun initCoreEnv() {
+        // یک‌بار در کل پردازه (تست‌ها و سرویس چند نمونه‌ی XrayCore می‌سازند)
         if (!envInitialized.compareAndSet(false, true)) return
         try {
             val ctx = appContext ?: return
@@ -137,14 +135,17 @@ class XrayCore(private val socksPort: Int = 10808) {
             ))
             .put("routing", JSONObject()
                 .put("domainStrategy", "AsIs")
-                .put("rules", JSONArray()
-                    // ترافیک داخلی ایران از تونل خارج — کاهش بار و حفظ دسترسی به سرویس‌های داخلی
-                    .put(JSONObject().put("type", "field")
-                        .put("ip", JSONArray(listOf("geoip:ir")))
-                        .put("outboundTag", "direct"))
-                    .put(JSONObject().put("type", "field")
-                        .put("domain", JSONArray(listOf("geosite:category-ir")))
-                        .put("outboundTag", "direct"))))
+                .put("rules", JSONArray().also { rules ->
+                    // ترافیک داخلی ایران از تونل خارج — حفظ دسترسی به سرویس‌های داخلی (قابل خاموش‌کردن)
+                    if (bypassIran()) {
+                        rules.put(JSONObject().put("type", "field")
+                            .put("ip", JSONArray(listOf("geoip:ir")))
+                            .put("outboundTag", "direct"))
+                        rules.put(JSONObject().put("type", "field")
+                            .put("domain", JSONArray(listOf("geosite:category-ir")))
+                            .put("outboundTag", "direct"))
+                    }
+                }))
         return root.toString()
     }
 
@@ -175,6 +176,17 @@ class XrayCore(private val socksPort: Int = 10808) {
             "ws" -> stream.put("network", "ws").put("wsSettings", JSONObject()
                 .put("path", q["path"] ?: "/")
                 .put("headers", JSONObject().put("Host", q["host"] ?: c.sniHost)))
+            "xhttp", "splithttp" -> {
+                val xs = JSONObject()
+                    .put("path", q["path"] ?: "/")
+                    .put("host", q["host"] ?: c.sniHost)
+                    .put("mode", q["mode"] ?: "auto")
+                q["extra"]?.let { ex -> runCatching { JSONObject(ex) }.getOrNull()?.let { xs.put("extra", it) } }
+                stream.put("network", "xhttp").put("xhttpSettings", xs)
+            }
+            "httpupgrade" -> stream.put("network", "httpupgrade").put("httpupgradeSettings", JSONObject()
+                .put("path", q["path"] ?: "/")
+                .put("host", q["host"] ?: c.sniHost))
             "grpc" -> stream.put("network", "grpc").put("grpcSettings", JSONObject()
                 .put("serviceName", q["serviceName"] ?: q["path"] ?: ""))
             "tcp" -> {
@@ -198,9 +210,10 @@ class XrayCore(private val socksPort: Int = 10808) {
             val variant = effectiveVariant
             val tls = JSONObject()
                 .put("serverName", c.sniHost)
-                .put("allowInsecure", q["allowInsecure"] == "1")
-                .put("fingerprint", variant?.fingerprint ?: q["fp"] ?: "chrome")
-                .put("alpn", JSONArray((variant?.alpn ?: q["alpn"] ?: "h2,http/1.1").split(",")))
+                .put("allowInsecure", q["allowInsecure"] == "1" || q["allowInsecure"] == "true" ||
+                    q["insecure"] == "1" || q["insecure"] == "true")
+                .put("fingerprint", variant?.fingerprint ?: q["fp"]?.ifEmpty { null } ?: "chrome")
+                .put("alpn", JSONArray(alpnFor(net, variant?.alpn, q["alpn"])))
             // ECH — روش همراه‌اول ۱
             val ech = variant?.echConfigList
             if (!ech.isNullOrBlank()) tls.put("echConfigList", ech)
@@ -244,12 +257,41 @@ class XrayCore(private val socksPort: Int = 10808) {
         return out
     }
 
+    private fun bypassIran(): Boolean = try {
+        appContext?.let { AppSettings.of(it).bypassIran } ?: true
+    } catch (_: Exception) { true }
+
+    /** ALPN: پروفایل ایران > لینک > پیش‌فرض (ws/httpupgrade فقط http/1.1). */
+    private fun alpnFor(net: String, variantAlpn: String?, linkAlpn: String?): List<String> {
+        val chosen = variantAlpn?.takeIf { it.isNotBlank() } ?: linkAlpn?.takeIf { it.isNotBlank() }
+        if (chosen != null) return chosen.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        return if (net == "ws" || net == "httpupgrade") listOf("http/1.1") else listOf("h2", "http/1.1")
+    }
+
     fun setAppContext(context: android.content.Context) {
         Seq.setContext(context.applicationContext)
         appContext = context.applicationContext
     }
 
     @Volatile private var appContext: android.content.Context? = null
+
+    companion object {
+        private val envInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        private val SUPPORTED_NETS = setOf("tcp", "ws", "grpc", "xhttp", "splithttp", "httpupgrade")
+
+        /** آیا این کانفیگ را هسته‌ی ما می‌تواند اجرا کند؟ (hysteria2/kcp/quic/socks حذف) */
+        fun isSupported(c: ProxyConfig): Boolean {
+            if (c.scheme !in setOf("vless", "vmess", "trojan", "ss")) return false
+            if (c.uuidOrUser.isBlank()) return false
+            val q = c.query.toMap()
+            val net = q["type"] ?: q["network"] ?: "tcp"
+            if (c.scheme != "ss" && net !in SUPPORTED_NETS) return false
+            val sec = q["security"] ?: ""
+            if (sec == "reality" && (q["pbk"].isNullOrBlank())) return false
+            return true
+        }
+    }
 
     /**
      * BaseKey ی XUDP — باید base64 بی‌پدینگِ یک بایت‌آرایه‌ی ۳۲ بیتی باشد
