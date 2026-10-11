@@ -15,22 +15,24 @@ data class ClubPalette(
     val onAccent: Color, val track: Color, val isDark: Boolean,
 )
 
+/** شب: بتن تیره‌ی سبز-خاکستری دیوار عکس + نارنجی گرافیتی «Hell Boy». */
 val NightPalette = ClubPalette(
-    bg = Color(0xFF0B0B12), bgTop = Color(0xFF07070C), bgBottom = Color(0xFF1A0B0B),
-    card = Color(0xFF15141F), cardElevated = Color(0xFF1E1B2A), border = Color(0xFF2E2A3D),
-    accent = Color(0xFFFF6A2B), accentMuted = Color(0xFF9A3412), indigo = Color(0xFF818CF8), purple = Color(0xFFA855F7),
-    green = Color(0xFF34D399), amber = Color(0xFFFBBF24), red = Color(0xFFF87171),
-    textPrimary = Color(0xFFF8F7FB), textSecondary = Color(0xFFA6A3B5), textTertiary = Color(0xFF6E6A80),
-    onAccent = Color(0xFF16090A), track = Color(0xFF2A2536), isDark = true,
+    bg = Color(0xFF222929), bgTop = Color(0xCC0E1212), bgBottom = Color(0xD9100C0A),
+    card = Color(0xC71C2222), cardElevated = Color(0xD92A3131), border = Color(0x66727C78),
+    accent = Color(0xFFE8742A), accentMuted = Color(0xFF783312), indigo = Color(0xFF9AA7FF), purple = Color(0xFFC08BFF),
+    green = Color(0xFF4ADE80), amber = Color(0xFFFBBF24), red = Color(0xFFF87171),
+    textPrimary = Color(0xFFF2EFEA), textSecondary = Color(0xFFB4BAB6), textTertiary = Color(0xFF828C88),
+    onAccent = Color(0xFF1A0D06), track = Color(0x55727C78), isDark = true,
 )
 
+/** روز: بتن روشن + همان نارنجی گرافیتی (کمی تیره‌تر برای خوانایی). */
 val DayPalette = ClubPalette(
-    bg = Color(0xFFFBF7F4), bgTop = Color(0xFFFFFFFF), bgBottom = Color(0xFFFCE9DF),
-    card = Color(0xFFFFFFFF), cardElevated = Color(0xFFF6EFEA), border = Color(0xFFEADCD3),
-    accent = Color(0xFFE2521B), accentMuted = Color(0xFFF7C3A8), indigo = Color(0xFF4F46E5), purple = Color(0xFF9333EA),
-    green = Color(0xFF059669), amber = Color(0xFFB45309), red = Color(0xFFDC2626),
-    textPrimary = Color(0xFF1C1917), textSecondary = Color(0xFF57534E), textTertiary = Color(0xFF8A817A),
-    onAccent = Color(0xFFFFFFFF), track = Color(0xFFEADCD3), isDark = false,
+    bg = Color(0xFFA8AAA5), bgTop = Color(0x99FFFFFF), bgBottom = Color(0x80E9DDD2),
+    card = Color(0xD9FFFFFF), cardElevated = Color(0xE6F3F1EC), border = Color(0x80A3A8A2),
+    accent = Color(0xFFC2551B), accentMuted = Color(0xFFF2C2A2), indigo = Color(0xFF4F46E5), purple = Color(0xFF9333EA),
+    green = Color(0xFF15803D), amber = Color(0xFFB45309), red = Color(0xFFDC2626),
+    textPrimary = Color(0xFF1F2422), textSecondary = Color(0xFF4A524E), textTertiary = Color(0xFF6B736F),
+    onAccent = Color(0xFFFFFFFF), track = Color(0x80A3A8A2), isDark = false,
 )
 
 val LocalPalette = staticCompositionLocalOf { NightPalette }
