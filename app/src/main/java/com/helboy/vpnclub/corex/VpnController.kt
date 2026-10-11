@@ -297,9 +297,10 @@ object VpnController {
         }
         if (st == null || st.state != SvcState.UP || st.serverId != e.id) {
             DiagLogger.log("ACTIVATE fail ${e.config.host} -> ${st?.state} ${st?.message}")
-            if (st?.state == SvcState.FAILED && st.message.contains("تونل") &&
-                android.net.VpnService.prepare(app) != null) {
-                _state.update { it.copy(needsPermission = true, message = "مجوز VPN لازم است") }
+            val err = st?.error
+            if (err is SvcError.Tun && (err.kind == TunFailure.PERMISSION_REVOKED ||
+                    android.net.VpnService.prepare(app) != null)) {
+                _state.update { it.copy(needsPermission = true, message = err.userMessage) }
             }
             return false
         }

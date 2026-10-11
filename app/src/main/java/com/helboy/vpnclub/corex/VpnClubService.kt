@@ -17,7 +17,13 @@ import java.util.concurrent.Executors
 
 enum class SvcState { STOPPED, STARTING, UP, FAILED }
 
-data class SvcStatus(val state: SvcState, val message: String = "", val serverId: String = "")
+data class SvcStatus(
+    val state: SvcState,
+    val message: String = "",
+    val serverId: String = "",
+    /** فقط وقتی state == FAILED: علت دقیق و نوع‌دار. */
+    val error: SvcError? = null
+)
 
 /**
  * سرویس پیش‌زمینه‌ی VPN: هسته (Xray) + تونل (hev) در یک سرویس.
@@ -62,7 +68,7 @@ class VpnClubService : VpnService() {
     private fun startTunnel() {
         val entry = CurrentConfigHolder.load(this)
         if (entry == null) {
-            _status.value = SvcStatus(SvcState.FAILED, "سروری برای اتصال انتخاب نشده")
+            _status.value = SvcStatus(SvcState.FAILED, SvcError.NoServer.userMessage, error = SvcError.NoServer)
             if (!tunnelUp) finish()
             return
         }
@@ -77,7 +83,8 @@ class VpnClubService : VpnService() {
         if (l == null) {
             val err = xray?.lastError.orEmpty().take(200)
             DiagLogger.log("SERVICE core_fail ${entry.config.host}:${entry.config.port} $err")
-            _status.value = SvcStatus(SvcState.FAILED, "هسته بالا نیامد $err", entry.id)
+            val e = SvcError.Core(err)
+            _status.value = SvcStatus(SvcState.FAILED, e.userMessage, entry.id, e)
             if (!tunnelUp) { stopAll(); finish() }
             return
         }
@@ -87,7 +94,8 @@ class VpnClubService : VpnService() {
             if (!ok) {
                 DiagLogger.log("SERVICE tun_fail (VpnService.establish)")
                 stopAll()
-                _status.value = SvcStatus(SvcState.FAILED, "ساخت تونل سیستم ناموفق بود: ${tun?.lastFailure.orEmpty()}")
+                val e = SvcError.Tun(tun?.lastFailureKind ?: TunFailure.HEV_FAILED, tun?.lastFailure.orEmpty())
+                _status.value = SvcStatus(SvcState.FAILED, e.userMessage, error = e)
                 finish()
                 return
             }

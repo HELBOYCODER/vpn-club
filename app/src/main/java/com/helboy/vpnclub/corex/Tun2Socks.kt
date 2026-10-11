@@ -24,6 +24,10 @@ class Tun2Socks(private val context: Context) {
     @Volatile var lastFailure: String = ""
         private set
 
+    /** نوع آخرین شکست (برای تصمیم‌گیری؛ [lastFailure] فقط برای لاگ است). */
+    @Volatile var lastFailureKind: TunFailure? = null
+        private set
+
     /**
      * راه‌اندازی تونل با سه سطح عقب‌نشینی (دستگاه‌های عجیب/سازنده‌های خاص):
      *  ۰) کامل (IPv4+IPv6، اپ‌های مستثنی)  ۱) بدون IPv6  ۲) فقط IPv4 و فقط خود اپ مستثنی.
@@ -36,17 +40,20 @@ class Tun2Socks(private val context: Context) {
         bypassApps: Set<String> = emptySet()
     ): Boolean {
         stop()
+        lastFailure = ""; lastFailureKind = null
         for (tier in 0..2) {
             val ok = try {
                 establish(service, socksPort, mtu, bypassApps, ipv6 = tier == 0, withBypass = tier < 2)
             } catch (e: Exception) {
-                lastFailure = "tier$tier ${e.javaClass.simpleName}: ${e.message}"
+                lastFailure = "${e.javaClass.simpleName}: ${e.message}"
+                lastFailureKind = TunFailure.ESTABLISH_EXCEPTION
                 Log.e(TAG, "tun start failed", e)
                 false
             }
             if (ok) return true
-            if (lastFailure.isEmpty() || !lastFailure.startsWith("tier$tier")) lastFailure = "tier$tier establish=null/hev"
-            DiagLogger.log("TUN fail $lastFailure")
+            DiagLogger.log("TUN fail tier$tier ${lastFailureKind} $lastFailure")
+            // بدون مجوز، سطح‌های بعدی هم بی‌فایده‌اند
+            if (lastFailureKind == TunFailure.PERMISSION_REVOKED) { stop(); return false }
             stop()
         }
         return false
@@ -71,12 +78,14 @@ class Tun2Socks(private val context: Context) {
         // سوکت‌های خروجی خود Xray/FragmentProxy نباید وارد TUN شوند (حلقه‌ی مسیریابی)
         runCatching { builder.addDisallowedApplication(context.packageName) }
         if (withBypass) for (pkg in bypassApps) runCatching { builder.addDisallowedApplication(pkg) }
-        val fd = builder.establish() ?: run { lastFailure = "establish=null (VPN permission?)"; return false }
+        val fd = builder.establish() ?: run {
+            lastFailure = "establish=null"; lastFailureKind = TunFailure.PERMISSION_REVOKED; return false
+        }
         tun = fd
         val cfg = File(context.filesDir, "hev-socks5-tunnel.yaml")
         cfg.writeText(buildHevConfig(mtu, socksPort, ipv6))
         val ok = TProxyService.TProxyStartService(cfg.absolutePath, fd.fd)
-        if (!ok) lastFailure = "hev start=false"
+        if (!ok) { lastFailure = "hev start=false"; lastFailureKind = TunFailure.HEV_FAILED }
         return ok
     }
 

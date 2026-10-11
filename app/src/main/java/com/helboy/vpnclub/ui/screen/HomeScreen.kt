@@ -32,7 +32,7 @@ import com.helboy.vpnclub.corex.ServerEntry
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.components.Chip
 import com.helboy.vpnclub.ui.components.ClubCard
-import com.helboy.vpnclub.ui.components.ClubPowerButton
+import com.helboy.vpnclub.ui.components.ParticleOrb
 import com.helboy.vpnclub.ui.components.StatTile
 import com.helboy.vpnclub.ui.fa
 import com.helboy.vpnclub.ui.formatBytes
@@ -74,7 +74,8 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         Text("VPN CLUB", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
             letterSpacing = 3.sp)
 
-        ClubPowerButton(phase = shownPhase, connected = ui.connected, onClick = onToggle, size = 220.dp)
+        ParticleOrb(phase = shownPhase, connected = ui.connected, busy = busy,
+            downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 280.dp)
 
         val (title, tColor) = when {
             ui.connected -> "متصل" to StatusGreen

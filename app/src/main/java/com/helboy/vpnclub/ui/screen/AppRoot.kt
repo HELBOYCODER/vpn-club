@@ -62,7 +62,10 @@ fun AppRoot(
                 }
             },
         ) { pad ->
-            Box(Modifier.fillMaxSize().background(DarkBg).padding(pad)) {
+            Box(Modifier.fillMaxSize().background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(androidx.compose.ui.graphics.Color(0xFF070A14), DarkBg, androidx.compose.ui.graphics.Color(0xFF0E1230))))
+                .padding(pad)) {
                 when (tab) {
                     0 -> HomeScreen(ui, onToggle)
                     1 -> ServersScreen(ui, onConnect,

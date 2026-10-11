@@ -215,10 +215,15 @@ class VpnClubEngine(private val context: Context) {
      * تاخیر واقعی (میلی‌ثانیه) یک درخواست HTTPS از داخل تونل این سرور با پروفایل/تزریق خودش.
      * @return -1 = ناسالم
      */
-    fun delayTest(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): Long = delayTestR(e, timeoutMs).first
+    fun delayTest(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): Long =
+        (delayTestR(e, timeoutMs) as? DelayResult.Ok)?.ms ?: -1L
 
-    /** مثل [delayTest] ولی دلیل شکست را هم برمی‌گرداند (برای لاگ). */
-    fun delayTestR(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): Pair<Long, String> {
+    /** کانفیگ‌هایی که هسته از نظر ساختاری رد کرد (در این اجرا دوباره تست نمی‌شوند). */
+    private val brokenConfigs: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** تست تاخیر با خطای نوع‌دار — نگاه کنید به [DelayResult]. */
+    fun delayTestR(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): DelayResult {
+        if (e.id in brokenConfigs) return DelayResult.ConfigError("cached")
         XrayCore.ensureEnv(context)
         val xr = XrayCore(0)
         xr.setVariant(IranVariants.byId(e.variantId))
@@ -227,25 +232,22 @@ class VpnClubEngine(private val context: Context) {
             val f = FragmentProxy(e.config.dialHost, e.config.dialPort)
             if (f.start()) { frag = f; xr.dialOverride = "127.0.0.1:${f.port}" }
         }
-        // بدون inbound: تست فقط به outbound نیاز دارد (پورت آزاد/اشغال مهم نیست)
+        // بدون inbound: تست فقط به outbound نیاز دارد
         val json = try {
             org.json.JSONObject(xr.buildConfig(e.config)).apply { remove("inbounds") }.toString()
-        } catch (ex: Exception) { frag?.stop(); return -1L to "build: ${ex.message}" }
+        } catch (ex: Exception) { frag?.stop(); return DelayResult.BuildError(ex.message ?: ex.javaClass.simpleName) }
         return try {
             val fut = delayPool.submit(Callable { libv2ray.Libv2ray.measureOutboundDelay(json, TEST_URL) })
-            val ms = fut.get(timeoutMs, TimeUnit.MILLISECONDS)
-            when {
-                ms in 1..MAX_DELAY_MS -> ms to ""
-                ms > MAX_DELAY_MS -> -1L to "slow ${ms}ms"
-                else -> -1L to "delay=$ms"
-            }
+            DelayResult.fromDelay(fut.get(timeoutMs, TimeUnit.MILLISECONDS), MAX_DELAY_MS)
         } catch (_: java.util.concurrent.TimeoutException) {
-            -1L to "timeout"
+            DelayResult.Timeout
         } catch (ex: Exception) {
-            val msg = (ex.cause?.message ?: ex.message ?: ex.javaClass.simpleName).take(120)
-            if (msg.contains("infra/conf", true))
-                DiagLogger.log("CORE_CONFIG ${e.config.host}: $msg | ${json.take(400)}")
-            -1L to msg
+            val r = DelayResult.fromCoreMessage(ex.cause?.message ?: ex.message ?: ex.javaClass.simpleName)
+            if (r is DelayResult.ConfigError) {
+                brokenConfigs.add(e.id)
+                DiagLogger.log("CORE_CONFIG ${e.config.host}: ${r.detail} | ${json.take(400)}")
+            }
+            r
         } finally { frag?.stop() }
     }
 
@@ -380,9 +382,12 @@ class VpnClubEngine(private val context: Context) {
                                 if (!currentCoroutineContext().isActive || expired()) break
                                 val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)
                                 val entry = ServerEntry(dial, v.id, v.useFrag, cf = cand.behindCf)
-                                val (ms, why) = delayTestR(entry)
+                                val r = delayTestR(entry)
                                 DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
-                                    if (ms > 0) "OK ${ms}ms" else "fail $why")
+                                    when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log}" })
+                                val ms = (r as? DelayResult.Ok)?.ms ?: -1L
+                                // کانفیگ خراب با هیچ پروفایلی درست نمی‌شود — بقیه‌ی پروفایل‌ها را امتحان نکن
+                                if (r is DelayResult.ConfigError) break
                                 if (ms > 0) {
                                     learnedVariant = v.id
                                     foundLock.withLock {
