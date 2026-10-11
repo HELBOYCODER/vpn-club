@@ -39,6 +39,11 @@ class AppSettings(context: Context) {
         get() = sp.getString("button_style", "hellboy") ?: "hellboy"
         set(v) { sp.edit().putString("button_style", v).apply() }
 
+    /** سایفون روی سرور (فقط با کانفیگ رسمی واردشده). */
+    var psiphonEnabled: Boolean
+        get() = sp.getBoolean("psiphon", false)
+        set(v) { sp.edit().putBoolean("psiphon", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)

@@ -28,6 +28,15 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Set up Go (Psiphon engine)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: false
+
+      - name: Build Psiphon engine (libpsiphon.so)
+        run: bash tools/build_psiphon.sh
+
       - name: Read version from Gradle
         id: ver
         run: |

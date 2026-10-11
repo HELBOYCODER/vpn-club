@@ -14,3 +14,6 @@ dist/
 app/build/
 vpnLib/build/
 VPNClub-1.5.4.apk
+
+# موتور سایفون — در CI با tools/build_psiphon.sh ساخته می‌شود
+app/src/main/jniLibs/*/libpsiphon.so

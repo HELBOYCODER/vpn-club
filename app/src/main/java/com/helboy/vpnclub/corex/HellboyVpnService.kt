@@ -57,6 +57,10 @@ class HellboyVpnService : VpnService() {
                 worker.execute { startTunnel() }
                 START_NOT_STICKY
             }
+            ACTION_PSIPHON -> {
+                worker.execute { applyPsiphon() }
+                START_NOT_STICKY
+            }
             ACTION_STOP -> {
                 worker.execute { stopAll(); finish() }
                 START_NOT_STICKY
@@ -90,7 +94,9 @@ class HellboyVpnService : VpnService() {
         }
         launched = l
         if (!tunnelUp || tun?.isRunning != true) {
-            val ok = tun?.start(this, SOCKS_PORT, bypassApps = AppSettings.of(this).bypassApps) == true
+            // سایفون (اگر کاربر روشن کرده): روی SOCKS هسته؛ تونل سیستم به SOCKS سایفون وصل می‌شود
+            val port = psiphonPortOrCore()
+            val ok = tun?.start(this, port, bypassApps = AppSettings.of(this).bypassApps) == true
             if (!ok) {
                 DiagLogger.log("SERVICE tun_fail (VpnService.establish)")
                 stopAll()
@@ -100,11 +106,12 @@ class HellboyVpnService : VpnService() {
                 return
             }
             tunnelUp = true
+            activeSocksPort = port
         }
         lastServerName = entry.config.tag.ifEmpty { entry.config.host }
         DiagLogger.log("SERVICE up ${entry.config.host}:${entry.config.port} variant=${entry.variantId} dial=${entry.config.dialHost}")
         _status.value = SvcStatus(SvcState.UP, "", entry.id)
-        updateNotification("متصل — $lastServerName")
+        updateNotification(if (activeSocksPort == PsiphonRunner.LOCAL_SOCKS) "متصل + سایفون — $lastServerName" else "متصل — $lastServerName")
         startTicker()
     }
 
@@ -126,7 +133,33 @@ class HellboyVpnService : VpnService() {
         }.also { it.isDaemon = true }.start()
     }
 
+    /** اگر سایفون فعال و قابل اجراست آن را بالا می‌آورد؛ پورت SOCKS نهایی برای تونل سیستم. */
+    private fun psiphonPortOrCore(): Int {
+        val st = AppSettings.of(this)
+        if (!st.psiphonEnabled) { PsiphonRunner.stop(); return SOCKS_PORT }
+        updateNotification("در حال اتصال سایفون…")
+        return if (PsiphonRunner.start(this, SOCKS_PORT)) {
+            DiagLogger.log("PSIPHON on (over server)")
+            PsiphonRunner.LOCAL_SOCKS
+        } else {
+            DiagLogger.log("PSIPHON failed: ${PsiphonRunner.lastError} — continuing without it")
+            SOCKS_PORT
+        }
+    }
+
+    /** روشن/خاموش کردن سایفون بدون قطع سرور: فقط تونل سیستم به پورت جدید وصل می‌شود. */
+    private fun applyPsiphon() {
+        if (!tunnelUp) return
+        val port = psiphonPortOrCore()
+        if (port == activeSocksPort && tun?.isRunning == true) return
+        val ok = tun?.start(this, port, bypassApps = AppSettings.of(this).bypassApps) == true
+        if (ok) { activeSocksPort = port; updateNotification(if (port == PsiphonRunner.LOCAL_SOCKS) "متصل + سایفون — $lastServerName" else "متصل — $lastServerName") }
+        else DiagLogger.log("PSIPHON apply: tun restart failed")
+    }
+
     private fun stopAll() {
+        try { PsiphonRunner.stop() } catch (_: Exception) {}
+        activeSocksPort = SOCKS_PORT
         tickerOn = false
         tunnelUp = false
         try { launched?.stop() } catch (_: Exception) {}
@@ -190,6 +223,15 @@ class HellboyVpnService : VpnService() {
         const val CHANNEL_ID = "vpnclub"
         const val NOTIF_ID = 1001
         const val SOCKS_PORT = 10808
+        const val ACTION_PSIPHON = "com.helboy.vpnclub.PSIPHON"
+
+        /** پورت SOCKS که تونل سیستم الان به آن وصل است (هسته یا سایفون) — برای تست سلامت. */
+        @Volatile var activeSocksPort: Int = SOCKS_PORT
+            private set
+
+        fun applyPsiphon(context: Context) {
+            context.startService(Intent(context, HellboyVpnService::class.java).setAction(ACTION_PSIPHON))
+        }
 
         private val _status = MutableStateFlow(SvcStatus(SvcState.STOPPED))
         val status: StateFlow<SvcStatus> = _status.asStateFlow()

@@ -56,7 +56,10 @@ object VpnController {
         val cleanIps: List<CloudflareScanner.CleanIp> = emptyList(),
         val needsPermission: Boolean = false,
         /** تنها IP که برای اینجکت استفاده می‌شود (سریع‌ترینِ آخرین اسکن یا ورود دستی). */
-        val selectedIp: String = ""
+        val selectedIp: String = "",
+        val psiphonOn: Boolean = false,
+        val psiphon: PsiphonState = PsiphonState.OFF,
+        val psiphonHasConfig: Boolean = false
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -99,6 +102,8 @@ object VpnController {
             }
             initialized = true
         }
+        _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app)) }
+        scope.launch { PsiphonRunner.state.collect { ps -> _state.update { it.copy(psiphon = ps) } } }
         registerNetworkKick()
         scope.launch {
             HellboyVpnService.status.collect { s ->
@@ -128,6 +133,29 @@ object VpnController {
 
     /** تزریق IPهای اسکن‌شده به سرورهای لیست. */
     fun injectIps() = runTask(Task.INJECT) { doInject() }
+
+    /** روشن/خاموش کردن سایفون روی سرور (اگر وصلیم، بدون قطع سرور اعمال می‌شود). */
+    fun setPsiphon(on: Boolean): String? {
+        if (on && !PsiphonRunner.hasConfig(app)) return "اول کانفیگ رسمی سایفون را وارد کنید"
+        if (on && !PsiphonRunner.binaryAvailable(app)) return "موتور سایفون برای پردازنده‌ی این گوشی موجود نیست"
+        settings.psiphonEnabled = on
+        _state.update { it.copy(psiphonOn = on, message = if (on) "سایفون روشن شد" else "سایفون خاموش شد") }
+        if (_state.value.connected) HellboyVpnService.applyPsiphon(app)
+        return null
+    }
+
+    /** ذخیره‌ی کانفیگ رسمی سایفون. null = موفق. */
+    fun importPsiphonConfig(text: String): String? {
+        val err = PsiphonRunner.saveUserConfig(app, text)
+        _state.update { it.copy(psiphonHasConfig = PsiphonRunner.hasConfig(app)) }
+        return err
+    }
+
+    fun clearPsiphonConfig() {
+        PsiphonRunner.clearUserConfig(app)
+        setPsiphon(false)
+        _state.update { it.copy(psiphonHasConfig = false) }
+    }
 
     /** انتخاب/ویرایش دستی IP منتخب. false = IP نامعتبر. */
     fun selectIp(ip: String): Boolean {
@@ -327,7 +355,9 @@ object VpnController {
     private suspend fun tryActivate(e: ServerEntry): Boolean {
         CurrentConfigHolder.save(app, e)
         HellboyVpnService.start(app)
-        val st = withTimeoutOrNull(20_000) {
+        // با سایفون، اولین اتصال تا ~۷۵ ثانیه طول می‌کشد (سایفون قبل از تونل سیستم وصل می‌شود)
+        val wait = if (settings.psiphonEnabled && !_state.value.connected) 100_000L else 20_000L
+        val st = withTimeoutOrNull(wait) {
             HellboyVpnService.status.first {
                 (it.state == SvcState.UP && it.serverId == e.id) || it.state == SvcState.FAILED
             }
@@ -343,7 +373,7 @@ object VpnController {
         }
         var lat = -1L
         for (i in 0 until 3) {
-            lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 6_000)
+            lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 6_000)
             if (lat > 0) break
             delay(500)
         }
@@ -385,7 +415,7 @@ object VpnController {
             while (isActive) {
                 delay(10_000)
                 if (!_state.value.connected || switching) continue
-                val lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 6_000)
+                val lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 6_000)
                 if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
                 if (++fails >= 2 && settings.autoFailover) { fails = 0; failover() }
             }
@@ -462,8 +492,8 @@ object VpnController {
             try {
                 delay(2_000)
                 if (!_state.value.connected || switching) return@launch
-                var lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 5_000)
-                if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 5_000) }
+                var lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000)
+                if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000) }
                 if (lat <= 0 && settings.autoFailover) failover()
             } finally { kickBusy = false }
         }
