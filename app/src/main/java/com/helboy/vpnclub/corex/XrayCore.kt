@@ -212,8 +212,6 @@ class XrayCore(private val socksPort: Int = 10808) {
             val variant = effectiveVariant
             val tls = JSONObject()
                 .put("serverName", c.sniHost)
-                .put("allowInsecure", q["allowInsecure"] == "1" || q["allowInsecure"] == "true" ||
-                    q["insecure"] == "1" || q["insecure"] == "true")
                 .put("fingerprint", variant?.fingerprint ?: q["fp"]?.ifEmpty { null } ?: "chrome")
                 .put("alpn", JSONArray(alpnFor(net, variant?.alpn, q["alpn"])))
             // ECH — روش همراه‌اول ۱
@@ -282,6 +280,11 @@ class XrayCore(private val socksPort: Int = 10808) {
     companion object {
         private val envInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
 
+        private val SS_METHODS = setOf(
+            "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "chacha20-poly1305",
+            "xchacha20-ietf-poly1305", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm",
+            "2022-blake3-chacha20-poly1305")
+
         private val SUPPORTED_NETS = setOf("tcp", "ws", "grpc", "xhttp", "splithttp", "httpupgrade")
 
         /** آیا این کانفیگ را هسته‌ی ما می‌تواند اجرا کند؟ (hysteria2/kcp/quic/socks حذف) */
@@ -293,6 +296,10 @@ class XrayCore(private val socksPort: Int = 10808) {
             if (c.scheme != "ss" && net !in SUPPORTED_NETS) return false
             val sec = q["security"] ?: ""
             if (sec == "reality" && (q["pbk"].isNullOrBlank())) return false
+            // هسته‌ی جدید allowInsecure را حذف کرده (core_fail) — این کانفیگ‌ها بی‌فایده‌اند
+            val insecure = listOf("allowInsecure", "insecure").any { q[it] == "1" || q[it] == "true" }
+            if (insecure) return false
+            if (c.scheme == "ss" && (q["method"] ?: "") !in SS_METHODS) return false
             return true
         }
     }

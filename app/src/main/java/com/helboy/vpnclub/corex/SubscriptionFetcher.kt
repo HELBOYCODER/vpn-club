@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
  */
 class SubscriptionFetcher(
     private val timeoutMs: Int = 8_000,
-    private val maxPerSource: Int = 400
+    private val maxPerSource: Int = 1_500
 ) {
 
     private val pool = Executors.newFixedThreadPool(6)

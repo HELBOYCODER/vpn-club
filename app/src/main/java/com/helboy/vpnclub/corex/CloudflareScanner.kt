@@ -148,7 +148,7 @@ object CloudflareScanner {
     }
 
     /** در اسکنر فقط «کلادفلر بودن» مهم است، نه اعتبار گواهی. */
-    private val TRUST_ALL = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+    internal val TRUST_ALL = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
         override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
         override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
         override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()

@@ -114,7 +114,7 @@ class VpnClubEngine(private val context: Context) {
         }
         currentCoroutineContext().ensureActive()
 
-        onState(Progress(Phase.TESTING, "غربال سریع ${parsed.size} سرور…",
+        onState(Progress(Phase.TESTING, "غربال سریع ${minOf(parsed.size, MAX_PREFILTER)} سرور (هندشیک واقعی)…",
             configCount = parsed.size, cleanIpCount = cleanIps.size))
         val sample = if (parsed.size > MAX_PREFILTER) parsed.shuffled(SecureRandom()).take(MAX_PREFILTER) else parsed
         val alive = prefilter(sample)
@@ -123,16 +123,14 @@ class VpnClubEngine(private val context: Context) {
                 configCount = parsed.size, cleanIpCount = cleanIps.size))
             return@withContext null
         }
-        // اولویت: کمترین پینگ، با تناوب بین سرورهای پشت کلادفلر (قابل تزریق IP تمیز) و بقیه
-        val cf = alive.filter { it.behindCf }.sortedBy { it.tcpMs }
-        val other = alive.filter { !it.behindCf }.sortedBy { it.tcpMs }
-        val ordered = ArrayList<Candidate>()
-        var i = 0
-        while (i < cf.size || i < other.size) {
-            if (i < cf.size) ordered.add(cf[i])
-            if (i < other.size) ordered.add(other[i])
-            i++
+        // تصادفی، ولی سرورهای با «اثبات پروتکلی» (TLS/WS) جلوتر از TCP-خام (ss/vmess بدون TLS)
+        fun strong(c: Candidate): Boolean {
+            val q = c.config.query.toMap()
+            return q["security"] in listOf("tls", "reality") || q["tls"] == "tls" || c.config.scheme == "trojan"
         }
+        val rng = SecureRandom()
+        val (st, weak) = alive.partition { strong(it) }
+        val ordered = st.shuffled(rng) + weak.shuffled(rng)
         Discovery(ordered.take(MAX_CANDIDATES), cleanIps, parsed.size)
     }
 
@@ -150,27 +148,36 @@ class VpnClubEngine(private val context: Context) {
         return top
     }
 
-    /** غربال TCP موازی + resolve برای تشخیص کلادفلر. سقف زمانی کل: ۳۰ ثانیه. */
+    /**
+     * غربال بدون هسته با پروب پروتکلی (هندشیک TLS با SNI، یا Upgrade وب‌سوکت و انتظار 101).
+     * اندازه‌گیری واقعی: قبل از این پروب فقط ~۱٪ کاندیدها تونل سالم داشتند، بعد از آن ~۱۲٪.
+     * نتایج هرچه تا مهلت رسید استفاده می‌شود (ExecutorCompletionService).
+     */
     private fun prefilter(configs: List<ProxyConfig>): List<Candidate> {
-        val pool = Executors.newFixedThreadPool(64)
+        val pool = Executors.newFixedThreadPool(PROBE_THREADS)
+        val ecs = java.util.concurrent.ExecutorCompletionService<Candidate?>(pool)
         val dnsCache = ConcurrentHashMap<String, Pair<String?, Boolean>>() // host → (ip, behindCf)
-        val futures = configs.map { c ->
-            pool.submit(Callable {
+        configs.forEach { c ->
+            ecs.submit(Callable {
                 val (ip, cf) = dnsCache.getOrPut(c.host) { resolveHost(c.host) }
                 if (ip == null) return@Callable null
-                val ms = HealthTester.tcpPing(ip, c.port, timeoutMs = 1_500)
-                if (ms in 1..MAX_TCP_MS) Candidate(c, cf, ms) else null
+                val ms = HealthTester.protocolProbe(c, ip, c.port, timeoutMs = 2_200)
+                if (ms > 0) Candidate(c, cf, ms) else null
             })
         }
-        pool.shutdown()
-        val deadline = System.currentTimeMillis() + 10_000
+        val deadline = System.currentTimeMillis() + PREFILTER_MS
         val out = ArrayList<Candidate>()
-        for (f in futures) {
-            val left = (deadline - System.currentTimeMillis()).coerceAtLeast(50)
-            val r = runCatching { f.get(left, TimeUnit.MILLISECONDS) }.getOrNull()
+        var done = 0
+        while (done < configs.size) {
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) break
+            val f = ecs.poll(left, TimeUnit.MILLISECONDS) ?: break
+            done++
+            val r = runCatching { f.get() }.getOrNull()
             if (r != null) out.add(r)
         }
         pool.shutdownNow()
+        DiagLogger.log("PREFILTER probed=$done/${configs.size} pass=${out.size}")
         return out
     }
 
@@ -224,10 +231,10 @@ class VpnClubEngine(private val context: Context) {
             return found.get() >= want || el > HARD_BUDGET_MS || (el > SOFT_BUDGET_MS && found.get() >= 5)
         }
 
-        suspend fun pass(cands: List<Candidate>, allVariants: Boolean) {
+        suspend fun pass(cands: List<Candidate>, allVariants: Boolean, workerCount: Int) {
             val queue = java.util.concurrent.ConcurrentLinkedQueue(cands)
             kotlinx.coroutines.coroutineScope {
-                (0 until WORKERS).map { w ->
+                (0 until workerCount).map { w ->
                     async(Dispatchers.IO) {
                         val xr = workerXray(w)
                         while (currentCoroutineContext().isActive && !expired()) {
@@ -274,10 +281,11 @@ class VpnClubEngine(private val context: Context) {
 
         // تصادفی‌سازی کامل ترتیب کاندیدها (تنوع + جلوگیری از گیر کردن روی یک رنج بد)
         val shuffled = disc.candidates.shuffled(rng)
-        pass(shuffled, allVariants = false)
+        pass(shuffled, allVariants = false, workerCount = WORKERS)
         if (found.get() == 0 && currentCoroutineContext().isActive) {
             onState(Progress(Phase.TESTING, "دور دوم: امتحان همه‌ی پروفایل‌ها…", disc.totalParsed, disc.cleanIps.size))
-            pass(shuffled.take(40), allVariants = true)
+            // تک‌هسته‌ای (محافظ در برابر مشکل احتمالی اجرای هم‌زمان چند هسته) + همه‌ی پروفایل‌ها
+            pass(shuffled.take(40), allVariants = true, workerCount = 1)
         }
         found.get()
     }
@@ -314,8 +322,10 @@ class VpnClubEngine(private val context: Context) {
         const val TEST_PORT = 10809
         const val WORKERS = 4
         const val MAX_TCP_MS = 2_500L
-        const val MAX_PREFILTER = 400
-        const val MAX_CANDIDATES = 160
+        const val MAX_PREFILTER = 2_500
+        const val PROBE_THREADS = 128
+        const val PREFILTER_MS = 15_000L
+        const val MAX_CANDIDATES = 400
         const val MAX_ATTEMPTS_LEARNED = 2
         const val SOFT_BUDGET_MS = 90_000L
         const val HARD_BUDGET_MS = 180_000L

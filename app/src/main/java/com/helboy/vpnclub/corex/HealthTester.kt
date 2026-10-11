@@ -94,6 +94,58 @@ object HealthTester {
     }
 
     /**
+     * پروب سبک و بدون هسته: آیا این سرور واقعاً «زنده و از نوع خودش» است؟
+     *  - TLS/Reality/Trojan: هندشیک TLS با SNI کانفیگ
+     *  - ws/httpupgrade روی TLS: بعد از هندشیک، درخواست Upgrade و انتظار «101»
+     *  - بدون TLS (ss/vmess-tcp): فقط اتصال TCP
+     * [host]/[port] می‌تواند IP تمیز تزریقی باشد.
+     * @return میلی‌ثانیه یا -۱
+     */
+    fun protocolProbe(c: ProxyConfig, host: String, port: Int, timeoutMs: Int = 2_500): Long {
+        val q = c.query.toMap()
+        val sec = q["security"] ?: ""
+        val net = q["type"] ?: q["network"] ?: "tcp"
+        val tls = sec == "tls" || sec == "reality" || q["tls"] == "tls" || c.scheme == "trojan"
+        var raw: java.net.Socket? = null
+        var ssl: javax.net.ssl.SSLSocket? = null
+        return try {
+            val start = System.currentTimeMillis()
+            raw = java.net.Socket()
+            raw.tcpNoDelay = true
+            raw.soTimeout = timeoutMs
+            raw.connect(InetSocketAddress(host, port), timeoutMs)
+            if (!tls) return System.currentTimeMillis() - start
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+            ctx.init(null, CloudflareScanner.TRUST_ALL, java.security.SecureRandom())
+            val sni = c.sniHost
+            ssl = ctx.socketFactory.createSocket(raw, sni, port, true) as javax.net.ssl.SSLSocket
+            ssl.soTimeout = timeoutMs
+            val p = ssl.sslParameters
+            p.serverNames = listOf(javax.net.ssl.SNIHostName(sni))
+            if (net == "ws" || net == "httpupgrade") p.applicationProtocols = arrayOf("http/1.1")
+            ssl.sslParameters = p
+            ssl.startHandshake()
+            if ((net == "ws" || net == "httpupgrade") && sec == "tls") {
+                val hostHeader = q["host"]?.takeIf { it.isNotEmpty() } ?: sni
+                val path = q["path"]?.takeIf { it.isNotEmpty() } ?: "/"
+                ssl.outputStream.write(("GET $path HTTP/1.1\r\nHost: $hostHeader\r\n" +
+                    "Upgrade: ${if (net == "ws") "websocket" else "websocket"}\r\nConnection: Upgrade\r\n" +
+                    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray())
+                ssl.outputStream.flush()
+                val buf = ByteArray(32)
+                var n = 0
+                while (n < 12) { val r = ssl.inputStream.read(buf, n, buf.size - n); if (r < 0) break; n += r }
+                if (!String(buf, 0, n).startsWith("HTTP/1.1 101")) return -1L
+            }
+            System.currentTimeMillis() - start
+        } catch (_: Exception) { -1L }
+        finally {
+            try { ssl?.close() } catch (_: Exception) {}
+            try { raw?.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
      * تاخیر واقعی از داخل تونل: زمان یک درخواست کوچک HTTPS (generate_204).
      * @return میلی‌ثانیه یا -۱
      */
@@ -122,7 +174,7 @@ object HealthTester {
      * کانفیگ فقط-پینگ (دانلود صفر) رد می‌شود.
      */
     fun testTunnel(socksPort: Int, withUpload: Boolean = true, quick: Boolean = false): TunnelResult {
-        val lat = tunnelLatency(socksPort, if (quick) 3_500 else 6_000)
+        val lat = tunnelLatency(socksPort, if (quick) 5_000 else 6_000)
         if (lat < 0) return TunnelResult(-1, 0.0, 0.0, "no_response")
         val down = if (quick) downloadThroughProxy(socksPort, bytes = 500_000, timeoutMs = 5_000)
             else downloadThroughProxy(socksPort, bytes = 1_000_000, timeoutMs = 8_000)
