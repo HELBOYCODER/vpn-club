@@ -76,6 +76,8 @@ finalmask JSON (فرمت فورک patterniha — تاییدشده با باین�
 
 **ابزار توسعه:** اسکیل‌های `.claude/skills/systematic-debugging` و `verification-before-completion` (از obra/superpowers، MIT) و MCPهای رایگان در `.mcp.json` (context7، sequential-thinking).
 
+| v3.0–3.4 | (ریلیز) | تغییر نام به Hellboy VPN، چهره‌ی ذره‌ای ۳حالته، پوسته‌ی بتن + خون/آتش، تم روز/شب، IP منتخب، اینجکت دستی، سهمیه‌ی سرور قابل اینجکت، فایل APK = HellboyVPN-x.y.z.apk | منتظر تست |
+
 ## 7. زیرساخت سرور (Cloudflare — اکانت کارفرما)
 
 - **Worker:** `vpnclub-sub` → https://vpnclub-sub.quilt-refract.workers.dev (کد: `/home/agentuser/projects/vpnclub-worker/`)
