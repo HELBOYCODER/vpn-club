@@ -114,7 +114,21 @@ object HealthTester {
             raw.tcpNoDelay = true
             raw.soTimeout = timeoutMs
             raw.connect(InetSocketAddress(host, port), timeoutMs)
-            if (!tls) return System.currentTimeMillis() - start
+            if (!tls) {
+                if (net == "ws" || net == "httpupgrade") {
+                    val path = q["path"]?.takeIf { it.isNotEmpty() } ?: "/"
+                    val hostHeader = q["host"]?.takeIf { it.isNotEmpty() } ?: c.sniHost
+                    raw.getOutputStream().write(("GET $path HTTP/1.1\r\nHost: $hostHeader\r\n" +
+                        "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray())
+                    raw.getOutputStream().flush()
+                    val buf = ByteArray(32)
+                    var n = 0
+                    while (n < 12) { val r = raw.getInputStream().read(buf, n, buf.size - n); if (r < 0) break; n += r }
+                    if (!String(buf, 0, n).startsWith("HTTP/1.1 101")) return -1L
+                }
+                return System.currentTimeMillis() - start
+            }
             val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
             ctx.init(null, CloudflareScanner.TRUST_ALL, java.security.SecureRandom())
             val sni = c.sniHost

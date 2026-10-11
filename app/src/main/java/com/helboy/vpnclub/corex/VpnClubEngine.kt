@@ -255,7 +255,7 @@ class VpnClubEngine(private val context: Context) {
         if (ips.isEmpty()) return@withContext entries
         val top = ips.take(6)
         fun portFor(e: ServerEntry, ip: CloudflareScanner.CleanIp) =
-            if (e.config.port in CloudflareScanner.CF_PORTS) e.config.port else ip.port
+            if (e.config.port in CloudflareScanner.CF_ALL_PORTS) e.config.port else ip.port
 
         // ── ۱) پروب موازی ──
         val targets = entries.filter { it.cf && injectable(it.config) }
@@ -408,7 +408,7 @@ class VpnClubEngine(private val context: Context) {
         if (v.id == "plain" && cursor % 3 == 2) return c // هر چند بار آدرس اصلی را هم امتحان کن
         if (cleanIps.isEmpty()) return c
         val ip = cleanIps[cursor % cleanIps.size]
-        val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
+        val port = if (c.port in CloudflareScanner.CF_ALL_PORTS) c.port else ip.port
         return c.withDial(ip.ip, port)
     }
 
@@ -416,7 +416,7 @@ class VpnClubEngine(private val context: Context) {
     private fun injectable(c: ProxyConfig): Boolean {
         val q = c.query.toMap()
         val sec = q["security"] ?: if (q["tls"] == "tls" || c.scheme == "trojan") "tls" else ""
-        if (sec != "tls") return false
+        if (sec == "reality") return false // TLS/ws و ws ساده (پورت‌های HTTP کلادفلر) هر دو قابل تزریق‌اند
         val net = q["type"] ?: q["network"] ?: "tcp"
         return net in setOf("ws", "grpc", "xhttp", "splithttp", "httpupgrade")
     }

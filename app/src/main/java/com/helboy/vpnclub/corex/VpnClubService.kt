@@ -87,7 +87,7 @@ class VpnClubService : VpnService() {
             if (!ok) {
                 DiagLogger.log("SERVICE tun_fail (VpnService.establish)")
                 stopAll()
-                _status.value = SvcStatus(SvcState.FAILED, "ساخت تونل سیستم ناموفق بود")
+                _status.value = SvcStatus(SvcState.FAILED, "ساخت تونل سیستم ناموفق بود: ${tun?.lastFailure.orEmpty()}")
                 finish()
                 return
             }

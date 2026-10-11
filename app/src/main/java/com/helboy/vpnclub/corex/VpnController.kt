@@ -80,6 +80,7 @@ object VpnController {
             _state.update { it.copy(servers = saved) }
             initialized = true
         }
+        registerNetworkKick()
         // قطع از بیرون (تنظیمات سیستم / اپ VPN دیگر)
         scope.launch {
             VpnClubService.status.collect { s ->
@@ -88,9 +89,43 @@ object VpnController {
         }
     }
 
+    /**
+     * تغییر شبکه‌ی زیرین (وای‌فای ↔ سیم‌کارت): بلافاصله سلامت تونل سنجیده می‌شود تا کاربر
+     * منتظر نگهبان ۱۰ ثانیه‌ای نماند.
+     */
+    private fun registerNetworkKick() {
+        try {
+            val cm = app.getSystemService(android.net.ConnectivityManager::class.java)
+            val req = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                .build()
+            cm.registerNetworkCallback(req, object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) { kickCheck() }
+            })
+        } catch (_: Exception) {}
+    }
+
+    @Volatile private var kickBusy = false
+    private fun kickCheck() {
+        if (kickBusy || !_state.value.connected) return
+        kickBusy = true
+        scope.launch {
+            try {
+                delay(2_000)
+                if (!_state.value.connected || switching) return@launch
+                var lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 5_000)
+                if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 5_000) }
+                if (lat <= 0 && settings.autoFailover) failover()
+            } finally { kickBusy = false }
+        }
+    }
+
     // ────────────────────────────── اقدام‌های کاربر ──────────────────────────────
 
     fun settings(): AppSettings = settings
+
+    fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
 
     /** یک دکمه: روشن/خاموش. */
     fun toggle() {
@@ -153,24 +188,47 @@ object VpnController {
     private val poolMutex = kotlinx.coroutines.sync.Mutex()
 
     private suspend fun runAuto() {
-        _state.update { it.copy(connected = false, current = null) }
-        val list = buildPool(engine.savedServers(), step = "")
+        _state.update { it.copy(connected = false, current = null, needsPermission = false) }
+
+        // ── مسیر سریع: آخرین سرورهای تأییدشده؛ اتصال در چند ثانیه (activate خودش جریان داده را می‌سنجد) ──
+        val saved = engine.savedServers().sortedByDescending { it.score }
+        if (saved.isNotEmpty()) {
+            setState(Phase.CONNECTING, "اتصال به آخرین سرور سالم…")
+            for (e in saved.take(FAST_TRIES)) {
+                if (!currentCoroutineContext().isActive) return
+                if (activate(e)) { backgroundTopUp(); return }
+                if (_state.value.needsPermission) return
+            }
+        }
+
+        // ── مسیر کامل: ساخت لیست؛ به‌محض ۳ سرور سالم وصل می‌شود و بقیه در پس‌زمینه کامل می‌شود ──
+        val list = buildPool(saved, step = "", earlyConnect = true)
+        if (_state.value.connected) return
+        if (_state.value.needsPermission) return
         if (list.isEmpty()) {
             if (_state.value.phase != Phase.FAILED)
                 setState(Phase.FAILED, "سرور سالمی پیدا نشد. اینترنت را بررسی و دوباره تلاش کنید.")
             return
         }
         setState(Phase.CONNECTING, "۳/۳ اتصال به بهترین سرور…")
-        // بهترین‌ها اول؛ اگر اولی وصل نشد بعدی
         for (e in list) {
             if (!currentCoroutineContext().isActive) return
             if (activate(e)) return
+            if (_state.value.needsPermission) return
         }
         setState(Phase.FAILED, "اتصال به هیچ‌کدام از سرورهای منتخب ممکن نشد")
     }
 
+    /** بعد از اتصال سریع: لیست ۱۰ تایی را بدون قطع اتصال تازه/کامل می‌کند. */
+    private fun backgroundTopUp() {
+        scope.launch {
+            if (poolBusy) return@launch
+            buildPool(_state.value.servers, step = "")
+        }
+    }
+
     /** لیست را به ۱۰ سرور سالم با IP تمیز می‌رساند. نتیجه مرتب بر اساس امتیاز و ذخیره‌شده است. */
-    private suspend fun buildPool(existing: List<ServerEntry>, step: String): List<ServerEntry> =
+    private suspend fun buildPool(existing: List<ServerEntry>, step: String, earlyConnect: Boolean = false): List<ServerEntry> =
         poolMutex.withLock {
             poolBusy = true
             _state.update { it.copy(testing = true) }
@@ -189,6 +247,7 @@ object VpnController {
                 }
                 // ── ۱/۳ یافتن سرورهای جدید تا ۱۰ ──
                 var list = alive
+                var earlyStarted = false
                 if (list.size < VpnClubEngine.TARGET_SERVERS) {
                     val disc = engine.discover { p ->
                         if (!_state.value.connected || p.phase == Phase.FAILED) report(p)
@@ -202,6 +261,18 @@ object VpnController {
                             onFound = { e ->
                                 list = (list + e).distinctBy { it.serverKey }
                                 publish(list)
+                                // کاربر معطل نماند: به‌محض EARLY_CONNECT_AT سرور سالم، وصل شو؛ تکمیل ۱۰ تایی ادامه دارد
+                                if (earlyConnect && !earlyStarted && !_state.value.connected &&
+                                    list.size >= EARLY_CONNECT_AT) {
+                                    earlyStarted = true
+                                    scope.launch {
+                                        for (c in _state.value.servers) {
+                                            if (_state.value.connected || _state.value.needsPermission) break
+                                            setState(Phase.CONNECTING, "اتصال به ${label(c)}…")
+                                            if (activate(c)) break
+                                        }
+                                    }
+                                }
                                 if (!_state.value.connected)
                                     setState(Phase.TESTING, "${step}۱/۳ یافتن ۱۰ سرور: ${list.size}/${VpnClubEngine.TARGET_SERVERS}")
                             },
@@ -275,6 +346,11 @@ object VpnController {
         }
         if (st == null || st.state != SvcState.UP || st.serverId != e.id) {
             DiagLogger.log("ACTIVATE fail ${e.config.host} -> ${st?.state} ${st?.message}")
+            // مجوز VPN لغو شده (مثلاً اپ VPN دیگر فعال شد)؟ باید از کاربر دوباره گرفته شود
+            if (st?.state == SvcState.FAILED && st.message.contains("تونل") &&
+                android.net.VpnService.prepare(app) != null) {
+                _state.update { it.copy(needsPermission = true, message = "مجوز VPN لازم است") }
+            }
             return false
         }
         // همان‌جا یک درخواست واقعی از داخل تونل
@@ -429,5 +505,7 @@ object VpnController {
     private fun label(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)
 
     private const val WEAK_POOL = 5
+    private const val FAST_TRIES = 4
+    private const val EARLY_CONNECT_AT = 3
     private const val POOL_CHECK_MS = 4 * 60_000L
 }

@@ -25,6 +25,11 @@ object CloudflareScanner {
     /** پورت‌هایی که در ایران معمولاً بازترند و TLS کلادفلر روی آن‌ها فعال است. */
     val CF_PORTS = listOf(443, 2053, 2083, 2087, 2096, 8443)
 
+    /** پورت‌های HTTP (بدون TLS) که کلادفلر پروکسی می‌کند. */
+    val CF_HTTP_PORTS = listOf(80, 8080, 8880, 2052, 2082, 2086, 2095)
+
+    val CF_ALL_PORTS: List<Int> get() = CF_PORTS + CF_HTTP_PORTS
+
     /** رنج‌های رسمی کلادفلر (cloudflare.com/ips-v4). */
     val CF_RANGES_V4 = listOf(
         "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",

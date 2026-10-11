@@ -11,6 +11,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import com.helboy.vpnclub.corex.ServerEntry
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.screen.AppRoot
@@ -55,6 +59,17 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
             !VpnController.state.value.connected && VpnService.prepare(this) == null) {
             VpnController.connectAuto()
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                VpnController.state.collect { st ->
+                    if (st.needsPermission) {
+                        VpnController.clearPermissionFlag()
+                        withVpnPermission { VpnController.connectAuto() }
+                    }
+                }
+            }
         }
 
         setContent {
