@@ -18,6 +18,8 @@ import go.Seq
  * که ترافیک تون را به این SOCKS5 محلی می‌فرستد.
  */
 class XrayCore(private val socksPort: Int = 10808) {
+    val port: Int get() = socksPort
+
 
     private var controller: CoreController? = null
     private val lock = Any()

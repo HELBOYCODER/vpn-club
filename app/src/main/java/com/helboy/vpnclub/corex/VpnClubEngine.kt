@@ -158,12 +158,12 @@ class VpnClubEngine(private val context: Context) {
             pool.submit(Callable {
                 val (ip, cf) = dnsCache.getOrPut(c.host) { resolveHost(c.host) }
                 if (ip == null) return@Callable null
-                val ms = HealthTester.tcpPing(ip, c.port, timeoutMs = 1_800)
+                val ms = HealthTester.tcpPing(ip, c.port, timeoutMs = 1_500)
                 if (ms in 1..MAX_TCP_MS) Candidate(c, cf, ms) else null
             })
         }
         pool.shutdown()
-        val deadline = System.currentTimeMillis() + 30_000
+        val deadline = System.currentTimeMillis() + 10_000
         val out = ArrayList<Candidate>()
         for (f in futures) {
             val left = (deadline - System.currentTimeMillis()).coerceAtLeast(50)
@@ -199,8 +199,11 @@ class VpnClubEngine(private val context: Context) {
     } }
 
     /**
-     * کاندیدها را به‌ترتیب تست می‌کند تا [want] سرور سالم پیدا شود.
-     * هر سرور سالم بلافاصله با [onFound] گزارش می‌شود (اتصال بدون انتظار برای کل فرایند).
+     * تست موازی (WORKERS هسته‌ی مستقل، هرکدام روی پورت خودش) تا [want] سرور سالم پیدا شود.
+     *
+     * دور اول: هر کاندید (تصادفی) فقط «یک» تلاش با یک پروفایل (آخرین موفق، یا تصادفی)، تست سبک
+     * (تاخیر + ۵۰۰KB دانلود). اگر دور اول هیچ سالمی نداد، دور دوم روی بهترین ۴۰ کاندید با همه‌ی پروفایل‌ها.
+     * هر سرور سالم بلافاصله با [onFound] گزارش می‌شود (به‌صورت سریالی).
      */
     suspend fun findServers(
         disc: Discovery,
@@ -210,52 +213,78 @@ class VpnClubEngine(private val context: Context) {
         onState: (Progress) -> Unit
     ): Int = withContext(Dispatchers.IO) {
         val t0 = System.currentTimeMillis()
-        var found = 0
-        var tested = 0
-        var cleanCursor = 0
+        val found = java.util.concurrent.atomic.AtomicInteger()
+        val tested = java.util.concurrent.atomic.AtomicInteger()
+        val cursor = java.util.concurrent.atomic.AtomicInteger()
+        val foundLock = Mutex()
         val rng = SecureRandom()
 
-        for (cand in disc.candidates) {
-            if (!currentCoroutineContext().isActive) break
-            if (found >= want) break
-            val elapsed = System.currentTimeMillis() - t0
-            if (elapsed > HARD_BUDGET_MS || (elapsed > SOFT_BUDGET_MS && found >= 5)) break
-            if (ServerEntry(cand.config).serverKey in skipKeys) continue
+        fun expired(): Boolean {
+            val el = System.currentTimeMillis() - t0
+            return found.get() >= want || el > HARD_BUDGET_MS || (el > SOFT_BUDGET_MS && found.get() >= 5)
+        }
 
-            tested++
-            onState(Progress(Phase.TESTING, "تست تونل واقعی… (${tested}/${disc.candidates.size})",
-                disc.totalParsed, disc.cleanIps.size, tested, found))
-
-            val variants = IranVariants.order(settings.carrierMode, learnedVariant)
-                .filter { !it.needsCf || cand.behindCf }
-                .let { if (learnedVariant != null) it.take(MAX_ATTEMPTS_LEARNED) else it }
-
-            for (v in variants) {
-                if (!currentCoroutineContext().isActive) break
-                if (v.needsCf && !cand.behindCf) continue
-                val dial = pickDial(cand, v, disc.cleanIps, cleanCursor++, rng)
-                val entry = ServerEntry(dial, v.id, v.useFrag)
-                val res = testLock.withLock {
-                    val tunnel = TunnelLauncher.launch(testXray, entry)
-                    if (tunnel == null)
-                        HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${testXray.lastError.take(160)}")
-                    else try { HealthTester.testTunnel(TEST_PORT) } finally { tunnel.stop() }
-                }
-                DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
-                    (res.error ?: "OK lat=${res.latencyMs}ms down=${res.downBps.toInt()}B/s up=${res.upBps.toInt()}B/s"))
-                if (res.error?.startsWith("core_fail") == true)
-                    DiagLogger.log("CONFIG_JSON: ${testXray.lastConfigJson.take(500)}")
-                if (res.ok) {
-                    learnedVariant = v.id
-                    found++
-                    onFound(entry.copy(latencyMs = res.latencyMs, downBps = res.downBps,
-                        upBps = res.upBps, testedAt = System.currentTimeMillis()))
-                    break
-                }
+        suspend fun pass(cands: List<Candidate>, allVariants: Boolean) {
+            val queue = java.util.concurrent.ConcurrentLinkedQueue(cands)
+            kotlinx.coroutines.coroutineScope {
+                (0 until WORKERS).map { w ->
+                    async(Dispatchers.IO) {
+                        val xr = workerXray(w)
+                        while (currentCoroutineContext().isActive && !expired()) {
+                            val cand = queue.poll() ?: break
+                            if (ServerEntry(cand.config).serverKey in skipKeys) continue
+                            val n = tested.incrementAndGet()
+                            onState(Progress(Phase.TESTING, "تست تونل واقعی… ($n/${disc.candidates.size})",
+                                disc.totalParsed, disc.cleanIps.size, n, found.get()))
+                            val applicable = IranVariants.order(settings.carrierMode, learnedVariant)
+                                .filter { !it.needsCf || cand.behindCf }
+                            val variants = if (allVariants) applicable
+                                else if (learnedVariant != null) applicable.take(1)
+                                else listOf(applicable[rng.nextInt(applicable.size)])
+                            for (v in variants) {
+                                if (!currentCoroutineContext().isActive || expired()) break
+                                val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)
+                                val entry = ServerEntry(dial, v.id, v.useFrag)
+                                val tunnel = TunnelLauncher.launch(xr, entry)
+                                val res = if (tunnel == null)
+                                    HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${xr.lastError.take(160)}")
+                                else try { HealthTester.testTunnel(xr.port, withUpload = false, quick = true) }
+                                     finally { tunnel.stop() }
+                                DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
+                                    (res.error ?: "OK lat=${res.latencyMs}ms down=${res.downBps.toInt()}B/s"))
+                                if (res.error?.startsWith("core_fail") == true)
+                                    DiagLogger.log("CONFIG_JSON: ${xr.lastConfigJson.take(500)}")
+                                if (res.ok) {
+                                    learnedVariant = v.id
+                                    foundLock.withLock {
+                                        if (found.get() < want) {
+                                            found.incrementAndGet()
+                                            onFound(entry.copy(latencyMs = res.latencyMs, downBps = res.downBps,
+                                                upBps = res.upBps, testedAt = System.currentTimeMillis()))
+                                        }
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }.forEach { it.await() }
             }
         }
-        found
+
+        // تصادفی‌سازی کامل ترتیب کاندیدها (تنوع + جلوگیری از گیر کردن روی یک رنج بد)
+        val shuffled = disc.candidates.shuffled(rng)
+        pass(shuffled, allVariants = false)
+        if (found.get() == 0 && currentCoroutineContext().isActive) {
+            onState(Progress(Phase.TESTING, "دور دوم: امتحان همه‌ی پروفایل‌ها…", disc.totalParsed, disc.cleanIps.size))
+            pass(shuffled.take(40), allVariants = true)
+        }
+        found.get()
     }
+
+    private val workers = HashMap<Int, XrayCore>()
+    @Synchronized private fun workerXray(i: Int): XrayCore =
+        workers.getOrPut(i) { XrayCore(TEST_PORT + 10 + i).also { it.setAppContext(context) } }
 
     /** آدرس dial برای یک ترکیب (کاندید × پروفایل): IP تمیز / IPv6 کلادفلر / آدرس اصلی. */
     private fun pickDial(
@@ -283,12 +312,13 @@ class VpnClubEngine(private val context: Context) {
 
     companion object {
         const val TEST_PORT = 10809
+        const val WORKERS = 4
         const val MAX_TCP_MS = 2_500L
-        const val MAX_PREFILTER = 700
+        const val MAX_PREFILTER = 400
         const val MAX_CANDIDATES = 160
         const val MAX_ATTEMPTS_LEARNED = 2
-        const val SOFT_BUDGET_MS = 150_000L
-        const val HARD_BUDGET_MS = 270_000L
+        const val SOFT_BUDGET_MS = 90_000L
+        const val HARD_BUDGET_MS = 180_000L
         const val TARGET_SERVERS = 10
     }
 }

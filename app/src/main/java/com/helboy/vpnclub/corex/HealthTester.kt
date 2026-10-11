@@ -121,10 +121,11 @@ object HealthTester {
      * تست سریع تونل: تاخیر → دانلود ۱ مگ (سقف ۸ ثانیه) → آپلود کوچک.
      * کانفیگ فقط-پینگ (دانلود صفر) رد می‌شود.
      */
-    fun testTunnel(socksPort: Int, withUpload: Boolean = true): TunnelResult {
-        val lat = tunnelLatency(socksPort)
+    fun testTunnel(socksPort: Int, withUpload: Boolean = true, quick: Boolean = false): TunnelResult {
+        val lat = tunnelLatency(socksPort, if (quick) 3_500 else 6_000)
         if (lat < 0) return TunnelResult(-1, 0.0, 0.0, "no_response")
-        val down = downloadThroughProxy(socksPort, bytes = 1_000_000, timeoutMs = 8_000)
+        val down = if (quick) downloadThroughProxy(socksPort, bytes = 500_000, timeoutMs = 5_000)
+            else downloadThroughProxy(socksPort, bytes = 1_000_000, timeoutMs = 8_000)
         if (down < HealthResult.MIN_DOWNLOAD_BPS) return TunnelResult(lat, down, 0.0, "dead_tunnel")
         val up = if (withUpload) uploadThroughProxy(socksPort, bytes = 200_000, timeoutMs = 8_000) else 0.0
         return TunnelResult(lat, down, up, null)
