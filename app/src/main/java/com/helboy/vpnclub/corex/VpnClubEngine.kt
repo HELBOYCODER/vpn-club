@@ -362,10 +362,19 @@ class VpnClubEngine(private val context: Context) {
         want: Int,
         skipKeys: Set<String>,
         onFound: suspend (ServerEntry) -> Unit,
-        onState: (Progress) -> Unit
+        onState: (Progress) -> Unit,
+        /** IP منتخب کاربر (از اسکنر) — سرورهای کلادفلر با همین IP تست می‌شوند. */
+        preferredIp: String? = null,
+        /** حداقل سرورِ «قابل اینجکت» در لیست، اگر کاندیدش وجود داشته باشد. */
+        minInjectable: Int = 3
     ): Int = withContext(Dispatchers.IO) {
         val t0 = System.currentTimeMillis()
         val found = java.util.concurrent.atomic.AtomicInteger()
+        val foundInj = java.util.concurrent.atomic.AtomicInteger()
+        val injLeft = java.util.concurrent.atomic.AtomicInteger(
+            disc.candidates.count { it.behindCf && injectable(it.config) })
+        val cleanForDial = preferredIp?.takeIf { it.isNotBlank() }
+            ?.let { listOf(CloudflareScanner.CleanIp(it, 443, 0)) } ?: disc.cleanIps
         val tested = java.util.concurrent.atomic.AtomicInteger()
         val cursor = java.util.concurrent.atomic.AtomicInteger()
         val foundLock = Mutex()
@@ -373,7 +382,8 @@ class VpnClubEngine(private val context: Context) {
 
         fun expired(): Boolean {
             val el = System.currentTimeMillis() - t0
-            return found.get() >= want || el > HARD_BUDGET_MS || (el > SOFT_BUDGET_MS && found.get() >= 5)
+            // قبلاً با ۵ سرور بعد از ۹۰ ثانیه متوقف می‌شد (لاگ کاربر) — حالا تا ۸ ادامه می‌دهد
+            return found.get() >= want || el > HARD_BUDGET_MS || (el > SOFT_BUDGET_MS && found.get() >= 8)
         }
 
         suspend fun pass(cands: List<Candidate>, allVariants: Boolean, parallelism: Int) {
@@ -383,6 +393,8 @@ class VpnClubEngine(private val context: Context) {
                     async(Dispatchers.IO) {
                         while (currentCoroutineContext().isActive && !expired()) {
                             val cand = queue.poll() ?: break
+                            val candInj = cand.behindCf && injectable(cand.config)
+                            if (candInj) injLeft.decrementAndGet()
                             if (ServerEntry(cand.config).serverKey in skipKeys) continue
                             val n = tested.incrementAndGet()
                             onState(Progress(Phase.TESTING, "تست تونل واقعی… ($n/${disc.candidates.size})",
@@ -392,7 +404,7 @@ class VpnClubEngine(private val context: Context) {
                             val variants = if (allVariants) applicable else applicable.take(1)
                             for (v in variants) {
                                 if (!currentCoroutineContext().isActive || expired()) break
-                                val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)
+                                val dial = pickDial(cand, v, cleanForDial, cursor.getAndIncrement(), rng, preferredIp != null)
                                 val entry = ServerEntry(dial, v.id, v.useFrag, cf = cand.behindCf)
                                 val r = delayTestR(entry)
                                 DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
@@ -403,8 +415,13 @@ class VpnClubEngine(private val context: Context) {
                                 if (ms > 0) {
                                     learnedVariant = v.id
                                     foundLock.withLock {
-                                        if (found.get() < want) {
+                                        // سهمیه: جای چند سرور قابل‌اینجکت خالی بماند تا اینجکت روی لیست اثر داشته باشد
+                                        val reserve = (minInjectable - foundInj.get()).coerceAtLeast(0)
+                                        val nonInjFull = !candInj && injLeft.get() > 0 &&
+                                            (found.get() - foundInj.get()) >= want - reserve
+                                        if (found.get() < want && !nonInjFull) {
                                             found.incrementAndGet()
+                                            if (candInj) foundInj.incrementAndGet()
                                             onFound(entry.copy(latencyMs = ms, testedAt = System.currentTimeMillis()))
                                         }
                                     }
@@ -429,12 +446,14 @@ class VpnClubEngine(private val context: Context) {
     /** آدرس dial برای یک ترکیب (کاندید × پروفایل): IP تمیز / IPv6 کلادفلر / آدرس اصلی. */
     private fun pickDial(
         cand: Candidate, v: IranVariants.Variant,
-        cleanIps: List<CloudflareScanner.CleanIp>, cursor: Int, rng: SecureRandom
+        cleanIps: List<CloudflareScanner.CleanIp>, cursor: Int, rng: SecureRandom,
+        pinned: Boolean = false
     ): ProxyConfig {
         val c = cand.config
         if (!cand.behindCf || !injectable(c)) return c
         if (v.ipv6 && v.ipv6Prefix != null) return c.withDial(IranVariants.randomIpv6(v.ipv6Prefix, rng), c.port)
-        if (v.id == "plain" && cursor % 3 == 2) return c // هر چند بار آدرس اصلی را هم امتحان کن
+        // با IP منتخب کاربر همیشه همان را تزریق کن؛ بدون آن، گاهی آدرس اصلی را هم امتحان کن
+        if (!pinned && v.id == "plain" && cursor % 3 == 2) return c
         if (cleanIps.isEmpty()) return c
         val ip = cleanIps[cursor % cleanIps.size]
         val port = if (c.port in CloudflareScanner.CF_ALL_PORTS) c.port else ip.port

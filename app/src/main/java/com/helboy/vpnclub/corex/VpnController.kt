@@ -226,7 +226,8 @@ object VpnController {
                 setTask(Task.RESCAN, "سرور سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}")
                 publish(fresh)
             },
-            onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}") })
+            onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}") },
+            preferredIp = _state.value.selectedIp.ifEmpty { null })
         if (fresh.size <= keep.size) toast("سرور سالم جدیدی پیدا نشد")
         else toast("${fresh.size} سرور سالم آماده است")
         return _state.value.servers
