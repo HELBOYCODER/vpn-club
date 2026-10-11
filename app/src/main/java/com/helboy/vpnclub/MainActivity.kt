@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import com.helboy.vpnclub.corex.ServerEntry
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.screen.AppRoot
-import com.helboy.vpnclub.ui.theme.VPNClubTheme
+import com.helboy.vpnclub.ui.theme.HellboyTheme
 
 /**
  * ورودی برنامه. منطق در [VpnController] (مستقل از Activity) است؛ اینجا فقط مجوز VPN و UI.
@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            VPNClubTheme {
+            HellboyTheme {
                 AppRoot(
                     onToggle = {
                         val s = VpnController.state.value

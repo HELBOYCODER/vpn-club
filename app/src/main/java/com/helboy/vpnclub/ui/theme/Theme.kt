@@ -20,7 +20,7 @@ object ThemeState {
 }
 
 @Composable
-fun VPNClubTheme(content: @Composable () -> Unit) {
+fun HellboyTheme(content: @Composable () -> Unit) {
     val dark = when (ThemeState.mode) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
     val p = if (dark) NightPalette else DayPalette
     val scheme = if (dark) darkColorScheme(

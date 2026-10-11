@@ -32,7 +32,7 @@ data class SvcStatus(
  * - ACTION_START دوباره = «عوض‌کردن سرور»: فقط هسته ری‌استارت می‌شود، TUN بالا می‌ماند.
  * - خود اپ از تونل خارج است (Tun2Socks) تا سوکت‌های هسته در حلقه نیفتند.
  */
-class VpnClubService : VpnService() {
+class HellboyVpnService : VpnService() {
 
     private var xray: XrayCore? = null
     private var tun: Tun2Socks? = null
@@ -163,7 +163,7 @@ class VpnClubService : VpnService() {
         }
         val stopIntent = PendingIntent.getService(
             this, 1,
-            Intent(this, VpnClubService::class.java).setAction(ACTION_STOP),
+            Intent(this, HellboyVpnService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE)
         val openIntent = PendingIntent.getActivity(
             this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
@@ -204,11 +204,11 @@ class VpnClubService : VpnService() {
             // وضعیت قبلی (UP سرور قبلی) نباید به‌عنوان نتیجه‌ی این شروع خوانده شود
             _status.value = SvcStatus(SvcState.STARTING)
             context.startForegroundService(
-                Intent(context, VpnClubService::class.java).setAction(ACTION_START))
+                Intent(context, HellboyVpnService::class.java).setAction(ACTION_START))
         }
         fun stop(context: Context) {
             context.startService(
-                Intent(context, VpnClubService::class.java).setAction(ACTION_STOP))
+                Intent(context, HellboyVpnService::class.java).setAction(ACTION_STOP))
         }
     }
 }

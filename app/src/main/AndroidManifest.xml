@@ -20,7 +20,7 @@
     </queries>
 
     <application
-        android:name=".VPNClubApp"
+        android:name=".HellboyVpnApp"
         android:extractNativeLibs="true"
         android:hardwareAccelerated="true"
         android:allowBackup="true"
@@ -43,7 +43,7 @@
 
         <!-- VpnClub Xray TUN service -->
         <service
-            android:name="com.helboy.vpnclub.corex.VpnClubService"
+            android:name="com.helboy.vpnclub.corex.HellboyVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:foregroundServiceType="specialUse"
             android:exported="false">

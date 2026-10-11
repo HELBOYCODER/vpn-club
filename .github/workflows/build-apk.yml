@@ -1,4 +1,4 @@
-name: Build VPN Club APK
+name: Build Hellboy VPN APK
 
 on:
   push:
@@ -41,14 +41,14 @@ jobs:
       - name: Copy and rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk "dist/VPNClub-${{ steps.ver.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/*.apk "dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk"
           ls -la dist/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VPNClub-${{ steps.ver.outputs.version }}-APK
-          path: dist/VPNClub-${{ steps.ver.outputs.version }}.apk
+          name: HellboyVPN-${{ steps.ver.outputs.version }}-APK
+          path: dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk
           retention-days: 90
 
       - name: Create or Update GitHub Release
@@ -56,7 +56,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="v${{ steps.ver.outputs.version }}"
-          APK="dist/VPNClub-${{ steps.ver.outputs.version }}.apk"
+          APK="dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, uploading asset..."
             gh release upload "$TAG_NAME" "$APK" --clobber
@@ -64,6 +64,6 @@ jobs:
             echo "Creating new release $TAG_NAME..."
             gh release create "$TAG_NAME" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "VPN CLUB $TAG_NAME" \
+              --title "Hellboy VPN $TAG_NAME" \
               --notes-file RELEASE_NOTES.md
           fi

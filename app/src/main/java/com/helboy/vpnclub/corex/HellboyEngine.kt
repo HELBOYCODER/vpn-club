@@ -30,7 +30,7 @@ enum class Phase { IDLE, FETCHING, SCANNING_CF, TESTING, CONNECTING, CONNECTED, 
  *   ۴. تست واقعی تونل (تاخیر + دانلود + آپلود) روی پورت جدا (۱۰۸۰۹) تا سرویس فعال مزاحم نشود
  *   ۵. هر سرور سالم فوراً گزارش می‌شود؛ هدف: ۱۰ سرور منتخب
  */
-class VpnClubEngine(private val context: Context) {
+class HellboyEngine(private val context: Context) {
 
     init { DiagLogger.appContext = context.applicationContext }
 

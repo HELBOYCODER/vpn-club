@@ -72,7 +72,7 @@ object VpnController {
         })
 
     private lateinit var app: Context
-    private lateinit var engine: VpnClubEngine
+    private lateinit var engine: HellboyEngine
     private lateinit var settings: AppSettings
     @Volatile private var initialized = false
 
@@ -91,7 +91,7 @@ object VpnController {
         synchronized(this) {
             if (initialized) return
             app = context.applicationContext
-            engine = VpnClubEngine(app)
+            engine = HellboyEngine(app)
             settings = AppSettings.of(app)
             _state.update {
                 it.copy(servers = engine.savedServers().sortedByDescending { e -> e.score },
@@ -101,7 +101,7 @@ object VpnController {
         }
         registerNetworkKick()
         scope.launch {
-            VpnClubService.status.collect { s ->
+            HellboyVpnService.status.collect { s ->
                 if (s.state == SvcState.STOPPED && _state.value.connected) markDisconnected("اتصال توسط سیستم قطع شد")
             }
         }
@@ -171,7 +171,7 @@ object VpnController {
 
     fun disconnect() {
         opJob?.cancel(); watchJob?.cancel(); statsJob?.cancel(); poolJob?.cancel()
-        VpnClubService.stop(app)
+        HellboyVpnService.stop(app)
         CurrentConfigHolder.clear(app)
         _state.update {
             it.copy(phase = Phase.IDLE, message = "", connected = false, current = null,
@@ -219,14 +219,14 @@ object VpnController {
         // سرور فعلی (اگر وصلیم) در لیست می‌ماند؛ بقیه کاملاً تازه
         val keep = listOfNotNull(_state.value.current.takeIf { _state.value.connected })
         var fresh = keep
-        val want = VpnClubEngine.TARGET_SERVERS - keep.size
+        val want = HellboyEngine.TARGET_SERVERS - keep.size
         engine.findServers(disc, want, skipKeys = keep.map { it.serverKey }.toSet(),
             onFound = { e ->
                 fresh = (fresh + e).distinctBy { it.serverKey }
-                setTask(Task.RESCAN, "سرور سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}")
+                setTask(Task.RESCAN, "سرور سالم: ${fresh.size}/${HellboyEngine.TARGET_SERVERS}")
                 publish(fresh)
             },
-            onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}") },
+            onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${HellboyEngine.TARGET_SERVERS}") },
             preferredIp = _state.value.selectedIp.ifEmpty { null })
         if (fresh.size <= keep.size) toast("سرور سالم جدیدی پیدا نشد")
         else toast("${fresh.size} سرور سالم آماده است")
@@ -313,12 +313,12 @@ object VpnController {
         } finally { switching = false }
         if (prev != null) {
             CurrentConfigHolder.save(app, prev)
-            VpnClubService.start(app)
+            HellboyVpnService.start(app)
             withTimeoutOrNull(20_000) {
-                VpnClubService.status.first { (it.state == SvcState.UP && it.serverId == prev.id) || it.state == SvcState.FAILED }
+                HellboyVpnService.status.first { (it.state == SvcState.UP && it.serverId == prev.id) || it.state == SvcState.FAILED }
             }
         } else {
-            VpnClubService.stop(app)
+            HellboyVpnService.stop(app)
             CurrentConfigHolder.clear(app)
         }
         return false
@@ -326,9 +326,9 @@ object VpnController {
 
     private suspend fun tryActivate(e: ServerEntry): Boolean {
         CurrentConfigHolder.save(app, e)
-        VpnClubService.start(app)
+        HellboyVpnService.start(app)
         val st = withTimeoutOrNull(20_000) {
-            VpnClubService.status.first {
+            HellboyVpnService.status.first {
                 (it.state == SvcState.UP && it.serverId == e.id) || it.state == SvcState.FAILED
             }
         }
@@ -343,7 +343,7 @@ object VpnController {
         }
         var lat = -1L
         for (i in 0 until 3) {
-            lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
+            lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 6_000)
             if (lat > 0) break
             delay(500)
         }
@@ -385,7 +385,7 @@ object VpnController {
             while (isActive) {
                 delay(10_000)
                 if (!_state.value.connected || switching) continue
-                val lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
+                val lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 6_000)
                 if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
                 if (++fails >= 2 && settings.autoFailover) { fails = 0; failover() }
             }
@@ -462,8 +462,8 @@ object VpnController {
             try {
                 delay(2_000)
                 if (!_state.value.connected || switching) return@launch
-                var lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 5_000)
-                if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 5_000) }
+                var lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 5_000)
+                if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(HellboyVpnService.SOCKS_PORT, 5_000) }
                 if (lat <= 0 && settings.autoFailover) failover()
             } finally { kickBusy = false }
         }
@@ -480,7 +480,7 @@ object VpnController {
     /** لیست را مرتب (سریع‌ترین اول)، به ۱۰ محدود، در state و دیسک می‌نویسد. */
     private fun publish(list: List<ServerEntry>) {
         val sorted = list.distinctBy { it.serverKey }.sortedByDescending { it.score }
-            .take(VpnClubEngine.TARGET_SERVERS)
+            .take(HellboyEngine.TARGET_SERVERS)
         _state.update { it.copy(servers = sorted) }
         engine.saveServers(sorted)
     }
