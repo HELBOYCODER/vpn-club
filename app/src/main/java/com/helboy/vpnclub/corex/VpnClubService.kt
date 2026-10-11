@@ -159,7 +159,7 @@ class VpnClubService : VpnService() {
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(NotificationChannel(
-                CHANNEL_ID, "VPN CLUB", NotificationManager.IMPORTANCE_LOW))
+                CHANNEL_ID, "Hellboy VPN", NotificationManager.IMPORTANCE_LOW))
         }
         val stopIntent = PendingIntent.getService(
             this, 1,
@@ -169,7 +169,7 @@ class VpnClubService : VpnService() {
             this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setContentTitle("VPN CLUB")
+            .setContentTitle("Hellboy VPN")
             .setContentText(text)
             .setContentIntent(openIntent)
             .setOngoing(true)

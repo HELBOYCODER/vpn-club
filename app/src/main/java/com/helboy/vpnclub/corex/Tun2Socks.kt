@@ -69,7 +69,7 @@ class Tun2Socks(private val context: Context) {
             .addRoute("0.0.0.0", 0)
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
-            .setSession("VPN CLUB")
+            .setSession("Hellboy VPN")
             .setBlocking(true)
         if (ipv6) {
             builder.addAddress(VPN_IP6, 126)

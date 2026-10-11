@@ -38,6 +38,17 @@ data class ServerEntry(
      */
     val canInject: Boolean get() = cf && injectableTransport(config)
 
+    /** اینجکت دستی: فقط به ترنسپورت نگاه می‌کند (تشخیص «پشت کلادفلر» ممکن است اشتباه کند). */
+    val canInjectManual: Boolean get() = injectableTransport(config)
+
+    /** دسته‌بندی برای نمایش مرتب. */
+    val category: String get() = when {
+        canInject || (canInjectManual && injected) -> "کلادفلر · قابل اینجکت"
+        (config.query.toMap()["security"] ?: "") == "reality" -> "Reality"
+        canInjectManual -> "CDN (احتمالاً قابل اینجکت)"
+        else -> "مستقیم"
+    }
+
     /** دلیل قابل‌فهم برای کاربر وقتی تزریق ممکن نیست. */
     val injectBlocker: String? get() = when {
         canInject -> null

@@ -54,7 +54,9 @@ object VpnController {
         val downTotal: Long = 0,
         val latencyMs: Long = -1,
         val cleanIps: List<CloudflareScanner.CleanIp> = emptyList(),
-        val needsPermission: Boolean = false
+        val needsPermission: Boolean = false,
+        /** تنها IP که برای اینجکت استفاده می‌شود (سریع‌ترینِ آخرین اسکن یا ورود دستی). */
+        val selectedIp: String = ""
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -93,7 +95,7 @@ object VpnController {
             settings = AppSettings.of(app)
             _state.update {
                 it.copy(servers = engine.savedServers().sortedByDescending { e -> e.score },
-                    cleanIps = engine.savedCleanIps())
+                    cleanIps = engine.savedCleanIps(), selectedIp = settings.selectedIp)
             }
             initialized = true
         }
@@ -126,6 +128,33 @@ object VpnController {
 
     /** تزریق IPهای اسکن‌شده به سرورهای لیست. */
     fun injectIps() = runTask(Task.INJECT) { doInject() }
+
+    /** انتخاب/ویرایش دستی IP منتخب. false = IP نامعتبر. */
+    fun selectIp(ip: String): Boolean {
+        val v = ip.trim()
+        if (!isValidIpv4(v)) return false
+        settings.selectedIp = v
+        _state.update { it.copy(selectedIp = v, message = "IP منتخب: $v") }
+        return true
+    }
+
+    /** اینجکت دستی IP منتخب روی یک سرور مشخص (اگر همان سرور متصل است، اتصال روی IP جدید می‌رود). */
+    fun injectInto(entry: ServerEntry) = runTask(Task.INJECT) {
+        val ip = _state.value.selectedIp.ifEmpty { doScanIps().firstOrNull()?.ip.orEmpty() }
+        if (ip.isEmpty()) { toast("اول IP اسکن یا وارد کنید"); return@runTask }
+        if (!entry.canInjectManual) { toast("این سرور ${entry.injectBlocker}؛ IP تمیز رویش کار نمی‌کند"); return@runTask }
+        setTask(Task.INJECT, "اینجکت $ip روی ${label(entry)}…")
+        val updated = engine.injectOne(entry, ip)
+        val ok = updated.latencyMs > 0
+        // انتخاب کاربر اعمال می‌شود؛ وضعیت تست کنارش نمایش داده می‌شود
+        publish(_state.value.servers.map { if (it.serverKey == entry.serverKey) updated.copy(cf = true) else it })
+        val isCurrent = _state.value.connected && _state.value.current?.serverKey == entry.serverKey
+        if (isCurrent && ok) {
+            setTask(Task.INJECT, "اتصال دوباره با $ip…")
+            toast(if (activate(updated)) "اتصال روی $ip رفت (${updated.latencyMs}ms)" else "اتصال با $ip برقرار نشد؛ IP قبلی حفظ شد")
+        } else toast(if (ok) "$ip روی ${label(entry)} اینجکت شد (${updated.latencyMs}ms)"
+                     else "$ip روی ${label(entry)} اعمال شد ولی تست جواب نداد — IP دیگری امتحان کنید")
+    }
 
     /** سریع‌ترین اتصال: همه‌ی سرورها هم‌زمان تست و اتصال به کم‌تاخیرترین. */
     fun connectFastest() = runTask(Task.CONNECT) { doConnectFastest() }
@@ -170,7 +199,12 @@ object VpnController {
             setTask(Task.SCAN_IP, "اسکن IP تمیز… $tested بررسی · $found تمیز")
         }
         _state.update { it.copy(cleanIps = ips, cleanIpCount = ips.size) }
-        toast(if (ips.isEmpty()) "IP تمیزی پیدا نشد" else "${ips.size} IP تمیز پیدا شد · بهترین: ${ips.first().ip}")
+        // از هر اسکن فقط یک IP منتخب: سریع‌ترین
+        ips.firstOrNull()?.let { best ->
+            settings.selectedIp = best.ip
+            _state.update { it.copy(selectedIp = best.ip) }
+        }
+        toast(if (ips.isEmpty()) "IP تمیزی پیدا نشد" else "${ips.size} IP بررسی شد · IP منتخب: ${ips.first().ip} (${ips.first().tlsMs}ms)")
         return ips
     }
 
@@ -200,10 +234,12 @@ object VpnController {
 
     private suspend fun doInject(): Int {
         if (_state.value.servers.isEmpty()) { toast("اول «ری‌اسکن» بزنید تا سرورها پیدا شوند"); return 0 }
-        var ips = _state.value.cleanIps
-        if (ips.isEmpty()) ips = doScanIps()
-        if (ips.isEmpty()) return 0
-        setTask(Task.INJECT, "تزریق ${ips.first().ip} به سرورها…")
+        if (_state.value.selectedIp.isEmpty()) doScanIps()
+        val sel = _state.value.selectedIp
+        if (sel.isEmpty()) return 0
+        // فقط «یک» IP منتخب — تا برنامه بین چند IP سردرگم نشود
+        val ips = listOf(CloudflareScanner.CleanIp(sel, 443, _state.value.cleanIps.firstOrNull { it.ip == sel }?.tlsMs ?: 0))
+        setTask(Task.INJECT, "تزریق $sel به سرورها…")
         val (list, changed) = engine.injectCleanIps(_state.value.servers, ips) { d, t ->
             setTask(Task.INJECT, "تزریق IP تمیز ($d/$t)")
         }
@@ -455,6 +491,11 @@ object VpnController {
 
     private fun setState(ph: Phase, msg: String) {
         _state.update { if (it.connected && ph != Phase.CONNECTED) it.copy(message = msg) else it.copy(phase = ph, message = msg) }
+    }
+
+    private fun isValidIpv4(s: String): Boolean {
+        val p = s.split(".")
+        return p.size == 4 && p.all { x -> x.toIntOrNull()?.let { it in 0..255 } == true && x.length <= 3 }
     }
 
     private fun label(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)

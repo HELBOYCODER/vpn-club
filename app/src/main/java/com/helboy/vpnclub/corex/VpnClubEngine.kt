@@ -341,6 +341,18 @@ class VpnClubEngine(private val context: Context) {
     }
 
     /**
+     * اینجکت دستی یک IP به یک سرور (انتخاب کاربر): آدرس dial عوض می‌شود و نتیجه‌ی تست واقعی
+     * در latencyMs ثبت می‌شود (−۱ = جواب نداد). تصمیم اعمال با فراخواننده است.
+     */
+    suspend fun injectOne(e: ServerEntry, ip: String): ServerEntry = withContext(Dispatchers.IO) {
+        val port = if (e.config.port in CloudflareScanner.CF_ALL_PORTS) e.config.port else 443
+        val cand = e.copy(config = e.config.withDial(ip, port))
+        val r = delayTestR(cand)
+        DiagLogger.log("INJECT_MANUAL ${e.config.host} -> $ip:$port ${when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log}" }}")
+        cand.copy(latencyMs = (r as? DelayResult.Ok)?.ms ?: -1L, testedAt = System.currentTimeMillis())
+    }
+
+    /**
      * تست موازی کاندیدها (ترتیب تصادفی) تا [want] سرور سالم پیدا شود.
      * دور اول: هر کاندید یک تلاش با پروفایل اول (آخرین موفق یا «مستقیم»).
      * دور دوم (اگر هیچ نیافت): ۴۰ کاندید با همه‌ی پروفایل‌های فایروال ایران.

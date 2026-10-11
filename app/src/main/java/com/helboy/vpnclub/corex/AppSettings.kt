@@ -16,7 +16,7 @@ class AppSettings(context: Context) {
 
     /** ترافیک داخل ایران مستقیم برود (geoip:ir). */
     var bypassIran: Boolean
-        get() = sp.getBoolean("bypass_iran", true)
+        get() = sp.getBoolean("bypass_iran", false) // پیش‌فرض: تونل کامل (همه‌ی ترافیک)
         set(v) { sp.edit().putBoolean("bypass_iran", v).apply() }
 
     /** تعویض خودکار سرور هنگام قطعی. */
@@ -28,6 +28,21 @@ class AppSettings(context: Context) {
     var autoConnectOnLaunch: Boolean
         get() = sp.getBoolean("auto_launch", false)
         set(v) { sp.edit().putBoolean("auto_launch", v).apply() }
+
+    /** تم: system | light | dark */
+    var themeMode: String
+        get() = sp.getString("theme", "system") ?: "system"
+        set(v) { sp.edit().putString("theme", v).apply() }
+
+    /** ظاهر دکمه‌ی اتصال: hellboy | orb */
+    var buttonStyle: String
+        get() = sp.getString("button_style", "hellboy") ?: "hellboy"
+        set(v) { sp.edit().putString("button_style", v).apply() }
+
+    /** IP منتخب برای اینجکت (خودکار از هر اسکن، یا دستی). */
+    var selectedIp: String
+        get() = sp.getString("selected_ip", "") ?: ""
+        set(v) { sp.edit().putString("selected_ip", v).apply() }
 
     /** دکمه‌ی اصلی به سریع‌ترین سرور وصل شود (وگرنه بهترین سرور لیست). */
     var fastestMode: Boolean

@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.components.Chip
 import com.helboy.vpnclub.ui.components.ClubCard
 import com.helboy.vpnclub.ui.components.ParticleOrb
+import com.helboy.vpnclub.ui.components.HellboyFace
 import com.helboy.vpnclub.ui.components.StatTile
 import com.helboy.vpnclub.ui.fa
 import com.helboy.vpnclub.ui.formatBytes
@@ -71,11 +73,15 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        Text("VPN CLUB", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
+        Text("HELLBOY VPN", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
             letterSpacing = 3.sp)
 
-        ParticleOrb(phase = shownPhase, connected = ui.connected, busy = busy,
-            downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 280.dp)
+        if (com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle == "orb")
+            ParticleOrb(phase = shownPhase, connected = ui.connected, busy = busy,
+                downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 280.dp)
+        else
+            HellboyFace(phase = shownPhase, connected = ui.connected, busy = busy,
+                downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 300.dp)
 
         val (title, tColor) = when {
             ui.connected -> "متصل" to StatusGreen
@@ -108,7 +114,7 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         if (busy || ui.testing) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth(),
-                color = NeonCyan, trackColor = Color(0xFF1A243B),
+                color = NeonCyan, trackColor = Palette.track,
             )
         }
 

@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.components
 
+import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -92,11 +93,11 @@ fun ActionButton(
         modifier = modifier.heightIn(min = 52.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = accent, contentColor = Color(0xFF0B0F19),
-            disabledContainerColor = accent.copy(alpha = 0.25f), disabledContentColor = Color(0xFF94A3B8)),
+            containerColor = accent, contentColor = Palette.onAccent,
+            disabledContainerColor = accent.copy(alpha = 0.25f), disabledContentColor = Palette.textSecondary),
     ) {
         if (running) CircularProgressIndicator(
-            modifier = Modifier.padding(end = 8.dp).size(18.dp), strokeWidth = 2.dp, color = Color(0xFF94A3B8))
+            modifier = Modifier.padding(end = 8.dp).size(18.dp), strokeWidth = 2.dp, color = Palette.textSecondary)
         else Icon(icon, null, modifier = Modifier.padding(end = 6.dp))
         Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }

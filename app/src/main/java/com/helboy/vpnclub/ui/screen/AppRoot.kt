@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,7 +65,7 @@ fun AppRoot(
         ) { pad ->
             Box(Modifier.fillMaxSize().background(
                 androidx.compose.ui.graphics.Brush.verticalGradient(
-                    listOf(androidx.compose.ui.graphics.Color(0xFF070A14), DarkBg, androidx.compose.ui.graphics.Color(0xFF0E1230))))
+                    listOf(Palette.bgTop, DarkBg, Palette.bgBottom)))
                 .padding(pad)) {
                 when (tab) {
                     0 -> HomeScreen(ui, onToggle)

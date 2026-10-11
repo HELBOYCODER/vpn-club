@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
@@ -57,12 +57,14 @@ fun ServersScreen(
     ) {
         item {
             Text("سرورهای منتخب", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("${ui.servers.size.fa()} سرور سالم · سریع‌ترین بالا · لمس = اتصال", color = TextSecondary, fontSize = 12.sp)
+            Text("${ui.servers.size.fa()} سرور سالم · لمس = اتصال · «اینجکت» = IP منتخب روی همان سرور", color = TextSecondary, fontSize = 12.sp)
+            Text(if (ui.selectedIp.isEmpty()) "IP منتخب: — (از تب اسکنر)" else "IP منتخب: ${ui.selectedIp}",
+                color = NeonCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton("ری‌اسکن سرورها", Icons.Rounded.Refresh,
                     running = ui.task == Task.RESCAN, enabled = !ui.testing,
                     accent = NeonCyan, onClick = onRescan, modifier = Modifier.weight(1f))
-                ActionButton("اینجکت IP تمیز", Icons.Rounded.Vaccines,
+                ActionButton("اینجکت به همه", Icons.Rounded.Vaccines,
                     running = ui.task == Task.INJECT, enabled = !ui.testing && ui.servers.isNotEmpty(),
                     accent = StatusAmber, onClick = onInject, modifier = Modifier.weight(1f))
             }
@@ -78,10 +80,27 @@ fun ServersScreen(
             }
         }
 
-        itemsIndexed(ui.servers, key = { _, s -> s.serverKey }) { i, s ->
-            ServerRow(rank = i + 1, s = s,
-                active = ui.connected && ui.current?.serverKey == s.serverKey,
-                onClick = { if (!ui.busyConnecting) onConnect(s) })
+        // دسته‌بندی: قابل اینجکت (کلادفلر) ← CDN ← Reality ← مستقیم
+        val order = listOf("کلادفلر · قابل اینجکت", "CDN (احتمالاً قابل اینجکت)", "Reality", "مستقیم")
+        val groups = ui.servers.groupBy { it.category }.toList().sortedBy { order.indexOf(it.first).let { i -> if (i < 0) 99 else i } }
+        var rank = 0
+        for ((cat, list) in groups) {
+            item(key = "h-$cat") {
+                Text("$cat · ${list.size.fa()}", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
+            for (s in list) {
+                rank++
+                val r = rank
+                item(key = s.serverKey) {
+                    ServerRow(rank = r, s = s,
+                        active = ui.connected && ui.current?.serverKey == s.serverKey,
+                        selectedIp = ui.selectedIp,
+                        busy = ui.testing,
+                        onClick = { if (!ui.busyConnecting) onConnect(s) },
+                        onInject = { VpnController.injectInto(s) })
+                }
+            }
         }
     }
 }
@@ -90,7 +109,7 @@ fun ServersScreen(
 @Composable
 fun TaskLine(ui: VpnController.UiState) {
     if (ui.testing) {
-        LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 10.dp), color = NeonCyan, trackColor = Color(0xFF1A243B))
+        LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 10.dp), color = NeonCyan, trackColor = Palette.track)
         Text(ui.taskMsg, color = TextTertiary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
     } else if (ui.message.isNotEmpty()) {
         Text(ui.message, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
@@ -98,14 +117,17 @@ fun TaskLine(ui: VpnController.UiState) {
 }
 
 @Composable
-private fun ServerRow(rank: Int, s: ServerEntry, active: Boolean, onClick: () -> Unit) {
+private fun ServerRow(
+    rank: Int, s: ServerEntry, active: Boolean, selectedIp: String, busy: Boolean,
+    onClick: () -> Unit, onInject: () -> Unit,
+) {
     ClubCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
-        border = if (active) StatusGreen else Color(0xFF26354D),
+        border = if (active) StatusGreen else Palette.border,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
-                Modifier.size(30.dp).background(if (active) StatusGreen else Color(0xFF1A243B), CircleShape),
+                Modifier.size(30.dp).background(if (active) StatusGreen else Palette.cardElevated, CircleShape),
                 contentAlignment = Alignment.Center,
             ) { Text(rank.fa(), color = if (active) Color.Black else TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
             Text(ServerEntry.flagOf(s.country), fontSize = 26.sp)
@@ -123,9 +145,16 @@ private fun ServerRow(rank: Int, s: ServerEntry, active: Boolean, onClick: () ->
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(if (s.latencyMs > 0) "${s.latencyMs.fa()} ms" else "—",
-                    color = StatusGreen, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(if (s.latencyMs > 0) "${s.latencyMs.fa()} ms" else "بدون پاسخ",
+                    color = if (s.latencyMs > 0) StatusGreen else StatusAmber, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 if (active) Text("متصل", color = StatusGreen, fontSize = 11.sp)
+                // اینجکت دستی IP منتخب روی همین سرور
+                if (s.canInjectManual) {
+                    androidx.compose.material3.TextButton(onClick = onInject, enabled = !busy && selectedIp.isNotEmpty(),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Text(if (s.config.dialHost == selectedIp) "اینجکت‌شده" else "اینجکت", color = NeonCyan, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

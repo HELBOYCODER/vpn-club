@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VpnController.init(applicationContext)
+        com.helboy.vpnclub.ui.theme.ThemeState.mode = VpnController.settings().themeMode
+        com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = VpnController.settings().buttonStyle
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)

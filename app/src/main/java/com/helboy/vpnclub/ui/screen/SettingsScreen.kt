@@ -61,6 +61,8 @@ private const val REPO = "helboycoder/vpn-club"
 fun SettingsScreen(settings: AppSettings) {
     val ctx = LocalContext.current
     var carrier by remember { mutableStateOf(settings.carrierMode) }
+    var theme by remember { mutableStateOf(settings.themeMode) }
+    var style by remember { mutableStateOf(settings.buttonStyle) }
     var bypassIran by remember { mutableStateOf(settings.bypassIran) }
     var failover by remember { mutableStateOf(settings.autoFailover) }
     var autoLaunch by remember { mutableStateOf(settings.autoConnectOnLaunch) }
@@ -76,6 +78,27 @@ fun SettingsScreen(settings: AppSettings) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("تنظیمات", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ظاهر", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("تم", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("system" to "خودکار", "light" to "روز", "dark" to "شب").forEach { (id, label) ->
+                        FilterChip(selected = theme == id, onClick = {
+                            theme = id; settings.themeMode = id; com.helboy.vpnclub.ui.theme.ThemeState.mode = id
+                        }, label = { Text(label, fontSize = 12.sp) })
+                    }
+                }
+                Text("دکمه‌ی اتصال", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("hellboy" to "چهره‌ی هلبوی", "orb" to "گوی ذرات").forEach { (id, label) ->
+                        FilterChip(selected = style == id, onClick = { style = id; settings.buttonStyle = id; com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = id },
+                            label = { Text(label, fontSize = 12.sp) })
+                    }
+                }
+            }
+        }
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -97,7 +120,7 @@ fun SettingsScreen(settings: AppSettings) {
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SwitchRow("ترافیک داخل ایران مستقیم", "سایت‌ها و سرویس‌های ایرانی بدون VPN (سریع‌تر)",
+                SwitchRow("ترافیک داخل ایران مستقیم", "خاموش = تونل کامل، همه‌ی ترافیک و همه‌ی اپ‌ها از VPN (پیش‌فرض)",
                     bypassIran) { bypassIran = it; settings.bypassIran = it }
                 SwitchRow("تعویض خودکار سرور", "با قطعی، فوراً به سرور بعدیِ ۱۰ منتخب می‌رود",
                     failover) { failover = it; settings.autoFailover = it }
@@ -128,7 +151,7 @@ fun SettingsScreen(settings: AppSettings) {
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("دربارهٔ برنامه", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("VPN CLUB نسخهٔ ${versionName(ctx)}", color = TextSecondary, fontSize = 12.sp)
+                Text("Hellboy VPN نسخهٔ ${versionName(ctx)}", color = TextSecondary, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
                         onClick = {
