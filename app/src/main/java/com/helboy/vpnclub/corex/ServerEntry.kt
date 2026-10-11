@@ -32,6 +32,20 @@ data class ServerEntry(
 
     val injected: Boolean get() = config.isInjected
 
+    /**
+     * آیا IP تمیز کلادفلر روی این سرور کار می‌کند؟ فقط سرور پشت کلادفلر با ترنسپورت CDN-پذیر
+     * (ws / grpc / xhttp / httpupgrade). Reality و TCP مستقیم از کلادفلر رد نمی‌شوند.
+     */
+    val canInject: Boolean get() = cf && injectableTransport(config)
+
+    /** دلیل قابل‌فهم برای کاربر وقتی تزریق ممکن نیست. */
+    val injectBlocker: String? get() = when {
+        canInject -> null
+        (config.query.toMap()["security"] ?: "") == "reality" -> "Reality (مستقیم، بدون کلادفلر)"
+        !cf -> "پشت کلادفلر نیست"
+        else -> "ترنسپورت ${config.query.toMap()["type"] ?: "tcp"} از CDN رد نمی‌شود"
+    }
+
     /** امتیاز: کمترین تاخیر واقعی تونل = بهترین (اگر سرعت دانلود هم اندازه‌گیری شده بود، وزن دارد). */
     val score: Double get() =
         if (latencyMs <= 0) 0.0
@@ -66,6 +80,13 @@ data class ServerEntry(
                 testedAt = o.optLong("at"),
                 cf = o.optBoolean("cf", false)
             )
+        }
+
+        fun injectableTransport(c: ProxyConfig): Boolean {
+            val q = c.query.toMap()
+            if ((q["security"] ?: "") == "reality") return false
+            val net = q["type"] ?: q["network"] ?: "tcp"
+            return net in setOf("ws", "grpc", "xhttp", "splithttp", "httpupgrade")
         }
 
         /** کشور از روی برچسب (ایموجی پرچم یا کد دو حرفی). */

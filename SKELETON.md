@@ -72,6 +72,10 @@ finalmask JSON (فرمت فورک patterniha — تاییدشده با باین�
 
 **v2.0.0 معماری:** VpnController (singleton) ← VpnClubEngine (discover/findServers روی پورت تست 10809) ← VpnClubService (10808، thread جدا). CI نسخه را از app/build.gradle.kts می‌خواند و ریلیز می‌سازد.
 
+| v2.3.1 | (ریلیز) | اینجکت اتصال زنده را با IP جدید دوباره برقرار می‌کند؛ ServerEntry.canInject/injectBlocker؛ تست با measureOutboundDelay (بدون هسته‌ی هم‌زمان) | منتظر تست |
+
+**ابزار توسعه:** اسکیل‌های `.claude/skills/systematic-debugging` و `verification-before-completion` (از obra/superpowers، MIT) و MCPهای رایگان در `.mcp.json` (context7، sequential-thinking).
+
 ## 7. زیرساخت سرور (Cloudflare — اکانت کارفرما)
 
 - **Worker:** `vpnclub-sub` → https://vpnclub-sub.quilt-refract.workers.dev (کد: `/home/agentuser/projects/vpnclub-worker/`)

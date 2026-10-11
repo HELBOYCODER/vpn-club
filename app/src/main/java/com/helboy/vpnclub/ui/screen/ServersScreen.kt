@@ -114,8 +114,11 @@ private fun ServerRow(rank: Int, s: ServerEntry, active: Boolean, onClick: () ->
                     fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Chip(s.config.scheme.uppercase(), NeonIndigo)
-                    if (s.injected) Chip("IP تمیز ${s.config.dialHost}", NeonCyan)
-                    else if (s.cf) Chip("کلادفلر", TextTertiary)
+                    when {
+                        s.injected && s.canInject -> Chip("IP تمیز ${s.config.dialHost}", NeonCyan)
+                        s.canInject -> Chip("کلادفلر · قابل اینجکت", NeonCyan.copy(alpha = 0.7f))
+                        else -> Chip("بدون اینجکت", TextTertiary)
+                    }
                     IranVariants.byId(s.variantId)?.takeIf { it.id != "plain" }?.let { Chip(it.label, StatusAmber) }
                 }
             }

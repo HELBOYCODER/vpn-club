@@ -208,12 +208,28 @@ object VpnController {
             setTask(Task.INJECT, "تزریق IP تمیز ($d/$t)")
         }
         publish(list)
-        val eligible = list.count { it.cf }
+        val eligible = list.count { it.canInject }
+
+        // ── ریشه‌ی باگ: قبلاً فقط لیست عوض می‌شد و اتصال زنده روی IP قبلی می‌ماند ──
+        val cur = _state.value.current
+        var curMsg = ""
+        if (_state.value.connected && cur != null) {
+            val updated = list.firstOrNull { it.serverKey == cur.serverKey }
+            when {
+                !cur.canInject -> curMsg = " · سرور فعلی: ${cur.injectBlocker}؛ IP تمیز روی آن کار نمی‌کند — یک سرور «کلادفلر» انتخاب کنید"
+                updated != null && updated.config.dialHost != cur.config.dialHost -> {
+                    setTask(Task.INJECT, "اتصال دوباره با IP تمیز ${updated.config.dialHost}…")
+                    curMsg = if (activate(updated)) " · اتصال فعلی روی ${updated.config.dialHost} رفت"
+                             else " · اتصال با IP جدید برقرار نشد؛ IP قبلی حفظ شد"
+                }
+                else -> curMsg = " · برای سرور فعلی IP تمیزِ بهتری جواب نداد"
+            }
+        }
         toast(when {
-            eligible == 0 -> "هیچ‌کدام از این سرورها پشت کلادفلر نیستند (تزریق لازم ندارند)"
-            changed == 0 -> "IP قبلی‌ها بهتر بودند؛ تغییری لازم نبود"
-            else -> "IP تمیز به $changed سرور تزریق شد"
-        })
+            eligible == 0 -> "هیچ‌کدام از این ۱۰ سرور پشت کلادفلر نیستند؛ «ری‌اسکن» بزنید"
+            changed == 0 -> "IP تمیز جدیدی روی سرورها جواب نداد"
+            else -> "IP تمیز به $changed از $eligible سرور قابل‌تزریق اعمال شد"
+        } + curMsg)
         return changed
     }
 

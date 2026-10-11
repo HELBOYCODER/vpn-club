@@ -12,8 +12,8 @@ android {
         applicationId = "com.helboy.vpnclub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 27
-        versionName = "2.3.0"
+        versionCode = 28
+        versionName = "2.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

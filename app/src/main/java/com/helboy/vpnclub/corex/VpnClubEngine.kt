@@ -127,8 +127,18 @@ class VpnClubEngine(private val context: Context) {
             return q["security"] in listOf("tls", "reality") || q["tls"] == "tls" || c.config.scheme == "trojan"
         }
         val rng = SecureRandom()
-        val (st, weak) = alive.partition { strong(it) }
-        val ordered = st.shuffled(rng) + weak.shuffled(rng)
+        // نیمی از کاندیدها از سرورهای «قابل تزریق IP تمیز» (پشت کلادفلر + ws/grpc/xhttp) تا
+        // دکمه‌ی اینجکت روی لیست ۱۰تایی واقعاً اثر داشته باشد
+        val (inj, rest) = alive.partition { it.behindCf && injectable(it.config) }
+        val (st, weak) = rest.partition { strong(it) }
+        val others = st.shuffled(rng) + weak.shuffled(rng)
+        val injS = inj.shuffled(rng)
+        val ordered = ArrayList<Candidate>()
+        var ii = 0; var oi = 0
+        while (ii < injS.size || oi < others.size) {
+            if (ii < injS.size) ordered.add(injS[ii++])
+            if (oi < others.size) ordered.add(others[oi++])
+        }
         Discovery(ordered.take(MAX_CANDIDATES), cleanIps, parsed.size)
     }
 
@@ -290,7 +300,8 @@ class VpnClubEngine(private val context: Context) {
         fun portFor(e: ServerEntry, ip: CloudflareScanner.CleanIp) =
             if (e.config.port in CloudflareScanner.CF_ALL_PORTS) e.config.port else ip.port
 
-        val targets = entries.filter { it.cf && injectable(it.config) }
+        val targets = entries.filter { it.canInject }
+        entries.filter { !it.canInject }.forEach { DiagLogger.log("INJECT skip ${it.config.host}: ${it.injectBlocker}") }
         val pool = Executors.newFixedThreadPool(48)
         val probes = targets.associate { e ->
             e.serverKey to top.map { ip ->
@@ -414,13 +425,7 @@ class VpnClubEngine(private val context: Context) {
     }
 
     /** تزریق IP فقط وقتی معنی دارد که ترنسپورت از CDN رد شود و TLS باشد (نه Reality/TCP خام). */
-    private fun injectable(c: ProxyConfig): Boolean {
-        val q = c.query.toMap()
-        val sec = q["security"] ?: if (q["tls"] == "tls" || c.scheme == "trojan") "tls" else ""
-        if (sec == "reality") return false // TLS/ws و ws ساده (پورت‌های HTTP کلادفلر) هر دو قابل تزریق‌اند
-        val net = q["type"] ?: q["network"] ?: "tcp"
-        return net in setOf("ws", "grpc", "xhttp", "splithttp", "httpupgrade")
-    }
+    private fun injectable(c: ProxyConfig): Boolean = ServerEntry.injectableTransport(c)
 
     companion object {
         const val PARALLEL_TESTS = 8
