@@ -205,6 +205,90 @@ class VpnClubEngine(private val context: Context) {
         } finally { tunnel.stop() }
     } }
 
+    /** بازتست موازی یک لیست؛ فقط سالم‌ها (با آمار تازه) برمی‌گردند. */
+    suspend fun retestAll(entries: List<ServerEntry>, onProgress: (done: Int, alive: Int) -> Unit = { _, _ -> }): List<ServerEntry> =
+        withContext(Dispatchers.IO) {
+            val queue = java.util.concurrent.ConcurrentLinkedQueue(entries)
+            val alive = java.util.concurrent.ConcurrentLinkedQueue<ServerEntry>()
+            val done = java.util.concurrent.atomic.AtomicInteger()
+            coroutineScope {
+                (0 until WORKERS).map { w ->
+                    async(Dispatchers.IO) {
+                        val xr = workerXray(w)
+                        while (currentCoroutineContext().isActive) {
+                            val e = queue.poll() ?: break
+                            val tunnel = TunnelLauncher.launch(xr, e)
+                            val r = if (tunnel == null) null else try {
+                                HealthTester.testTunnel(xr.port, withUpload = false, quick = true)
+                            } finally { tunnel.stop() }
+                            DiagLogger.log("RETEST ${e.config.host}:${e.config.port} dial=${e.config.dialHost} -> ${r?.error ?: if (r == null) "core_fail" else "OK"}")
+                            if (r != null && r.ok) alive.add(e.copy(latencyMs = r.latencyMs, downBps = r.downBps,
+                                testedAt = System.currentTimeMillis()))
+                            onProgress(done.incrementAndGet(), alive.size)
+                        }
+                    }
+                }.forEach { it.await() }
+            }
+            alive.toList()
+        }
+
+    /** اسکن تازه‌ی IP تمیز کلادفلر: کش بازبینی + اسکن؛ تمیزترین‌ها (کمترین زمان هندشیک+HTTP) اول. */
+    suspend fun freshCleanIps(): List<CloudflareScanner.CleanIp> = withContext(Dispatchers.IO) {
+        val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
+        val fresh = CloudflareScanner.scan(perRange = 20, ports = listOf(443), timeoutMs = 2_500)
+        val all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }.take(24)
+        if (all.isNotEmpty()) store.saveCleanIps(all)
+        all
+    }
+
+    /**
+     * تزریق تمیزترین IP به همه‌ی سرورهای منتخبِ پشت کلادفلر.
+     * برای هر سرور به‌ترتیب تمیزترین ۳ IP امتحان می‌شود؛ اولین که تونل سالم داد می‌ماند.
+     * اگر هیچ‌کدام کار نکرد همان آدرس قبلی (که سالم تست شده) حفظ می‌شود.
+     */
+    suspend fun injectCleanIps(
+        entries: List<ServerEntry>,
+        ips: List<CloudflareScanner.CleanIp>,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): List<ServerEntry> = withContext(Dispatchers.IO) {
+        if (ips.isEmpty()) return@withContext entries
+        val top = ips.take(3)
+        val queue = java.util.concurrent.ConcurrentLinkedQueue(entries)
+        val out = ConcurrentHashMap<String, ServerEntry>()
+        val done = java.util.concurrent.atomic.AtomicInteger()
+        coroutineScope {
+            (0 until WORKERS).map { w ->
+                async(Dispatchers.IO) {
+                    val xr = workerXray(w)
+                    while (currentCoroutineContext().isActive) {
+                        val e = queue.poll() ?: break
+                        var best = e
+                        if (e.cf && injectable(e.config)) {
+                            for (ip in top) {
+                                val port = if (e.config.port in CloudflareScanner.CF_PORTS) e.config.port else ip.port
+                                if (e.config.dialHost == ip.ip && e.config.dialPort == port) { best = e; break }
+                                val cand = e.copy(config = e.config.withDial(ip.ip, port))
+                                val tunnel = TunnelLauncher.launch(xr, cand)
+                                val r = if (tunnel == null) null else try {
+                                    HealthTester.testTunnel(xr.port, withUpload = false, quick = true)
+                                } finally { tunnel.stop() }
+                                DiagLogger.log("INJECT ${e.config.host} -> ${ip.ip} ${r?.error ?: if (r == null) "core_fail" else "OK lat=${r.latencyMs}"}")
+                                if (r != null && r.ok) {
+                                    best = cand.copy(latencyMs = r.latencyMs, downBps = r.downBps,
+                                        testedAt = System.currentTimeMillis())
+                                    break
+                                }
+                            }
+                        }
+                        out[e.serverKey] = best
+                        onProgress(done.incrementAndGet(), entries.size)
+                    }
+                }
+            }.forEach { it.await() }
+        }
+        entries.mapNotNull { out[it.serverKey] }
+    }
+
     /**
      * تست موازی (WORKERS هسته‌ی مستقل، هرکدام روی پورت خودش) تا [want] سرور سالم پیدا شود.
      *
@@ -250,7 +334,7 @@ class VpnClubEngine(private val context: Context) {
                             for (v in variants) {
                                 if (!currentCoroutineContext().isActive || expired()) break
                                 val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)
-                                val entry = ServerEntry(dial, v.id, v.useFrag)
+                                val entry = ServerEntry(dial, v.id, v.useFrag, cf = cand.behindCf)
                                 val tunnel = TunnelLauncher.launch(xr, entry)
                                 val res = if (tunnel == null)
                                     HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${xr.lastError.take(160)}")

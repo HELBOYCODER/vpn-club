@@ -60,7 +60,7 @@ fun ServersScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("۱۰ سرور منتخب", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("تست‌شده با دانلود/آپلود واقعی از داخل تونل", color = TextSecondary, fontSize = 12.sp)
+                    Text("رفرش: ضعیف‌ها حذف ← سرور جدید از ساب‌ها ← اسکن IP تمیز ← تزریق به هر ۱۰ سرور", color = TextSecondary, fontSize = 12.sp)
                 }
                 IconButton(onClick = onRefresh, enabled = !ui.testing) {
                     Icon(Icons.Rounded.Refresh, contentDescription = "تست دوباره",

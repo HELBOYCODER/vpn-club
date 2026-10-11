@@ -18,7 +18,9 @@ data class ServerEntry(
     val latencyMs: Long = 0,
     val downBps: Double = 0.0,
     val upBps: Double = 0.0,
-    val testedAt: Long = 0
+    val testedAt: Long = 0,
+    /** سرور پشت کلادفلر است (قابل تزریق IP تمیز). */
+    val cf: Boolean = false
 ) {
     val id: String get() =
         "${config.scheme}|${config.host}|${config.port}|${config.uuidOrUser}|${config.dialHost}|${variantId ?: "-"}"
@@ -43,6 +45,7 @@ data class ServerEntry(
         .put("down", downBps)
         .put("up", upBps)
         .put("at", testedAt)
+        .put("cf", cf)
 
     companion object {
         fun fromJson(o: JSONObject?): ServerEntry? {
@@ -58,7 +61,8 @@ data class ServerEntry(
                 latencyMs = o.optLong("lat"),
                 downBps = o.optDouble("down", 0.0),
                 upBps = o.optDouble("up", 0.0),
-                testedAt = o.optLong("at")
+                testedAt = o.optLong("at"),
+                cf = o.optBoolean("cf", false)
             )
         }
 
