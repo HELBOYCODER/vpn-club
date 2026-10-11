@@ -17,7 +17,12 @@ import go.Seq
  * تونل سراسری از VpnService + hev-socks5-tunnel (libhev-socks5-tunnel.so) تامین می‌شود
  * که ترافیک تون را به این SOCKS5 محلی می‌فرستد.
  */
-class XrayCore(private val socksPort: Int = 10808) {
+class XrayCore(
+    private val socksPort: Int = 10808,
+    /** قوانین مسیریابی geoip/geosite فقط برای هسته‌ی سرویس. در هسته‌های تست بارگذاری geodata
+     *  هر استارت را کند می‌کرد و با اجرای هم‌زمان core_fail می‌داد (لاگ واقعی کاربر). */
+    private val useRouting: Boolean = false
+) {
     val port: Int get() = socksPort
 
 
@@ -139,7 +144,7 @@ class XrayCore(private val socksPort: Int = 10808) {
                 .put("domainStrategy", "AsIs")
                 .put("rules", JSONArray().also { rules ->
                     // ترافیک داخلی ایران از تونل خارج — حفظ دسترسی به سرویس‌های داخلی (قابل خاموش‌کردن)
-                    if (bypassIran()) {
+                    if (useRouting && bypassIran()) {
                         rules.put(JSONObject().put("type", "field")
                             .put("ip", JSONArray(listOf("geoip:ir")))
                             .put("outboundTag", "direct"))

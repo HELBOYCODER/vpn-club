@@ -235,16 +235,17 @@ class VpnClubEngine(private val context: Context) {
     /** اسکن تازه‌ی IP تمیز کلادفلر: کش بازبینی + اسکن؛ تمیزترین‌ها (کمترین زمان هندشیک+HTTP) اول. */
     suspend fun freshCleanIps(): List<CloudflareScanner.CleanIp> = withContext(Dispatchers.IO) {
         val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
-        val fresh = CloudflareScanner.scan(perRange = 20, ports = listOf(443), timeoutMs = 2_500)
+        val fresh = CloudflareScanner.scan(perRange = 10, ports = listOf(443), maxConcurrency = 64, timeoutMs = 2_000)
         val all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }.take(24)
         if (all.isNotEmpty()) store.saveCleanIps(all)
         all
     }
 
     /**
-     * تزریق تمیزترین IP به همه‌ی سرورهای منتخبِ پشت کلادفلر.
-     * برای هر سرور به‌ترتیب تمیزترین ۳ IP امتحان می‌شود؛ اولین که تونل سالم داد می‌ماند.
-     * اگر هیچ‌کدام کار نکرد همان آدرس قبلی (که سالم تست شده) حفظ می‌شود.
+     * تزریق تمیزترین IP به همه‌ی سرورهای منتخبِ پشت کلادفلر — سریع:
+     *  ۱) پروب سبک و موازی (هندشیک TLS + Upgrade وب‌سوکت) از هر سرور × ۶ تمیزترین IP، بدون هسته (~۳ ثانیه)
+     *  ۲) برای هر سرور «تمیزترینِ» پروب‌گذشته فقط یک بار با تونل واقعی تأیید می‌شود
+     *  ۳) اگر تأیید نشد، آدرس قبلی (که سالم تست شده) حفظ می‌شود
      */
     suspend fun injectCleanIps(
         entries: List<ServerEntry>,
@@ -252,7 +253,27 @@ class VpnClubEngine(private val context: Context) {
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ): List<ServerEntry> = withContext(Dispatchers.IO) {
         if (ips.isEmpty()) return@withContext entries
-        val top = ips.take(3)
+        val top = ips.take(6)
+        fun portFor(e: ServerEntry, ip: CloudflareScanner.CleanIp) =
+            if (e.config.port in CloudflareScanner.CF_PORTS) e.config.port else ip.port
+
+        // ── ۱) پروب موازی ──
+        val targets = entries.filter { it.cf && injectable(it.config) }
+        val pool = Executors.newFixedThreadPool(48)
+        val probes = targets.associate { e ->
+            e.serverKey to top.map { ip ->
+                pool.submit(Callable { ip to HealthTester.protocolProbe(e.config, ip.ip, portFor(e, ip), 2_200) })
+            }
+        }
+        val chosen = HashMap<String, CloudflareScanner.CleanIp?>()
+        for ((k, futs) in probes) {
+            chosen[k] = futs.mapNotNull { f -> runCatching { f.get(6, TimeUnit.SECONDS) }.getOrNull() }
+                .firstOrNull { it.second > 0 }?.first   // به ترتیب «تمیزترین»
+        }
+        pool.shutdownNow()
+        DiagLogger.log("INJECT_PROBE targets=${targets.size} withIp=${chosen.values.count { it != null }}")
+
+        // ── ۲) تأیید تونل واقعی (موازی با هسته‌های تست) ──
         val queue = java.util.concurrent.ConcurrentLinkedQueue(entries)
         val out = ConcurrentHashMap<String, ServerEntry>()
         val done = java.util.concurrent.atomic.AtomicInteger()
@@ -263,21 +284,20 @@ class VpnClubEngine(private val context: Context) {
                     while (currentCoroutineContext().isActive) {
                         val e = queue.poll() ?: break
                         var best = e
-                        if (e.cf && injectable(e.config)) {
-                            for (ip in top) {
-                                val port = if (e.config.port in CloudflareScanner.CF_PORTS) e.config.port else ip.port
-                                if (e.config.dialHost == ip.ip && e.config.dialPort == port) { best = e; break }
+                        val ip = chosen[e.serverKey]
+                        if (ip != null) {
+                            val port = portFor(e, ip)
+                            if (e.config.dialHost == ip.ip && e.config.dialPort == port) {
+                                best = e
+                            } else {
                                 val cand = e.copy(config = e.config.withDial(ip.ip, port))
                                 val tunnel = TunnelLauncher.launch(xr, cand)
                                 val r = if (tunnel == null) null else try {
                                     HealthTester.testTunnel(xr.port, withUpload = false, quick = true)
                                 } finally { tunnel.stop() }
                                 DiagLogger.log("INJECT ${e.config.host} -> ${ip.ip} ${r?.error ?: if (r == null) "core_fail" else "OK lat=${r.latencyMs}"}")
-                                if (r != null && r.ok) {
-                                    best = cand.copy(latencyMs = r.latencyMs, downBps = r.downBps,
-                                        testedAt = System.currentTimeMillis())
-                                    break
-                                }
+                                if (r != null && r.ok) best = cand.copy(latencyMs = r.latencyMs,
+                                    downBps = r.downBps, testedAt = System.currentTimeMillis())
                             }
                         }
                         out[e.serverKey] = best

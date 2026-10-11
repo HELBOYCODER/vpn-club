@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,6 +175,8 @@ object VpnController {
             poolBusy = true
             _state.update { it.copy(testing = true) }
             try {
+                // اسکن IP تمیز هم‌زمان با یافتن سرورها شروع می‌شود؛ تزریق (مرحله ۲) بعد از ۱۰ سرور است
+                val ipJob = scope.async(Dispatchers.IO) { engine.freshCleanIps() }
                 // ── بازتست موجودی ──
                 var alive: List<ServerEntry> = emptyList()
                 if (existing.isNotEmpty()) {
@@ -212,7 +215,7 @@ object VpnController {
                 if (list.isEmpty()) return@withLock emptyList()
                 // ── ۲/۳ اسکن IP تمیز + تزریق به همه ──
                 if (!_state.value.connected) setState(Phase.SCANNING_CF, "${step}۲/۳ اسکن تمیزترین IP کلادفلر…")
-                val ips = engine.freshCleanIps()
+                val ips = ipJob.await()
                 _state.update { it.copy(cleanIps = ips, cleanIpCount = ips.size) }
                 if (!_state.value.connected)
                     setState(Phase.SCANNING_CF, "${step}۲/۳ تزریق ${ips.firstOrNull()?.ip ?: "—"} به سرورها…")

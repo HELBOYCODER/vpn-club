@@ -38,7 +38,7 @@ class VpnClubService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        xray = XrayCore(SOCKS_PORT).also { it.setAppContext(this) }
+        xray = XrayCore(SOCKS_PORT, useRouting = true).also { it.setAppContext(this) }
         tun = Tun2Socks(this)
         DiagLogger.appContext = applicationContext
     }
@@ -67,7 +67,13 @@ class VpnClubService : VpnService() {
             return
         }
         launched?.stop(); launched = null
-        val l = TunnelLauncher.launch(xray!!, entry)
+        var l = TunnelLauncher.launch(xray!!, entry)
+        if (l == null) {
+            // احتمال خطای geodata در قوانین مسیریابی؛ یک بار بدون قوانین امتحان کن
+            DiagLogger.log("SERVICE retry without routing: ${xray?.lastError.orEmpty().take(120)}")
+            xray = XrayCore(SOCKS_PORT, useRouting = false).also { it.setAppContext(this) }
+            l = TunnelLauncher.launch(xray!!, entry)
+        }
         if (l == null) {
             val err = xray?.lastError.orEmpty().take(200)
             DiagLogger.log("SERVICE core_fail ${entry.config.host}:${entry.config.port} $err")
