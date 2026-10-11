@@ -37,7 +37,6 @@ class VpnClubEngine(private val context: Context) {
     private val fetcher = SubscriptionFetcher()
     private val store = ServerStore(context)
     private val settings = AppSettings.of(context)
-    private val testXray = XrayCore(TEST_PORT).also { it.setAppContext(context) }
 
     /** مخازن اشتراک — سرور خودمان اول، بعد منابع تأییدشده. */
     val defaultSubscriptions = listOf(
@@ -86,8 +85,7 @@ class VpnClubEngine(private val context: Context) {
 
     @Volatile private var learnedVariant: String? = null
 
-    /** testXray و پورت ۱۰۸۰۹ مشترک است؛ هر تست باید انحصاری باشد. */
-    private val testLock = Mutex()
+
 
     fun savedServers(): List<ServerEntry> = store.loadServers()
     fun saveServers(list: List<ServerEntry>) = store.saveServers(list)
@@ -193,71 +191,105 @@ class VpnClubEngine(private val context: Context) {
     // تست تونل واقعی
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** تست یک ServerEntry آماده (برای بازبینی لیست ذخیره‌شده). null = ناسالم. */
-    suspend fun retest(e: ServerEntry): ServerEntry? = withContext(Dispatchers.IO) { testLock.withLock {
-        val tunnel = TunnelLauncher.launch(testXray, e) ?: return@withContext null
-        try {
-            val r = HealthTester.testTunnel(TEST_PORT)
-            DiagLogger.log("RETEST ${e.config.host}:${e.config.port} ${e.variantId} -> ${r.error ?: "OK"}")
-            if (!r.ok) null
-            else e.copy(latencyMs = r.latencyMs, downBps = r.downBps, upBps = r.upBps,
-                testedAt = System.currentTimeMillis())
-        } finally { tunnel.stop() }
-    } }
+    // ─────────────────────────────────────────────────────────────────────────
+    // تست تونل واقعی — با Libv2ray.measureOutboundDelay
+    //
+    // چرا: اجرای هم‌زمان چند CoreController (۴ هسته‌ی تست + هسته‌ی سرویس) احتمالاً باعث
+    // کرش native و بسته شدن ناگهانی برنامه می‌شد. measureOutboundDelay همان مسیری است که
+    // v2rayNG برای تست موازی صدها سرور استفاده می‌کند: هر تست یک نمونه‌ی موقت بدون inbound.
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /** بازتست موازی یک لیست؛ فقط سالم‌ها (با آمار تازه) برمی‌گردند. */
+    private val delayPool = Executors.newCachedThreadPool()
+
+    /**
+     * تاخیر واقعی (میلی‌ثانیه) یک درخواست HTTPS از داخل تونل این سرور با پروفایل/تزریق خودش.
+     * @return -1 = ناسالم
+     */
+    fun delayTest(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): Long = delayTestR(e, timeoutMs).first
+
+    /** مثل [delayTest] ولی دلیل شکست را هم برمی‌گرداند (برای لاگ). */
+    fun delayTestR(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): Pair<Long, String> {
+        XrayCore.ensureEnv(context)
+        val xr = XrayCore(0)
+        xr.setVariant(IranVariants.byId(e.variantId))
+        var frag: FragmentProxy? = null
+        if (e.useFrag) {
+            val f = FragmentProxy(e.config.dialHost, e.config.dialPort)
+            if (f.start()) { frag = f; xr.dialOverride = "127.0.0.1:${f.port}" }
+        }
+        // بدون inbound: تست فقط به outbound نیاز دارد (پورت آزاد/اشغال مهم نیست)
+        val json = try {
+            org.json.JSONObject(xr.buildConfig(e.config)).apply { remove("inbounds") }.toString()
+        } catch (ex: Exception) { frag?.stop(); return -1L to "build: ${ex.message}" }
+        return try {
+            val fut = delayPool.submit(Callable { libv2ray.Libv2ray.measureOutboundDelay(json, TEST_URL) })
+            val ms = fut.get(timeoutMs, TimeUnit.MILLISECONDS)
+            when {
+                ms in 1..MAX_DELAY_MS -> ms to ""
+                ms > MAX_DELAY_MS -> -1L to "slow ${ms}ms"
+                else -> -1L to "delay=$ms"
+            }
+        } catch (_: java.util.concurrent.TimeoutException) {
+            -1L to "timeout"
+        } catch (ex: Exception) {
+            val msg = (ex.cause?.message ?: ex.message ?: ex.javaClass.simpleName).take(120)
+            if (msg.contains("infra/conf", true))
+                DiagLogger.log("CORE_CONFIG ${e.config.host}: $msg | ${json.take(400)}")
+            -1L to msg
+        } finally { frag?.stop() }
+    }
+
+    /** تست یک ServerEntry (برای تعویض خودکار). null = ناسالم. */
+    suspend fun retest(e: ServerEntry): ServerEntry? = withContext(Dispatchers.IO) {
+        val ms = delayTest(e)
+        DiagLogger.log("RETEST ${e.config.host}:${e.config.port} dial=${e.config.dialHost} -> ${if (ms > 0) "OK ${ms}ms" else "fail"}")
+        if (ms > 0) e.copy(latencyMs = ms, testedAt = System.currentTimeMillis()) else null
+    }
+
+    /** بازتست موازی یک لیست؛ فقط سالم‌ها (با تاخیر تازه) برمی‌گردند. */
     suspend fun retestAll(entries: List<ServerEntry>, onProgress: (done: Int, alive: Int) -> Unit = { _, _ -> }): List<ServerEntry> =
         withContext(Dispatchers.IO) {
-            val queue = java.util.concurrent.ConcurrentLinkedQueue(entries)
-            val alive = java.util.concurrent.ConcurrentLinkedQueue<ServerEntry>()
             val done = java.util.concurrent.atomic.AtomicInteger()
-            coroutineScope {
-                (0 until WORKERS).map { w ->
-                    async(Dispatchers.IO) {
-                        val xr = workerXray(w)
-                        while (currentCoroutineContext().isActive) {
-                            val e = queue.poll() ?: break
-                            val tunnel = TunnelLauncher.launch(xr, e)
-                            val r = if (tunnel == null) null else try {
-                                HealthTester.testTunnel(xr.port, withUpload = false, quick = true)
-                            } finally { tunnel.stop() }
-                            DiagLogger.log("RETEST ${e.config.host}:${e.config.port} dial=${e.config.dialHost} -> ${r?.error ?: if (r == null) "core_fail" else "OK"}")
-                            if (r != null && r.ok) alive.add(e.copy(latencyMs = r.latencyMs, downBps = r.downBps,
-                                testedAt = System.currentTimeMillis()))
-                            onProgress(done.incrementAndGet(), alive.size)
-                        }
-                    }
-                }.forEach { it.await() }
-            }
-            alive.toList()
+            val alive = java.util.concurrent.atomic.AtomicInteger()
+            entries.map { e ->
+                async(Dispatchers.IO) {
+                    val ms = delayTest(e)
+                    if (ms > 0) alive.incrementAndGet()
+                    onProgress(done.incrementAndGet(), alive.get())
+                    if (ms > 0) e.copy(latencyMs = ms, testedAt = System.currentTimeMillis()) else null
+                }
+            }.mapNotNull { it.await() }
         }
 
     /** اسکن تازه‌ی IP تمیز کلادفلر: کش بازبینی + اسکن؛ تمیزترین‌ها (کمترین زمان هندشیک+HTTP) اول. */
-    suspend fun freshCleanIps(): List<CloudflareScanner.CleanIp> = withContext(Dispatchers.IO) {
-        val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
-        val fresh = CloudflareScanner.scan(perRange = 10, ports = listOf(443), maxConcurrency = 64, timeoutMs = 2_000)
-        val all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }.take(24)
-        if (all.isNotEmpty()) store.saveCleanIps(all)
-        all
-    }
+    suspend fun freshCleanIps(onProgress: (tested: Int, found: Int) -> Unit = { _, _ -> }): List<CloudflareScanner.CleanIp> =
+        withContext(Dispatchers.IO) {
+            val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
+            val fresh = CloudflareScanner.scan(perRange = 12, ports = listOf(443), maxConcurrency = 64,
+                timeoutMs = 2_000, onProgress = onProgress)
+            val all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }.take(24)
+            if (all.isNotEmpty()) store.saveCleanIps(all)
+            all
+        }
+
+    fun savedCleanIps(): List<CloudflareScanner.CleanIp> = store.loadCleanIps()
 
     /**
-     * تزریق تمیزترین IP به همه‌ی سرورهای منتخبِ پشت کلادفلر — سریع:
-     *  ۱) پروب سبک و موازی (هندشیک TLS + Upgrade وب‌سوکت) از هر سرور × ۶ تمیزترین IP، بدون هسته (~۳ ثانیه)
-     *  ۲) برای هر سرور «تمیزترینِ» پروب‌گذشته فقط یک بار با تونل واقعی تأیید می‌شود
-     *  ۳) اگر تأیید نشد، آدرس قبلی (که سالم تست شده) حفظ می‌شود
+     * تزریق تمیزترین IP به سرورهای پشت کلادفلر:
+     *  ۱) پروب سبک و موازی (TLS/WS-101) هر سرور × ۶ تمیزترین IP، بدون هسته
+     *  ۲) تمیزترینِ پروب‌گذشته با تونل واقعی تأیید می‌شود؛ اگر نشد آدرس قبلی می‌ماند
+     * @return (لیست جدید، تعداد سرورهایی که IP جدید گرفتند)
      */
     suspend fun injectCleanIps(
         entries: List<ServerEntry>,
         ips: List<CloudflareScanner.CleanIp>,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
-    ): List<ServerEntry> = withContext(Dispatchers.IO) {
-        if (ips.isEmpty()) return@withContext entries
+    ): Pair<List<ServerEntry>, Int> = withContext(Dispatchers.IO) {
+        if (ips.isEmpty()) return@withContext entries to 0
         val top = ips.take(6)
         fun portFor(e: ServerEntry, ip: CloudflareScanner.CleanIp) =
             if (e.config.port in CloudflareScanner.CF_ALL_PORTS) e.config.port else ip.port
 
-        // ── ۱) پروب موازی ──
         val targets = entries.filter { it.cf && injectable(it.config) }
         val pool = Executors.newFixedThreadPool(48)
         val probes = targets.associate { e ->
@@ -268,53 +300,37 @@ class VpnClubEngine(private val context: Context) {
         val chosen = HashMap<String, CloudflareScanner.CleanIp?>()
         for ((k, futs) in probes) {
             chosen[k] = futs.mapNotNull { f -> runCatching { f.get(6, TimeUnit.SECONDS) }.getOrNull() }
-                .firstOrNull { it.second > 0 }?.first   // به ترتیب «تمیزترین»
+                .firstOrNull { it.second > 0 }?.first
         }
         pool.shutdownNow()
         DiagLogger.log("INJECT_PROBE targets=${targets.size} withIp=${chosen.values.count { it != null }}")
 
-        // ── ۲) تأیید تونل واقعی (موازی با هسته‌های تست) ──
-        val queue = java.util.concurrent.ConcurrentLinkedQueue(entries)
-        val out = ConcurrentHashMap<String, ServerEntry>()
         val done = java.util.concurrent.atomic.AtomicInteger()
-        coroutineScope {
-            (0 until WORKERS).map { w ->
-                async(Dispatchers.IO) {
-                    val xr = workerXray(w)
-                    while (currentCoroutineContext().isActive) {
-                        val e = queue.poll() ?: break
-                        var best = e
-                        val ip = chosen[e.serverKey]
-                        if (ip != null) {
-                            val port = portFor(e, ip)
-                            if (e.config.dialHost == ip.ip && e.config.dialPort == port) {
-                                best = e
-                            } else {
-                                val cand = e.copy(config = e.config.withDial(ip.ip, port))
-                                val tunnel = TunnelLauncher.launch(xr, cand)
-                                val r = if (tunnel == null) null else try {
-                                    HealthTester.testTunnel(xr.port, withUpload = false, quick = true)
-                                } finally { tunnel.stop() }
-                                DiagLogger.log("INJECT ${e.config.host} -> ${ip.ip} ${r?.error ?: if (r == null) "core_fail" else "OK lat=${r.latencyMs}"}")
-                                if (r != null && r.ok) best = cand.copy(latencyMs = r.latencyMs,
-                                    downBps = r.downBps, testedAt = System.currentTimeMillis())
-                            }
-                        }
-                        out[e.serverKey] = best
-                        onProgress(done.incrementAndGet(), entries.size)
+        val changed = java.util.concurrent.atomic.AtomicInteger()
+        val out = entries.map { e ->
+            async(Dispatchers.IO) {
+                var best = e
+                val ip = chosen[e.serverKey]
+                if (ip != null) {
+                    val port = portFor(e, ip)
+                    if (e.config.dialHost != ip.ip || e.config.dialPort != port) {
+                        val cand = e.copy(config = e.config.withDial(ip.ip, port))
+                        val ms = delayTest(cand)
+                        DiagLogger.log("INJECT ${e.config.host} -> ${ip.ip} ${if (ms > 0) "OK ${ms}ms" else "fail"}")
+                        if (ms > 0) { best = cand.copy(latencyMs = ms, testedAt = System.currentTimeMillis()); changed.incrementAndGet() }
                     }
                 }
-            }.forEach { it.await() }
-        }
-        entries.mapNotNull { out[it.serverKey] }
+                onProgress(done.incrementAndGet(), entries.size)
+                best
+            }
+        }.map { it.await() }
+        out to changed.get()
     }
 
     /**
-     * تست موازی (WORKERS هسته‌ی مستقل، هرکدام روی پورت خودش) تا [want] سرور سالم پیدا شود.
-     *
-     * دور اول: هر کاندید (تصادفی) فقط «یک» تلاش با یک پروفایل (آخرین موفق، یا تصادفی)، تست سبک
-     * (تاخیر + ۵۰۰KB دانلود). اگر دور اول هیچ سالمی نداد، دور دوم روی بهترین ۴۰ کاندید با همه‌ی پروفایل‌ها.
-     * هر سرور سالم بلافاصله با [onFound] گزارش می‌شود (به‌صورت سریالی).
+     * تست موازی کاندیدها (ترتیب تصادفی) تا [want] سرور سالم پیدا شود.
+     * دور اول: هر کاندید یک تلاش با پروفایل اول (آخرین موفق یا «مستقیم»).
+     * دور دوم (اگر هیچ نیافت): ۴۰ کاندید با همه‌ی پروفایل‌های فایروال ایران.
      */
     suspend fun findServers(
         disc: Discovery,
@@ -335,12 +351,11 @@ class VpnClubEngine(private val context: Context) {
             return found.get() >= want || el > HARD_BUDGET_MS || (el > SOFT_BUDGET_MS && found.get() >= 5)
         }
 
-        suspend fun pass(cands: List<Candidate>, allVariants: Boolean, workerCount: Int) {
+        suspend fun pass(cands: List<Candidate>, allVariants: Boolean, parallelism: Int) {
             val queue = java.util.concurrent.ConcurrentLinkedQueue(cands)
-            kotlinx.coroutines.coroutineScope {
-                (0 until workerCount).map { w ->
+            coroutineScope {
+                (0 until parallelism).map {
                     async(Dispatchers.IO) {
-                        val xr = workerXray(w)
                         while (currentCoroutineContext().isActive && !expired()) {
                             val cand = queue.poll() ?: break
                             if (ServerEntry(cand.config).serverKey in skipKeys) continue
@@ -349,28 +364,20 @@ class VpnClubEngine(private val context: Context) {
                                 disc.totalParsed, disc.cleanIps.size, n, found.get()))
                             val applicable = IranVariants.order(settings.carrierMode, learnedVariant)
                                 .filter { !it.needsCf || cand.behindCf }
-                            val variants = if (allVariants) applicable
-                                else applicable.take(1) // اولین = آخرین موفق یا (در حالت خودکار) مستقیم
+                            val variants = if (allVariants) applicable else applicable.take(1)
                             for (v in variants) {
                                 if (!currentCoroutineContext().isActive || expired()) break
                                 val dial = pickDial(cand, v, disc.cleanIps, cursor.getAndIncrement(), rng)
                                 val entry = ServerEntry(dial, v.id, v.useFrag, cf = cand.behindCf)
-                                val tunnel = TunnelLauncher.launch(xr, entry)
-                                val res = if (tunnel == null)
-                                    HealthTester.TunnelResult(-1, 0.0, 0.0, "core_fail: ${xr.lastError.take(160)}")
-                                else try { HealthTester.testTunnel(xr.port, withUpload = false, quick = true) }
-                                     finally { tunnel.stop() }
+                                val (ms, why) = delayTestR(entry)
                                 DiagLogger.log("${v.id} | ${dial.host}:${dial.port}->${dial.dialHost}/${dial.scheme} | " +
-                                    (res.error ?: "OK lat=${res.latencyMs}ms down=${res.downBps.toInt()}B/s"))
-                                if (res.error?.startsWith("core_fail") == true)
-                                    DiagLogger.log("CONFIG_JSON: ${xr.lastConfigJson.take(500)}")
-                                if (res.ok) {
+                                    if (ms > 0) "OK ${ms}ms" else "fail $why")
+                                if (ms > 0) {
                                     learnedVariant = v.id
                                     foundLock.withLock {
                                         if (found.get() < want) {
                                             found.incrementAndGet()
-                                            onFound(entry.copy(latencyMs = res.latencyMs, downBps = res.downBps,
-                                                upBps = res.upBps, testedAt = System.currentTimeMillis()))
+                                            onFound(entry.copy(latencyMs = ms, testedAt = System.currentTimeMillis()))
                                         }
                                     }
                                     break
@@ -382,20 +389,14 @@ class VpnClubEngine(private val context: Context) {
             }
         }
 
-        // تصادفی‌سازی کامل ترتیب کاندیدها (تنوع + جلوگیری از گیر کردن روی یک رنج بد)
         val shuffled = disc.candidates.shuffled(rng)
-        pass(shuffled, allVariants = false, workerCount = WORKERS)
+        pass(shuffled, allVariants = false, parallelism = PARALLEL_TESTS)
         if (found.get() == 0 && currentCoroutineContext().isActive) {
-            onState(Progress(Phase.TESTING, "دور دوم: امتحان همه‌ی پروفایل‌ها…", disc.totalParsed, disc.cleanIps.size))
-            // تک‌هسته‌ای (محافظ در برابر مشکل احتمالی اجرای هم‌زمان چند هسته) + همه‌ی پروفایل‌ها
-            pass(shuffled.take(40), allVariants = true, workerCount = 1)
+            onState(Progress(Phase.TESTING, "دور دوم: همه‌ی پروفایل‌های فایروال ایران…", disc.totalParsed, disc.cleanIps.size))
+            pass(shuffled.take(40), allVariants = true, parallelism = PARALLEL_TESTS)
         }
         found.get()
     }
-
-    private val workers = HashMap<Int, XrayCore>()
-    @Synchronized private fun workerXray(i: Int): XrayCore =
-        workers.getOrPut(i) { XrayCore(TEST_PORT + 10 + i).also { it.setAppContext(context) } }
 
     /** آدرس dial برای یک ترکیب (کاندید × پروفایل): IP تمیز / IPv6 کلادفلر / آدرس اصلی. */
     private fun pickDial(
@@ -422,8 +423,10 @@ class VpnClubEngine(private val context: Context) {
     }
 
     companion object {
-        const val TEST_PORT = 10809
-        const val WORKERS = 4
+        const val PARALLEL_TESTS = 8
+        const val TEST_URL = "https://cp.cloudflare.com/generate_204"
+        const val DELAY_TIMEOUT_MS = 8_000L
+        const val MAX_DELAY_MS = 4_000L
         const val MAX_TCP_MS = 2_500L
         const val MAX_PREFILTER = 2_500
         const val PROBE_THREADS = 128

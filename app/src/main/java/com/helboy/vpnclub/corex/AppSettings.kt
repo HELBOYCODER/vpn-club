@@ -29,6 +29,11 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("auto_launch", false)
         set(v) { sp.edit().putBoolean("auto_launch", v).apply() }
 
+    /** دکمه‌ی اصلی به سریع‌ترین سرور وصل شود (وگرنه بهترین سرور لیست). */
+    var fastestMode: Boolean
+        get() = sp.getBoolean("fastest", true)
+        set(v) { sp.edit().putBoolean("fastest", v).apply() }
+
     /** اپ‌هایی که از تونل خارج‌اند (split tunneling). */
     var bypassApps: Set<String>
         get() = sp.getStringSet("bypass_apps", emptySet()) ?: emptySet()

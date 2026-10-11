@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,8 +51,10 @@ import kotlinx.coroutines.delay
 /** صفحهٔ خانه: دکمه، وضعیت، سرور فعلی، سرعت زنده و مدت نشست. */
 @Composable
 fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
-    val busy = ui.phase == Phase.FETCHING || ui.phase == Phase.SCANNING_CF ||
-        ui.phase == Phase.TESTING || ui.phase == Phase.CONNECTING
+    // چرخش دکمه فقط وقتی واقعاً در حال اتصال هستیم (نه هنگام اسکن/ری‌اسکن جدا)
+    val busy = ui.busyConnecting
+    val shownPhase = if (!busy && !ui.connected && ui.phase != Phase.FAILED) Phase.IDLE else ui.phase
+    var fastest by remember { mutableStateOf(VpnController.settings().fastestMode) }
 
     // ساعت نشست
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -70,22 +74,35 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         Text("VPN CLUB", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
             letterSpacing = 3.sp)
 
-        ClubPowerButton(phase = ui.phase, connected = ui.connected, onClick = onToggle, size = 220.dp)
+        ClubPowerButton(phase = shownPhase, connected = ui.connected, onClick = onToggle, size = 220.dp)
 
         val (title, tColor) = when {
             ui.connected -> "متصل" to StatusGreen
-            ui.phase == Phase.FAILED -> "اتصال ناموفق" to StatusRed
+            ui.phase == Phase.FAILED && !busy -> "اتصال ناموفق" to StatusRed
             busy -> "در حال اتصال…" to StatusAmber
             else -> "قطع" to TextSecondary
         }
         Text(title, color = tColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(
-            ui.message.ifEmpty {
+            (if (busy) ui.taskMsg.ifEmpty { ui.message } else ui.message).ifEmpty {
                 if (ui.connected) "اینترنت شما امن است" else "برای اتصال هوشمند، دکمه را بزنید"
             },
             color = TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 12.dp),
         )
+
+        // گزینه‌ی سریع‌ترین اتصال
+        ClubCard(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("سریع‌ترین اتصال", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (fastest) "همه‌ی سرورها هم‌زمان تست و کم‌تاخیرترین وصل می‌شود"
+                         else "به بهترین سرور لیست وصل می‌شود (یا از تب سرورها انتخاب کنید)",
+                        color = TextTertiary, fontSize = 11.sp)
+                }
+                Switch(checked = fastest, onCheckedChange = { fastest = it; VpnController.settings().fastestMode = it })
+            }
+        }
 
         if (busy || ui.testing) {
             LinearProgressIndicator(

@@ -87,6 +87,8 @@ class XrayCore(
      * کپی geoip.dat/geosite.dat از assets به دایرکتوری assets خصوصی + initCoreEnv.
      * بدون این، startLoop exception می‌دهد (مخصوصاً با قوانین geoip:ir).
      */
+    internal fun initCoreEnvNow() = initCoreEnv()
+
     private fun initCoreEnv() {
         // یک‌بار در کل پردازه (تست‌ها و سرویس چند نمونه‌ی XrayCore می‌سازند)
         if (!envInitialized.compareAndSet(false, true)) return
@@ -284,6 +286,12 @@ class XrayCore(
 
     companion object {
         private val envInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** آماده‌سازی محیط هسته (geo assets + initCoreEnv) — برای measureOutboundDelay بدون CoreController. */
+        fun ensureEnv(ctx: android.content.Context) {
+            if (envInitialized.get()) return
+            XrayCore(0).also { it.setAppContext(ctx) }.initCoreEnvNow()
+        }
 
         private val SS_METHODS = setOf(
             "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "chacha20-poly1305",

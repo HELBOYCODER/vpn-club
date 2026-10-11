@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -22,7 +23,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.helboy.vpnclub.corex.ServerEntry
@@ -32,7 +32,7 @@ import com.helboy.vpnclub.ui.theme.DarkBg
 import com.helboy.vpnclub.ui.theme.NeonCyan
 import com.helboy.vpnclub.ui.theme.TextTertiary
 
-/** ریشهٔ UI: سه تب، راست‌چین. */
+/** ریشهٔ UI: چهار تب جدا — خانه، سرورها، اسکنر IP، تنظیمات. راست‌چین. */
 @Composable
 fun AppRoot(
     onToggle: () -> Unit,
@@ -56,6 +56,8 @@ fun AppRoot(
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = colors,
                         icon = { Icon(Icons.Rounded.Dns, null) }, label = { Text("سرورها") })
                     NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors,
+                        icon = { Icon(Icons.Rounded.Radar, null) }, label = { Text("اسکنر IP") })
+                    NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = colors,
                         icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("تنظیمات") })
                 }
             },
@@ -63,7 +65,11 @@ fun AppRoot(
             Box(Modifier.fillMaxSize().background(DarkBg).padding(pad)) {
                 when (tab) {
                     0 -> HomeScreen(ui, onToggle)
-                    1 -> ServersScreen(ui, onConnect, onRefresh = { VpnController.refreshServers() })
+                    1 -> ServersScreen(ui, onConnect,
+                        onRescan = { VpnController.rescanServers() },
+                        onInject = { VpnController.injectIps() })
+                    2 -> ScannerScreen(ui, onScan = { VpnController.scanIps() },
+                        onInject = { VpnController.injectIps() })
                     else -> SettingsScreen(VpnController.settings())
                 }
             }

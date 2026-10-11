@@ -32,8 +32,10 @@ data class ServerEntry(
 
     val injected: Boolean get() = config.isInjected
 
-    /** امتیاز: سرعت دانلود تقسیم بر تاخیر. */
-    val score: Double get() = downBps / (1.0 + latencyMs / 500.0)
+    /** امتیاز: کمترین تاخیر واقعی تونل = بهترین (اگر سرعت دانلود هم اندازه‌گیری شده بود، وزن دارد). */
+    val score: Double get() =
+        if (latencyMs <= 0) 0.0
+        else 1_000_000.0 / (latencyMs + 50) + (if (downBps > 0) downBps / 1_000_000.0 else 0.0)
 
     fun toJson(): JSONObject = JSONObject()
         .put("raw", config.raw)

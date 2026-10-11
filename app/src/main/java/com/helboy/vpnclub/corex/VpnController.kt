@@ -1,31 +1,39 @@
 package com.helboy.vpnclub.corex
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
+/** کار در حال اجرا — هر دکمه یک کار جدا. */
+enum class Task { NONE, SCAN_IP, RESCAN, INJECT, CONNECT }
+
 /**
- * مغز برنامه (singleton هم‌عمر با پردازه، مستقل از Activity):
+ * مغز برنامه (singleton هم‌عمر با پردازه، مستقل از Activity).
  *
- *  - اتصال خودکار: ابتدا ۱۰ سرور منتخبِ ذخیره‌شده بازتست می‌شوند (اتصال در چند ثانیه)؛
- *    اگر سالمی نبود کشف کامل (ساب‌ها + IP تمیز) اجرا می‌شود.
- *  - به‌محض اولین سرور سالم وصل می‌شود؛ تست ادامه می‌یابد تا ۱۰ سرور منتخب کامل شود.
- *  - نگهبان: هر ۱۰ ثانیه سلامت تونل زنده سنجیده می‌شود؛ دو شکست پیاپی → سرور بعدی از لیست.
- *  - آمار زنده‌ی سرعت/حجم و زمان نشست.
+ * امکانات جدا، هرکدام با دکمه‌ی خودش:
+ *  - [scanIps]        اسکنر: پیدا کردن IPهای تمیز کلادفلر
+ *  - [rescanServers]  ری‌اسکن: لیست تازه‌ی ۱۰ سرور سالم تصادفی از کل ساب‌ها
+ *  - [injectIps]      اینجکت: تزریق تمیزترین IP به سرورهای پشت کلادفلر در همان ۱۰ سرور
+ *  - [connectFastest] سریع‌ترین اتصال: همه‌ی ۱۰ سرور هم‌زمان تست، اتصال به کم‌تاخیرترین
+ *  - [connectTo]      اتصال به سرور انتخابی
+ * همه با موتور PattNG و پروفایل‌های فایروال ایران ([IranVariants]).
+ *
+ * خودکار در پس‌زمینه: نگهبان اتصال (تعویض سرور هنگام قطعی)، بررسی سلامت لیست و تغییر شبکه.
  */
 object VpnController {
 
@@ -37,7 +45,8 @@ object VpnController {
         val current: ServerEntry? = null,
         val configCount: Int = 0,
         val cleanIpCount: Int = 0,
-        val testing: Boolean = false,
+        val task: Task = Task.NONE,
+        val taskMsg: String = "",
         val connectedSince: Long = 0,
         val upBps: Long = 0,
         val downBps: Long = 0,
@@ -46,26 +55,32 @@ object VpnController {
         val latencyMs: Long = -1,
         val cleanIps: List<CloudflareScanner.CleanIp> = emptyList(),
         val needsPermission: Boolean = false
-    )
+    ) {
+        val testing: Boolean get() = task != Task.NONE
+        val busyConnecting: Boolean get() = task == Task.CONNECT
+    }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default +
-        kotlinx.coroutines.CoroutineExceptionHandler { _, t ->
-            DiagLogger.log("CONTROLLER_EXC ${t.javaClass.simpleName}: ${t.message}")
-            _state.update { it.copy(testing = false) }
-        })
-    @Volatile private var switching = false
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default +
+        CoroutineExceptionHandler { _, t ->
+            DiagLogger.log("CONTROLLER_EXC ${t.javaClass.simpleName}: ${t.message}")
+            _state.update { it.copy(task = Task.NONE, taskMsg = "") }
+        })
 
     private lateinit var app: Context
     private lateinit var engine: VpnClubEngine
     private lateinit var settings: AppSettings
-    private var initialized = false
+    @Volatile private var initialized = false
 
-    private var mainJob: Job? = null
+    /** فقط یک «کار» (اسکن/ری‌اسکن/اینجکت/اتصال) در هر لحظه. */
+    private val opMutex = Mutex()
+    private var opJob: Job? = null
     private var watchJob: Job? = null
     private var statsJob: Job? = null
     private var poolJob: Job? = null
+    @Volatile private var switching = false
     @Volatile private var baseUp = 0L
     @Volatile private var baseDown = 0L
 
@@ -76,12 +91,13 @@ object VpnController {
             app = context.applicationContext
             engine = VpnClubEngine(app)
             settings = AppSettings.of(app)
-            val saved = engine.savedServers().sortedByDescending { it.score }
-            _state.update { it.copy(servers = saved) }
+            _state.update {
+                it.copy(servers = engine.savedServers().sortedByDescending { e -> e.score },
+                    cleanIps = engine.savedCleanIps())
+            }
             initialized = true
         }
         registerNetworkKick()
-        // قطع از بیرون (تنظیمات سیستم / اپ VPN دیگر)
         scope.launch {
             VpnClubService.status.collect { s ->
                 if (s.state == SvcState.STOPPED && _state.value.connected) markDisconnected("اتصال توسط سیستم قطع شد")
@@ -89,10 +105,288 @@ object VpnController {
         }
     }
 
-    /**
-     * تغییر شبکه‌ی زیرین (وای‌فای ↔ سیم‌کارت): بلافاصله سلامت تونل سنجیده می‌شود تا کاربر
-     * منتظر نگهبان ۱۰ ثانیه‌ای نماند.
-     */
+    fun settings(): AppSettings = settings
+    fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
+
+    // ════════════════════════════ دکمه‌ها ════════════════════════════
+
+    /** دکمه‌ی اصلی: وصل/قطع. وصل = سریع‌ترین (یا سرور انتخابی اگر گزینه‌ی سریع‌ترین خاموش است). */
+    fun toggle() {
+        val s = _state.value
+        if (s.connected || s.task == Task.CONNECT) { disconnect(); return }
+        if (settings.fastestMode || s.servers.isEmpty()) connectFastest()
+        else connectTo(s.servers.first())
+    }
+
+    /** اسکنر IP تمیز کلادفلر. */
+    fun scanIps() = runTask(Task.SCAN_IP) { doScanIps() }
+
+    /** لیست تازه‌ی ۱۰ سرور سالم تصادفی از کل ساب‌ها (جایگزین لیست قبلی). */
+    fun rescanServers() = runTask(Task.RESCAN) { doRescan() }
+
+    /** تزریق IPهای اسکن‌شده به سرورهای لیست. */
+    fun injectIps() = runTask(Task.INJECT) { doInject() }
+
+    /** سریع‌ترین اتصال: همه‌ی سرورها هم‌زمان تست و اتصال به کم‌تاخیرترین. */
+    fun connectFastest() = runTask(Task.CONNECT) { doConnectFastest() }
+
+    /** اتصال به سرور مشخص از لیست. */
+    fun connectTo(entry: ServerEntry) = runTask(Task.CONNECT) {
+        setTask(Task.CONNECT, "اتصال به ${label(entry)}…")
+        setState(Phase.CONNECTING, "اتصال به ${label(entry)}…")
+        if (!activate(entry)) {
+            if (_state.value.connected) setState(Phase.CONNECTED, "این سرور وصل نشد؛ سرور قبلی حفظ شد")
+            else setState(Phase.FAILED, "این سرور وصل نشد. «سریع‌ترین اتصال» را امتحان کنید.")
+        }
+    }
+
+    fun disconnect() {
+        opJob?.cancel(); watchJob?.cancel(); statsJob?.cancel(); poolJob?.cancel()
+        VpnClubService.stop(app)
+        CurrentConfigHolder.clear(app)
+        _state.update {
+            it.copy(phase = Phase.IDLE, message = "", connected = false, current = null,
+                task = Task.NONE, taskMsg = "", upBps = 0, downBps = 0, upTotal = 0, downTotal = 0,
+                connectedSince = 0, latencyMs = -1)
+        }
+    }
+
+    /** اجرای یک کار به‌صورت انحصاری. کار دیگری در حال اجرا باشد، نادیده گرفته می‌شود. */
+    private fun runTask(t: Task, block: suspend () -> Unit) {
+        if (opMutex.isLocked) return
+        opJob = scope.launch {
+            opMutex.withLock {
+                setTask(t, "")
+                try { block() } finally { setTask(Task.NONE, "") }
+            }
+        }
+    }
+
+    // ════════════════════════════ کارها ════════════════════════════
+
+    private suspend fun doScanIps(): List<CloudflareScanner.CleanIp> {
+        setTask(Task.SCAN_IP, "اسکن IP تمیز کلادفلر…")
+        val ips = engine.freshCleanIps { tested, found ->
+            setTask(Task.SCAN_IP, "اسکن IP تمیز… $tested بررسی · $found تمیز")
+        }
+        _state.update { it.copy(cleanIps = ips, cleanIpCount = ips.size) }
+        toast(if (ips.isEmpty()) "IP تمیزی پیدا نشد" else "${ips.size} IP تمیز پیدا شد · بهترین: ${ips.first().ip}")
+        return ips
+    }
+
+    private suspend fun doRescan(): List<ServerEntry> {
+        setTask(Task.RESCAN, "دریافت ساب‌ها…")
+        val disc = engine.discover { p -> setTask(Task.RESCAN, p.message) } ?: run {
+            toast("دریافت ساب‌ها ناموفق بود. اینترنت را بررسی کنید.")
+            return _state.value.servers
+        }
+        _state.update { it.copy(configCount = disc.totalParsed, cleanIpCount = disc.cleanIps.size,
+            cleanIps = if (it.cleanIps.isEmpty()) disc.cleanIps else it.cleanIps) }
+        // سرور فعلی (اگر وصلیم) در لیست می‌ماند؛ بقیه کاملاً تازه
+        val keep = listOfNotNull(_state.value.current.takeIf { _state.value.connected })
+        var fresh = keep
+        val want = VpnClubEngine.TARGET_SERVERS - keep.size
+        engine.findServers(disc, want, skipKeys = keep.map { it.serverKey }.toSet(),
+            onFound = { e ->
+                fresh = (fresh + e).distinctBy { it.serverKey }
+                setTask(Task.RESCAN, "سرور سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}")
+                publish(fresh)
+            },
+            onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${VpnClubEngine.TARGET_SERVERS}") })
+        if (fresh.size <= keep.size) toast("سرور سالم جدیدی پیدا نشد")
+        else toast("${fresh.size} سرور سالم آماده است")
+        return _state.value.servers
+    }
+
+    private suspend fun doInject(): Int {
+        if (_state.value.servers.isEmpty()) { toast("اول «ری‌اسکن» بزنید تا سرورها پیدا شوند"); return 0 }
+        var ips = _state.value.cleanIps
+        if (ips.isEmpty()) ips = doScanIps()
+        if (ips.isEmpty()) return 0
+        setTask(Task.INJECT, "تزریق ${ips.first().ip} به سرورها…")
+        val (list, changed) = engine.injectCleanIps(_state.value.servers, ips) { d, t ->
+            setTask(Task.INJECT, "تزریق IP تمیز ($d/$t)")
+        }
+        publish(list)
+        val eligible = list.count { it.cf }
+        toast(when {
+            eligible == 0 -> "هیچ‌کدام از این سرورها پشت کلادفلر نیستند (تزریق لازم ندارند)"
+            changed == 0 -> "IP قبلی‌ها بهتر بودند؛ تغییری لازم نبود"
+            else -> "IP تمیز به $changed سرور تزریق شد"
+        })
+        return changed
+    }
+
+    private suspend fun doConnectFastest() {
+        _state.update { it.copy(needsPermission = false) }
+        // ۱) لیست خالی → ساخت: ری‌اسکن ← اسکن IP ← اینجکت
+        if (_state.value.servers.isEmpty()) {
+            setState(Phase.TESTING, "یافتن سرورهای سالم…")
+            doRescan()
+            if (_state.value.servers.isEmpty()) { setState(Phase.FAILED, "سرور سالمی پیدا نشد. دوباره تلاش کنید."); return }
+            doInject()
+        }
+        // ۲) همه هم‌زمان تست، سریع‌ترین اول
+        setTask(Task.CONNECT, "یافتن سریع‌ترین سرور…")
+        setState(Phase.TESTING, "یافتن سریع‌ترین سرور…")
+        var alive = engine.retestAll(_state.value.servers) { d, a ->
+            setTask(Task.CONNECT, "تست سرورها $d/${_state.value.servers.size} · سالم: $a")
+        }
+        if (alive.isEmpty()) {
+            // لیست مرده → ساخت دوباره
+            setState(Phase.TESTING, "سرورهای قبلی ضعیف شده‌اند؛ لیست تازه…")
+            doRescan(); doInject()
+            alive = _state.value.servers
+        } else publish(alive)
+        // ۳) اتصال به ترتیب سرعت
+        for (e in alive.sortedBy { it.latencyMs }) {
+            if (!currentCoroutineContext().isActive) return
+            setTask(Task.CONNECT, "اتصال به ${label(e)} (${e.latencyMs}ms)…")
+            setState(Phase.CONNECTING, "اتصال به ${label(e)}…")
+            if (activate(e)) return
+            if (_state.value.needsPermission) return
+        }
+        setState(Phase.FAILED, "اتصال ممکن نشد. «ری‌اسکن» را بزنید و دوباره وصل شوید.")
+    }
+
+    // ════════════════════════════ اتصال ════════════════════════════
+
+    /** سرویس را روی این سرور بالا می‌آورد و صحت جریان داده را می‌سنجد. */
+    private suspend fun activate(e: ServerEntry): Boolean {
+        val prev = if (_state.value.connected) _state.value.current else null
+        switching = true
+        try {
+            if (tryActivate(e)) return true
+        } finally { switching = false }
+        if (prev != null) {
+            CurrentConfigHolder.save(app, prev)
+            VpnClubService.start(app)
+            withTimeoutOrNull(20_000) {
+                VpnClubService.status.first { (it.state == SvcState.UP && it.serverId == prev.id) || it.state == SvcState.FAILED }
+            }
+        } else {
+            VpnClubService.stop(app)
+            CurrentConfigHolder.clear(app)
+        }
+        return false
+    }
+
+    private suspend fun tryActivate(e: ServerEntry): Boolean {
+        CurrentConfigHolder.save(app, e)
+        VpnClubService.start(app)
+        val st = withTimeoutOrNull(20_000) {
+            VpnClubService.status.first {
+                (it.state == SvcState.UP && it.serverId == e.id) || it.state == SvcState.FAILED
+            }
+        }
+        if (st == null || st.state != SvcState.UP || st.serverId != e.id) {
+            DiagLogger.log("ACTIVATE fail ${e.config.host} -> ${st?.state} ${st?.message}")
+            if (st?.state == SvcState.FAILED && st.message.contains("تونل") &&
+                android.net.VpnService.prepare(app) != null) {
+                _state.update { it.copy(needsPermission = true, message = "مجوز VPN لازم است") }
+            }
+            return false
+        }
+        var lat = -1L
+        for (i in 0 until 3) {
+            lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
+            if (lat > 0) break
+            delay(500)
+        }
+        if (lat <= 0) { DiagLogger.log("ACTIVATE no_data ${e.config.host}"); return false }
+        val b = Tun2Socks.bytes()
+        baseUp = b?.first ?: 0; baseDown = b?.second ?: 0
+        val now = System.currentTimeMillis()
+        val since = if (_state.value.connected && _state.value.connectedSince > 0) _state.value.connectedSince else now
+        _state.update { it.copy(phase = Phase.CONNECTED, message = "", connected = true, current = e,
+            connectedSince = since, latencyMs = lat) }
+        startStats()
+        if (watchJob?.isActive != true) startWatchdog()
+        startPoolMonitor()
+        return true
+    }
+
+    // ════════════════════════════ خودکار ════════════════════════════
+
+    private fun startStats() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            var lastUp = baseUp; var lastDown = baseDown
+            while (isActive) {
+                delay(1_000)
+                val b = Tun2Socks.bytes() ?: continue
+                _state.update {
+                    it.copy(upBps = (b.first - lastUp).coerceAtLeast(0), downBps = (b.second - lastDown).coerceAtLeast(0),
+                        upTotal = (b.first - baseUp).coerceAtLeast(0), downTotal = (b.second - baseDown).coerceAtLeast(0))
+                }
+                lastUp = b.first; lastDown = b.second
+            }
+        }
+    }
+
+    private fun startWatchdog() {
+        watchJob?.cancel()
+        watchJob = scope.launch {
+            var fails = 0
+            while (isActive) {
+                delay(10_000)
+                if (!_state.value.connected || switching) continue
+                val lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
+                if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
+                if (++fails >= 2 && settings.autoFailover) { fails = 0; failover() }
+            }
+        }
+    }
+
+    /** هر چند دقیقه: سرورهای مرده از لیست حذف؛ اگر ≤ WEAK_POOL ماند، ری‌اسکن + اینجکت خودکار. */
+    private fun startPoolMonitor() {
+        if (poolJob?.isActive == true) return
+        poolJob = scope.launch {
+            while (isActive) {
+                delay(POOL_CHECK_MS)
+                if (!_state.value.connected || switching || opMutex.isLocked) continue
+                val current = _state.value.servers
+                if (current.isEmpty()) continue
+                opMutex.withLock {
+                    val alive = engine.retestAll(current)
+                    val keepCur = _state.value.current?.let { c -> current.firstOrNull { it.serverKey == c.serverKey } }
+                    publish((alive + listOfNotNull(keepCur)).distinctBy { it.serverKey })
+                    DiagLogger.log("POOL_CHECK alive=${alive.size}/${current.size}")
+                    if (alive.size <= WEAK_POOL) {
+                        setTask(Task.RESCAN, "تازه‌سازی خودکار لیست…")
+                        try { doRescan(); doInject() } finally { setTask(Task.NONE, "") }
+                    }
+                }
+            }
+        }
+    }
+
+    /** قطعی: سریع‌ترین سرور سالم دیگر؛ اگر هیچ نبود ری‌اسکن + اینجکت و دوباره. */
+    private suspend fun failover() {
+        val cur = _state.value.current
+        _state.update { it.copy(message = "قطعی تشخیص داده شد — تعویض سرور…") }
+        DiagLogger.log("FAILOVER from ${cur?.config?.host}")
+        if (HealthTester.tcpPing("1.1.1.1", 443, 2_500) < 0 && HealthTester.tcpPing("8.8.8.8", 443, 2_500) < 0) {
+            _state.update { it.copy(message = "اینترنت قطع است — منتظر بازگشت شبکه…") }
+            return
+        }
+        val others = _state.value.servers.filter { it.serverKey != cur?.serverKey }
+        val alive = engine.retestAll(others).sortedBy { it.latencyMs }
+        for (e in alive) {
+            if (!currentCoroutineContext().isActive) return
+            if (activate(e)) { _state.update { it.copy(message = "") }; return }
+        }
+        if (opMutex.isLocked) return
+        opMutex.withLock {
+            setTask(Task.RESCAN, "همه‌ی سرورها ضعیف شدند؛ لیست تازه…")
+            try { doRescan(); doInject() } finally { setTask(Task.NONE, "") }
+        }
+        for (e in _state.value.servers.sortedBy { it.latencyMs }) { if (activate(e)) return }
+        markDisconnected("سرور سالمی پیدا نشد")
+        setState(Phase.FAILED, "سرور سالمی پیدا نشد")
+    }
+
+    /** تغییر شبکه‌ی زیرین (وای‌فای ↔ سیم‌کارت): سلامت تونل فوراً سنجیده می‌شود. */
     private fun registerNetworkKick() {
         try {
             val cm = app.getSystemService(android.net.ConnectivityManager::class.java)
@@ -121,350 +415,7 @@ object VpnController {
         }
     }
 
-    // ────────────────────────────── اقدام‌های کاربر ──────────────────────────────
-
-    fun settings(): AppSettings = settings
-
-    fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
-
-    /** یک دکمه: روشن/خاموش. */
-    fun toggle() {
-        val s = _state.value
-        if (s.connected || mainJob?.isActive == true) disconnect() else connectAuto()
-    }
-
-    fun connectAuto() {
-        mainJob?.cancel()
-        mainJob = scope.launch { runAuto() }
-    }
-
-    /** اتصال دستی به یکی از ۱۰ سرور منتخب. */
-    fun connectTo(entry: ServerEntry) {
-        mainJob?.cancel()
-        mainJob = scope.launch {
-            setState(Phase.CONNECTING, "اتصال به ${label(entry)}…")
-            if (!activate(entry)) {
-                if (_state.value.connected) setState(Phase.CONNECTED, "اتصال به این سرور ناموفق بود؛ سرور قبلی حفظ شد")
-                else setState(Phase.FAILED, "اتصال به این سرور ناموفق بود")
-            }
-        }
-    }
-
-    fun disconnect() {
-        mainJob?.cancel(); watchJob?.cancel(); statsJob?.cancel(); poolJob?.cancel()
-        VpnClubService.stop(app)
-        CurrentConfigHolder.clear(app)
-        _state.update {
-            it.copy(phase = Phase.IDLE, message = "", connected = false, current = null,
-                testing = false, upBps = 0, downBps = 0, upTotal = 0, downTotal = 0,
-                connectedSince = 0, latencyMs = -1)
-        }
-    }
-
-    /**
-     * رفرش لیست سرورها (دکمه‌ی صفحه‌ی سرورها): سرورهای ضعیف حذف، سرورهای جدید از ساب‌ها
-     * جایگزین، سپس دوباره اسکن IP تمیز و تزریق. اتصال فعلی قطع نمی‌شود.
-     */
-    fun refreshServers() {
-        if (poolBusy) return
-        scope.launch {
-            val before = _state.value.current
-            val list = refreshPool(manual = true)
-            // اگر سرور فعلی از لیست جدید حذف شد، به بهترین سرور تازه برو
-            if (_state.value.connected && before != null && list.none { it.serverKey == before.serverKey } && list.isNotEmpty()) {
-                activate(list.first())
-            }
-        }
-    }
-
-    // ────────────────────────────── چرخه‌ی اصلی ──────────────────────────────
-    //
-    //  ۱/۳  یافتن ۱۰ سرور سالم از کل ساب‌ها (سرورهای قبلیِ هنوز سالم نگه داشته می‌شوند)
-    //  ۲/۳  اسکن IP تمیز کلادفلر و تزریق تمیزترین IP به همه‌ی ۱۰ سرور
-    //  ۳/۳  اتصال به بهترین
-    //  نگهبان: وقتی لیست ضعیف شد (≤ WEAK_POOL سالم)، همین رویه خودکار تکرار می‌شود.
-
-    @Volatile private var poolBusy = false
-    private val poolMutex = kotlinx.coroutines.sync.Mutex()
-
-    private suspend fun runAuto() {
-        _state.update { it.copy(connected = false, current = null, needsPermission = false) }
-
-        // ── مسیر سریع: آخرین سرورهای تأییدشده؛ اتصال در چند ثانیه (activate خودش جریان داده را می‌سنجد) ──
-        val saved = engine.savedServers().sortedByDescending { it.score }
-        if (saved.isNotEmpty()) {
-            setState(Phase.CONNECTING, "اتصال به آخرین سرور سالم…")
-            for (e in saved.take(FAST_TRIES)) {
-                if (!currentCoroutineContext().isActive) return
-                if (activate(e)) { backgroundTopUp(); return }
-                if (_state.value.needsPermission) return
-            }
-        }
-
-        // ── مسیر کامل: ساخت لیست؛ به‌محض ۳ سرور سالم وصل می‌شود و بقیه در پس‌زمینه کامل می‌شود ──
-        val list = buildPool(saved, step = "", earlyConnect = true)
-        if (_state.value.connected) return
-        if (_state.value.needsPermission) return
-        if (list.isEmpty()) {
-            if (_state.value.phase != Phase.FAILED)
-                setState(Phase.FAILED, "سرور سالمی پیدا نشد. اینترنت را بررسی و دوباره تلاش کنید.")
-            return
-        }
-        setState(Phase.CONNECTING, "۳/۳ اتصال به بهترین سرور…")
-        for (e in list) {
-            if (!currentCoroutineContext().isActive) return
-            if (activate(e)) return
-            if (_state.value.needsPermission) return
-        }
-        setState(Phase.FAILED, "اتصال به هیچ‌کدام از سرورهای منتخب ممکن نشد")
-    }
-
-    /** بعد از اتصال سریع: لیست ۱۰ تایی را بدون قطع اتصال تازه/کامل می‌کند. */
-    private fun backgroundTopUp() {
-        scope.launch {
-            if (poolBusy) return@launch
-            buildPool(_state.value.servers, step = "")
-        }
-    }
-
-    /** لیست را به ۱۰ سرور سالم با IP تمیز می‌رساند. نتیجه مرتب بر اساس امتیاز و ذخیره‌شده است. */
-    private suspend fun buildPool(existing: List<ServerEntry>, step: String, earlyConnect: Boolean = false): List<ServerEntry> =
-        poolMutex.withLock {
-            poolBusy = true
-            _state.update { it.copy(testing = true) }
-            try {
-                // اسکن IP تمیز هم‌زمان با یافتن سرورها شروع می‌شود؛ تزریق (مرحله ۲) بعد از ۱۰ سرور است
-                val ipJob = scope.async(Dispatchers.IO) { engine.freshCleanIps() }
-                // ── بازتست موجودی ──
-                var alive: List<ServerEntry> = emptyList()
-                if (existing.isNotEmpty()) {
-                    setState(if (_state.value.connected) _state.value.phase else Phase.TESTING,
-                        "${step}بازبینی ${existing.size} سرور قبلی…")
-                    alive = engine.retestAll(existing) { d, a ->
-                        if (!_state.value.connected) setState(Phase.TESTING, "${step}بازبینی سرورهای قبلی ($d/${existing.size}) · سالم: $a")
-                    }
-                    publish(alive)
-                }
-                // ── ۱/۳ یافتن سرورهای جدید تا ۱۰ ──
-                var list = alive
-                var earlyStarted = false
-                if (list.size < VpnClubEngine.TARGET_SERVERS) {
-                    val disc = engine.discover { p ->
-                        if (!_state.value.connected || p.phase == Phase.FAILED) report(p)
-                    }
-                    if (disc != null) {
-                        _state.update { it.copy(configCount = disc.totalParsed, cleanIpCount = disc.cleanIps.size,
-                            cleanIps = disc.cleanIps) }
-                        val have = list.map { it.serverKey }.toSet()
-                        engine.findServers(
-                            disc, want = VpnClubEngine.TARGET_SERVERS - list.size, skipKeys = have,
-                            onFound = { e ->
-                                list = (list + e).distinctBy { it.serverKey }
-                                publish(list)
-                                // کاربر معطل نماند: به‌محض EARLY_CONNECT_AT سرور سالم، وصل شو؛ تکمیل ۱۰ تایی ادامه دارد
-                                if (earlyConnect && !earlyStarted && !_state.value.connected &&
-                                    list.size >= EARLY_CONNECT_AT) {
-                                    earlyStarted = true
-                                    scope.launch {
-                                        for (c in _state.value.servers) {
-                                            if (_state.value.connected || _state.value.needsPermission) break
-                                            setState(Phase.CONNECTING, "اتصال به ${label(c)}…")
-                                            if (activate(c)) break
-                                        }
-                                    }
-                                }
-                                if (!_state.value.connected)
-                                    setState(Phase.TESTING, "${step}۱/۳ یافتن ۱۰ سرور: ${list.size}/${VpnClubEngine.TARGET_SERVERS}")
-                            },
-                            onState = { p ->
-                                if (!_state.value.connected)
-                                    setState(Phase.TESTING, "${step}۱/۳ ${p.message} · پیدا شده: ${list.size}/${VpnClubEngine.TARGET_SERVERS}")
-                            }
-                        )
-                    }
-                }
-                if (list.isEmpty()) return@withLock emptyList()
-                // ── ۲/۳ اسکن IP تمیز + تزریق به همه ──
-                if (!_state.value.connected) setState(Phase.SCANNING_CF, "${step}۲/۳ اسکن تمیزترین IP کلادفلر…")
-                val ips = ipJob.await()
-                _state.update { it.copy(cleanIps = ips, cleanIpCount = ips.size) }
-                if (!_state.value.connected)
-                    setState(Phase.SCANNING_CF, "${step}۲/۳ تزریق ${ips.firstOrNull()?.ip ?: "—"} به سرورها…")
-                list = engine.injectCleanIps(list, ips) { d, t ->
-                    if (!_state.value.connected) setState(Phase.SCANNING_CF, "${step}۲/۳ تزریق IP تمیز ($d/$t)")
-                }
-                publish(list)
-                _state.value.servers
-            } finally {
-                poolBusy = false
-                _state.update { it.copy(testing = false) }
-            }
-        }
-
-    /** لیست را مرتب (امتیاز)، به ۱۰ محدود، در state و دیسک می‌نویسد. */
-    private fun publish(list: List<ServerEntry>) {
-        val sorted = list.distinctBy { it.serverKey }.sortedByDescending { it.score }
-            .take(VpnClubEngine.TARGET_SERVERS)
-        _state.update { it.copy(servers = sorted) }
-        engine.saveServers(sorted)
-    }
-
-    /** رفرش کامل لیست (دستی یا خودکار). */
-    private suspend fun refreshPool(manual: Boolean): List<ServerEntry> {
-        val step = if (manual) "" else "(رفرش خودکار) "
-        return buildPool(_state.value.servers, step)
-    }
-
-    /** سرویس را روی این سرور بالا می‌آورد و صحت جریان داده را می‌سنجد. */
-    private suspend fun activate(e: ServerEntry): Boolean {
-        val prev = if (_state.value.connected) _state.value.current else null
-        switching = true
-        try {
-            if (tryActivate(e)) return true
-        } finally { switching = false }
-        // شکست: یا به سرور قبلی برگرد، یا تونل بی‌دیتا را کامل ببند
-        if (prev != null) {
-            CurrentConfigHolder.save(app, prev)
-            VpnClubService.start(app)
-            withTimeoutOrNull(20_000) {
-                VpnClubService.status.first { (it.state == SvcState.UP && it.serverId == prev.id) || it.state == SvcState.FAILED }
-            }
-        } else {
-            VpnClubService.stop(app)
-            CurrentConfigHolder.clear(app)
-        }
-        return false
-    }
-
-    private suspend fun tryActivate(e: ServerEntry): Boolean {
-        CurrentConfigHolder.save(app, e)
-        VpnClubService.start(app)
-        val st = withTimeoutOrNull(20_000) {
-            VpnClubService.status.first {
-                (it.state == SvcState.UP && it.serverId == e.id) || it.state == SvcState.FAILED
-            }
-        }
-        if (st == null || st.state != SvcState.UP || st.serverId != e.id) {
-            DiagLogger.log("ACTIVATE fail ${e.config.host} -> ${st?.state} ${st?.message}")
-            // مجوز VPN لغو شده (مثلاً اپ VPN دیگر فعال شد)؟ باید از کاربر دوباره گرفته شود
-            if (st?.state == SvcState.FAILED && st.message.contains("تونل") &&
-                android.net.VpnService.prepare(app) != null) {
-                _state.update { it.copy(needsPermission = true, message = "مجوز VPN لازم است") }
-            }
-            return false
-        }
-        // همان‌جا یک درخواست واقعی از داخل تونل
-        var lat = -1L
-        for (i in 0 until 3) {
-            lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
-            if (lat > 0) break
-            delay(500)
-        }
-        if (lat <= 0) {
-            DiagLogger.log("ACTIVATE no_data ${e.config.host}")
-            return false
-        }
-        val now = System.currentTimeMillis()
-        val b = Tun2Socks.bytes()
-        baseUp = b?.first ?: 0; baseDown = b?.second ?: 0
-        val sinceKeep = if (_state.value.connected && _state.value.connectedSince > 0) _state.value.connectedSince else now
-        _state.update { it.copy(phase = Phase.CONNECTED, message = "", connected = true, current = e,
-            connectedSince = sinceKeep, latencyMs = lat) }
-        startStats()
-        if (watchJob?.isActive != true) startWatchdog()
-        startPoolMonitor()
-        return true
-    }
-
-    // ────────────────────────────── نگهبان و آمار ──────────────────────────────
-
-    private fun startStats() {
-        statsJob?.cancel()
-        statsJob = scope.launch {
-            var lastUp = baseUp; var lastDown = baseDown
-            while (isActive) {
-                delay(1_000)
-                val b = Tun2Socks.bytes() ?: continue
-                val up = b.first; val down = b.second
-                _state.update {
-                    it.copy(
-                        upBps = (up - lastUp).coerceAtLeast(0),
-                        downBps = (down - lastDown).coerceAtLeast(0),
-                        upTotal = (up - baseUp).coerceAtLeast(0),
-                        downTotal = (down - baseDown).coerceAtLeast(0)
-                    )
-                }
-                lastUp = up; lastDown = down
-            }
-        }
-    }
-
-    private fun startWatchdog() {
-        watchJob?.cancel()
-        watchJob = scope.launch {
-            var fails = 0
-            while (isActive) {
-                delay(10_000)
-                if (!_state.value.connected || switching) continue
-                val lat = HealthTester.tunnelLatency(VpnClubService.SOCKS_PORT, 6_000)
-                if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
-                fails++
-                if (fails >= 2 && settings.autoFailover) {
-                    fails = 0
-                    failover()
-                }
-            }
-        }
-    }
-
-    /**
-     * سلامت لیست ۱۰ سرور را هر چند دقیقه می‌سنجد؛ سرورهای مرده حذف می‌شوند و اگر
-     * تعداد سالم‌ها به [WEAK_POOL] یا کمتر رسید، رویه‌ی کامل (سرور جدید ← IP تمیز ← تزریق) خودکار تکرار می‌شود.
-     */
-    private fun startPoolMonitor() {
-        if (poolJob?.isActive == true) return
-        poolJob = scope.launch {
-            while (isActive) {
-                delay(POOL_CHECK_MS)
-                if (!_state.value.connected || poolBusy || switching) continue
-                val current = _state.value.servers
-                if (current.isEmpty()) continue
-                val alive = poolMutex.withLock {
-                    poolBusy = true
-                    try { engine.retestAll(current) } finally { poolBusy = false }
-                }
-                publish(alive)
-                DiagLogger.log("POOL_CHECK alive=${alive.size}/${current.size}")
-                if (alive.size <= WEAK_POOL) refreshPool(manual = false)
-            }
-        }
-    }
-
-    /** تعویض خودکار: سرور بعدیِ لیست؛ اگر هیچ‌کدام نبود، کشف دوباره. */
-    private suspend fun failover() {
-        val cur = _state.value.current
-        _state.update { it.copy(message = "قطعی تشخیص داده شد — تعویض سرور…") }
-        DiagLogger.log("FAILOVER from ${cur?.config?.host}")
-        // بدون اینترنت واقعی، سرورها را «ناسالم» حساب نکن و لیست را پاک نکن
-        if (HealthTester.tcpPing("1.1.1.1", 443, 2_500) < 0 && HealthTester.tcpPing("8.8.8.8", 443, 2_500) < 0) {
-            _state.update { it.copy(message = "اینترنت قطع است — منتظر بازگشت شبکه…") }
-            return
-        }
-        val others = _state.value.servers.filter { it.id != cur?.id }
-        for (e in others) {
-            if (!currentCoroutineContext().isActive) return
-            val fresh = engine.retest(e)
-            if (fresh == null) { drop(e); continue }
-            if (activate(fresh)) return
-        }
-        // لیست خالی/ناسالم → رویه‌ی کامل از نو: ۱۰ سرور تازه + IP تمیز + اتصال
-        val list = refreshPool(manual = false)
-        for (e in list) { if (activate(e)) return }
-        _state.update { it.copy(connected = false) }
-        setState(Phase.FAILED, "سرور سالمی پیدا نشد")
-    }
-
-    // ────────────────────────────── کمکی ──────────────────────────────
+    // ════════════════════════════ کمکی ════════════════════════════
 
     private fun markDisconnected(msg: String) {
         watchJob?.cancel(); statsJob?.cancel(); poolJob?.cancel()
@@ -472,40 +423,25 @@ object VpnController {
             upBps = 0, downBps = 0, connectedSince = 0) }
     }
 
-    private fun report(p: VpnClubEngine.Progress) {
-        _state.update {
-            // وقتی وصلیم، تست پس‌زمینه نباید فاز/پیام اصلی را عوض کند
-            it.copy(
-                phase = if (it.connected) it.phase else p.phase,
-                message = if (it.connected) it.message else p.message,
-                configCount = if (p.configCount > 0) p.configCount else it.configCount,
-                cleanIpCount = if (p.cleanIpCount > 0) p.cleanIpCount else it.cleanIpCount
-            )
-        }
+    /** لیست را مرتب (سریع‌ترین اول)، به ۱۰ محدود، در state و دیسک می‌نویسد. */
+    private fun publish(list: List<ServerEntry>) {
+        val sorted = list.distinctBy { it.serverKey }.sortedByDescending { it.score }
+            .take(VpnClubEngine.TARGET_SERVERS)
+        _state.update { it.copy(servers = sorted) }
+        engine.saveServers(sorted)
     }
+
+    private fun setTask(t: Task, msg: String) { _state.update { it.copy(task = t, taskMsg = msg) } }
+
+    /** پیام نتیجه‌ی یک کار (وقتی وصلیم فاز اصلی را عوض نمی‌کند). */
+    private fun toast(msg: String) { _state.update { it.copy(message = msg) } }
 
     private fun setState(ph: Phase, msg: String) {
-        _state.update { it.copy(phase = ph, message = msg) }
-    }
-
-    private fun upsert(e: ServerEntry) {
-        val list = (listOf(e) + _state.value.servers.filter { it.serverKey != e.serverKey })
-            .sortedByDescending { it.score }
-            .take(VpnClubEngine.TARGET_SERVERS)
-        _state.update { it.copy(servers = list) }
-        engine.saveServers(list)
-    }
-
-    private fun drop(e: ServerEntry) {
-        val list = _state.value.servers.filter { it.id != e.id }
-        _state.update { it.copy(servers = list) }
-        engine.saveServers(list)
+        _state.update { if (it.connected && ph != Phase.CONNECTED) it.copy(message = msg) else it.copy(phase = ph, message = msg) }
     }
 
     private fun label(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)
 
     private const val WEAK_POOL = 5
-    private const val FAST_TRIES = 4
-    private const val EARLY_CONNECT_AT = 3
     private const val POOL_CHECK_MS = 4 * 60_000L
 }

@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
         // اتصال خودکار هنگام باز شدن (فقط اگر مجوز VPN از قبل داده شده)
         if (savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
             !VpnController.state.value.connected && VpnService.prepare(this) == null) {
-            VpnController.connectAuto()
+            VpnController.connectFastest()
         }
 
         lifecycleScope.launch {
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 VpnController.state.collect { st ->
                     if (st.needsPermission) {
                         VpnController.clearPermissionFlag()
-                        withVpnPermission { VpnController.connectAuto() }
+                        withVpnPermission { VpnController.connectFastest() }
                     }
                 }
             }
@@ -77,8 +77,8 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     onToggle = {
                         val s = VpnController.state.value
-                        if (s.connected || s.testing || s.phase.ordinal in 1..4) VpnController.toggle()
-                        else withVpnPermission { VpnController.connectAuto() }
+                        if (s.connected || s.busyConnecting) VpnController.toggle()
+                        else withVpnPermission { VpnController.toggle() }
                     },
                     onConnect = { e: ServerEntry -> withVpnPermission { VpnController.connectTo(e) } },
                 )

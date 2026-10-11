@@ -6,7 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,5 +71,33 @@ fun StatTile(
             Text(value, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(sub, color = TextSecondary, fontSize = 11.sp)
         }
+    }
+}
+
+
+/** دکمه‌ی عملیات با حالت «در حال اجرا». */
+@Composable
+fun ActionButton(
+    text: String,
+    icon: ImageVector,
+    running: Boolean,
+    enabled: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled && !running,
+        modifier = modifier.heightIn(min = 52.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = accent, contentColor = Color(0xFF0B0F19),
+            disabledContainerColor = accent.copy(alpha = 0.25f), disabledContentColor = Color(0xFF94A3B8)),
+    ) {
+        if (running) CircularProgressIndicator(
+            modifier = Modifier.padding(end = 8.dp).size(18.dp), strokeWidth = 2.dp, color = Color(0xFF94A3B8))
+        else Icon(icon, null, modifier = Modifier.padding(end = 6.dp))
+        Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
 }
