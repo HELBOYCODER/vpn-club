@@ -44,8 +44,27 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "Building version $V"
 
+      - name: Restore release signing key
+        env:
+          HB_KEYSTORE_B64: ${{ secrets.HB_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$HB_KEYSTORE_B64" ]; then
+            echo "$HB_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hellboy-release.jks"
+            echo "HB_KEYSTORE=$RUNNER_TEMP/hellboy-release.jks" >> "$GITHUB_ENV"
+            echo "Release key restored"
+          else
+            echo "::warning::HB_KEYSTORE_B64 secret missing — APK will be debug-signed and won't install over previous versions"
+          fi
+
       - name: Build Android Release APK
+        env:
+          HB_KEYSTORE_PASSWORD: ${{ secrets.HB_KEYSTORE_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Print signing certificate
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/*.apk | grep -E "SHA-256|DN" || true
 
       - name: Copy and rename APK
         run: |

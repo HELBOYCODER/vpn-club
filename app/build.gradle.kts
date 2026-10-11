@@ -18,10 +18,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // امضای ثابت: بدون آن هر بیلد CI با یک کلید debug تصادفی امضا می‌شد و نسخه‌ی جدید
+    // روی نسخه‌ی قبلی نصب نمی‌شد. کلید از Secretهای گیت‌هاب (HB_KEYSTORE_*) می‌آید.
+    val hbKeystore = System.getenv("HB_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (hbKeystore != null) {
+            create("hellboy") {
+                storeFile = hbKeystore
+                storePassword = System.getenv("HB_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("HB_KEY_ALIAS") ?: "hellboy"
+                keyPassword = System.getenv("HB_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hbKeystore != null) signingConfigs.getByName("hellboy")
+                            else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
