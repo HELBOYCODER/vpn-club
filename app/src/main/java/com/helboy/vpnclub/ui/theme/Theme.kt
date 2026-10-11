@@ -15,6 +15,8 @@ object ThemeState {
     var mode by mutableStateOf("system")
     /** ظاهر دکمه‌ی اتصال: hellboy | orb */
     var buttonStyle by mutableStateOf("hellboy")
+    /** قطره‌های خون و آتش روی پوسته */
+    var effects by mutableStateOf(true)
 }
 
 @Composable

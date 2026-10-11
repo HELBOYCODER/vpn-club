@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
         VpnController.init(applicationContext)
         com.helboy.vpnclub.ui.theme.ThemeState.mode = VpnController.settings().themeMode
         com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = VpnController.settings().buttonStyle
+        com.helboy.vpnclub.ui.theme.ThemeState.effects = VpnController.settings().skinEffects
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)

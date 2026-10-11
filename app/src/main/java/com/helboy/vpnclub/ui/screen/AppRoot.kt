@@ -66,7 +66,12 @@ fun AppRoot(
                 }
             },
         ) { pad ->
-            Box(Modifier.fillMaxSize().concreteWall().padding(pad)) {
+            Box(Modifier.fillMaxSize().concreteWall()) {
+                // قطره‌های خون و اخگرهای آتش روی دیوار (قابل خاموش‌کردن در تنظیمات)
+                if (com.helboy.vpnclub.ui.theme.ThemeState.effects)
+                    com.helboy.vpnclub.ui.components.BloodAndFire(Modifier.fillMaxSize(), dark = Palette.isDark)
+            }
+            Box(Modifier.fillMaxSize().padding(pad)) {
                 when (tab) {
                     0 -> HomeScreen(ui, onToggle)
                     1 -> ServersScreen(ui, onConnect,

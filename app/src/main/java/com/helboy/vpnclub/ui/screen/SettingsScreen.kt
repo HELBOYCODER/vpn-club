@@ -63,6 +63,7 @@ fun SettingsScreen(settings: AppSettings) {
     var carrier by remember { mutableStateOf(settings.carrierMode) }
     var theme by remember { mutableStateOf(settings.themeMode) }
     var style by remember { mutableStateOf(settings.buttonStyle) }
+    var fx by remember { mutableStateOf(settings.skinEffects) }
     var bypassIran by remember { mutableStateOf(settings.bypassIran) }
     var failover by remember { mutableStateOf(settings.autoFailover) }
     var autoLaunch by remember { mutableStateOf(settings.autoConnectOnLaunch) }
@@ -89,6 +90,9 @@ fun SettingsScreen(settings: AppSettings) {
                             theme = id; settings.themeMode = id; com.helboy.vpnclub.ui.theme.ThemeState.mode = id
                         }, label = { Text(label, fontSize = 12.sp) })
                     }
+                }
+                SwitchRow("قطره‌های خون و آتش", "جلوه‌ی متحرک روی دیوار پس‌زمینه", fx) {
+                    fx = it; settings.skinEffects = it; com.helboy.vpnclub.ui.theme.ThemeState.effects = it
                 }
                 Text("دکمه‌ی اتصال", color = TextSecondary, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

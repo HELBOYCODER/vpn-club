@@ -39,6 +39,11 @@ class AppSettings(context: Context) {
         get() = sp.getString("button_style", "hellboy") ?: "hellboy"
         set(v) { sp.edit().putString("button_style", v).apply() }
 
+    /** جلوه‌ی خون و آتش روی پوسته. */
+    var skinEffects: Boolean
+        get() = sp.getBoolean("skin_fx", true)
+        set(v) { sp.edit().putBoolean("skin_fx", v).apply() }
+
     /** IP منتخب برای اینجکت (خودکار از هر اسکن، یا دستی). */
     var selectedIp: String
         get() = sp.getString("selected_ip", "") ?: ""
