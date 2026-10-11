@@ -1,27 +1,11 @@
-# 🔥 Hellboy VPN v3.5.0 — Psiphon
-
-**دانلود / Download:** `HellboyVPN-3.5.0.apk`
-
----
+# 🔥 Hellboy VPN v3.5.1 — امضای دائمی / Permanent signing
 
 ## 🇮🇷 فارسی
-
-### سایفون روی سرورها (اختیاری)
-- **سایفون** حالا روی سرور فعلی قابل روشن شدن است: ترافیک ← سایفون ← سرور (Xray). اگر سایفون وصل نشود، اتصال بدون آن ادامه پیدا می‌کند.
-- **کلید با فونت هلبوی** در صفحه‌ی خانه: با روشن شدن، نوشته‌ی «PSIPHON» **آتش می‌گیرد** (زبانه و اخگر)؛ با خاموش شدن **یخ می‌زند** (قندیل و برفک).
-- روشن/خاموش کردن در حین اتصال، بدون قطع سرور اعمال می‌شود.
-- ⚠️ سایفون فقط با **کانفیگ رسمی Psiphon Inc.** (PropagationChannelId، SponsorId، …) کار می‌کند که داخل برنامه نیست؛ از تنظیمات ← سایفون ← «وارد کردن کانفیگ».
-- موتور سایفون فعلاً برای پردازنده‌های **ARM** (تقریباً همه‌ی گوشی‌ها) است.
-
----
+- از این نسخه برنامه با **کلید امضای ثابت Hellboy VPN** امضا می‌شود؛ آپدیت‌های بعدی مستقیم روی همین نسخه نصب می‌شوند.
+- ⚠️ **فقط این یک بار:** نسخه‌ی قبلی را حذف کنید و بعد این نسخه را نصب کنید (نسخه‌های قبلی هر کدام با کلید تصادفی متفاوتی امضا شده بودند).
+- شامل همه‌ی امکانات ۳.۵.۰ (سایفون روی سرور با کلید آتش/یخ).
 
 ## 🇬🇧 English
-
-### Psiphon over servers (optional)
-- **Psiphon** can now be layered on top of the current server: traffic → Psiphon → server (Xray). If Psiphon can't connect, the connection continues without it.
-- **Hellboy-font toggle** on the home screen: turning it on sets the "PSIPHON" title **on fire** (flames and embers); turning it off **freezes** it (icicles and frost).
-- Toggling while connected applies without dropping the server.
-- ⚠️ Psiphon requires an **official Psiphon Inc. configuration** (PropagationChannelId, SponsorId, …), which is not bundled. Add it in Settings → Psiphon → "Import config".
-- The Psiphon engine is currently built for **ARM** devices (virtually all phones).
-
-Third-party licenses: see `THIRD_PARTY.md` (Psiphon tunnel-core is GPL-3.0).
+- Starting with this version the app is signed with a **permanent Hellboy VPN signing key**; future updates install directly over it.
+- ⚠️ **One time only:** uninstall the previous version, then install this one (earlier builds were each signed with a different random key).
+- Includes everything from 3.5.0 (Psiphon over server with the fire/ice toggle).
