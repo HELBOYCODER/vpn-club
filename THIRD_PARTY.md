@@ -10,3 +10,5 @@
 
 > Bundling GPL-3.0 Psiphon means distributed builds of this app should be released under GPL-3.0-compatible terms with source available.
 > Psiphon network access requires an official configuration (PropagationChannelId/SponsorId…) from Psiphon Inc.; it is not included.
+
+- Psiphon options (direct/over-server mode, protocol presets incl. Conduit in-proxy, egress region, aggressive establishment) modeled on MahsaNG by GFW-knocker (GPL-3.0): https://github.com/GFW-knocker/MahsaNG

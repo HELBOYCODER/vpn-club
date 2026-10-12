@@ -61,22 +61,52 @@ object PsiphonRunner {
 
     fun clearUserConfig(ctx: Context) { configFile(ctx).delete() }
 
+    /** پروتکل‌های سایفون (مثل MahsaNG): auto = همه، normal = OSSH کلاسیک، conduit = از طریق داوطلبان Conduit (WebRTC). */
+    private val NORMAL_PROTOCOLS = listOf("SSH", "OSSH", "TLS-OSSH", "QUIC-OSSH", "SHADOWSOCKS-OSSH")
+    private val CONDUIT_PROTOCOLS = listOf(
+        "INPROXY-WEBRTC-OSSH", "INPROXY-WEBRTC-UNFRONTED-MEEK-HTTPS-OSSH",
+        "INPROXY-WEBRTC-UNFRONTED-MEEK-SESSION-TICKET-OSSH", "INPROXY-WEBRTC-FRONTED-MEEK-OSSH",
+        "INPROXY-WEBRTC-FRONTED-MEEK-HTTP-OSSH", "INPROXY-WEBRTC-QUIC-OSSH")
+
+    /** کشورهای خروجی رایج سایفون (کد دوحرفی؛ "" = خودکار/بهترین). */
+    val REGIONS = listOf("" to "خودکار", "DE" to "آلمان", "NL" to "هلند", "GB" to "انگلیس", "FR" to "فرانسه",
+        "US" to "آمریکا", "CA" to "کانادا", "SE" to "سوئد", "FI" to "فنلاند", "AT" to "اتریش", "CH" to "سوئیس",
+        "SG" to "سنگاپور", "JP" to "ژاپن", "IN" to "هند")
+
+    /** کانفیگ نهایی اجرا: کانفیگ کاربر + تنظیمات اپ. [upstreamSocks] = null یعنی سایفون مستقیم (بدون سرور زیرین). */
+    internal fun buildRunConfig(user: JSONObject, dataDir: String, upstreamSocks: Int?, st: AppSettings): JSONObject {
+        val cfg = JSONObject(user.toString())
+            .put("DataRootDirectory", dataDir)
+            .put("LocalSocksProxyPort", LOCAL_SOCKS)
+            .put("DisableLocalHTTPProxy", true)
+            .put("EmitDiagnosticNotices", false)
+        if (upstreamSocks != null) cfg.put("UpstreamProxyURL", "socks5://127.0.0.1:$upstreamSocks")
+        else cfg.remove("UpstreamProxyURL")
+        if (st.psiphonRegion.length == 2) cfg.put("EgressRegion", st.psiphonRegion)
+        when (st.psiphonProtocol) {
+            "normal" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(NORMAL_PROTOCOLS))
+            "conduit" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(CONDUIT_PROTOCOLS))
+        }
+        if (st.psiphonAggressive) cfg.put("AggressiveEstablishment", true)
+        if (!cfg.has("DNSResolverAlternateServers"))
+            cfg.put("DNSResolverAlternateServers", org.json.JSONArray(listOf("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4")))
+        return cfg
+    }
+
     /**
-     * سایفون را روی SOCKS هسته ([upstreamSocks]) بالا می‌آورد و تا [timeoutMs] منتظر اتصال می‌ماند.
+     * سایفون را بالا می‌آورد و تا [timeoutMs] منتظر اتصال می‌ماند.
+     * [upstreamSocks] = پورت SOCKS هسته (سایفون روی سرور)؛ null = سایفون مستقیم.
      * @return true اگر وصل شد (SOCKS محلی روی [LOCAL_SOCKS] آماده است)
      */
-    fun start(ctx: Context, upstreamSocks: Int, timeoutMs: Long = 75_000): Boolean {
+    fun start(ctx: Context, upstreamSocks: Int?, timeoutMs: Long = 75_000): Boolean {
         stop()
         val user = loadUserConfig(ctx) ?: run { fail("کانفیگ سایفون وارد نشده"); return false }
         val bin = binary(ctx)
         if (!bin.exists()) { fail("موتور سایفون در این نسخه/پردازنده موجود نیست"); return false }
         val dataDir = File(ctx.filesDir, "psiphon").apply { mkdirs() }
-        val cfg = JSONObject(user.toString())
-            .put("DataRootDirectory", dataDir.absolutePath)
-            .put("UpstreamProxyURL", "socks5://127.0.0.1:$upstreamSocks")
-            .put("LocalSocksProxyPort", LOCAL_SOCKS)
-            .put("DisableLocalHTTPProxy", true)
-            .put("EmitDiagnosticNotices", false)
+        val cfg = buildRunConfig(user, dataDir.absolutePath, upstreamSocks, AppSettings.of(ctx))
+        DiagLogger.log("PSIPHON start ${if (upstreamSocks == null) "direct" else "over-server"} " +
+            "region=${cfg.optString("EgressRegion", "auto")} protocols=${cfg.optJSONArray("LimitTunnelProtocols")?.length() ?: "all"}")
         val cfgFile = File(dataDir, "run_config.json").apply { writeText(cfg.toString()) }
 
         _state.value = PsiphonState.CONNECTING

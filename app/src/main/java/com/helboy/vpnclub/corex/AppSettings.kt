@@ -44,6 +44,26 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("psiphon", false)
         set(v) { sp.edit().putBoolean("psiphon", v).apply() }
 
+    /** حالت سایفون: chain = روی سرور (ترافیک ← سایفون ← سرور)، direct = سایفون تنها بدون سرور. */
+    var psiphonMode: String
+        get() = sp.getString("psiphon_mode", "chain") ?: "chain"
+        set(v) { sp.edit().putString("psiphon_mode", v).apply() }
+
+    /** کشور خروجی سایفون (کد دوحرفی؛ خالی = خودکار). */
+    var psiphonRegion: String
+        get() = sp.getString("psiphon_region", "") ?: ""
+        set(v) { sp.edit().putString("psiphon_region", v).apply() }
+
+    /** پروتکل سایفون: auto | normal | conduit */
+    var psiphonProtocol: String
+        get() = sp.getString("psiphon_protocol", "auto") ?: "auto"
+        set(v) { sp.edit().putString("psiphon_protocol", v).apply() }
+
+    /** اتصال تهاجمی سایفون (تلاش هم‌زمان بیشتر، اتصال سریع‌تر، مصرف بیشتر). */
+    var psiphonAggressive: Boolean
+        get() = sp.getBoolean("psiphon_aggressive", false)
+        set(v) { sp.edit().putBoolean("psiphon_aggressive", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)

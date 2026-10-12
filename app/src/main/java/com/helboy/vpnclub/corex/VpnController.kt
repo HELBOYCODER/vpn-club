@@ -103,7 +103,16 @@ object VpnController {
             initialized = true
         }
         _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app)) }
-        scope.launch { PsiphonRunner.state.collect { ps -> _state.update { it.copy(psiphon = ps) } } }
+        scope.launch {
+            PsiphonRunner.state.collect { ps ->
+                _state.update { it.copy(psiphon = ps) }
+                // سایفون مستقیم تنها مسیر است؛ اگر موتورش افتاد، تونل را ببند تا کاربر بداند
+                if (ps == PsiphonState.FAILED && psiphonOnlyUp && !opMutex.isLocked) {
+                    HellboyVpnService.stop(app)
+                    markDisconnected("سایفون قطع شد: ${PsiphonRunner.lastError}")
+                }
+            }
+        }
         registerNetworkKick()
         scope.launch {
             HellboyVpnService.status.collect { s ->
@@ -121,6 +130,7 @@ object VpnController {
     fun toggle() {
         val s = _state.value
         if (s.connected || s.task == Task.CONNECT) { disconnect(); return }
+        if (psiphonDirect()) { connectPsiphonOnly(); return }
         if (settings.fastestMode || s.servers.isEmpty()) connectFastest()
         else connectTo(s.servers.first())
     }
@@ -140,7 +150,8 @@ object VpnController {
         if (on && !PsiphonRunner.binaryAvailable(app)) return "موتور سایفون برای پردازنده‌ی این گوشی موجود نیست"
         settings.psiphonEnabled = on
         _state.update { it.copy(psiphonOn = on, message = if (on) "سایفون روشن شد" else "سایفون خاموش شد") }
-        if (_state.value.connected) HellboyVpnService.applyPsiphon(app)
+        if (!on && psiphonOnlyUp) disconnect()
+        else if (_state.value.connected) HellboyVpnService.applyPsiphon(app)
         return null
     }
 
@@ -186,6 +197,40 @@ object VpnController {
 
     /** سریع‌ترین اتصال: همه‌ی سرورها هم‌زمان تست و اتصال به کم‌تاخیرترین. */
     fun connectFastest() = runTask(Task.CONNECT) { doConnectFastest() }
+
+    /** حالت «سایفون مستقیم» فعال است (کلید روشن + کانفیگ + حالت direct). */
+    fun psiphonDirect(): Boolean = settings.psiphonEnabled && settings.psiphonMode == "direct" &&
+        PsiphonRunner.hasConfig(app) && PsiphonRunner.binaryAvailable(app)
+
+    /** اتصال فقط با سایفون، بدون سرور (وقتی هیچ سروری جواب نمی‌دهد). */
+    fun connectPsiphonOnly() = runTask(Task.CONNECT) {
+        _state.update { it.copy(needsPermission = false) }
+        setTask(Task.CONNECT, "اتصال سایفون مستقیم… (تا ۲ دقیقه)")
+        setState(Phase.CONNECTING, "اتصال سایفون مستقیم…")
+        CurrentConfigHolder.clear(app)
+        HellboyVpnService.startPsiphonOnly(app)
+        val st = withTimeoutOrNull(130_000) {
+            HellboyVpnService.status.first { it.state == SvcState.UP || it.state == SvcState.FAILED }
+        }
+        if (st?.state != SvcState.UP) {
+            HellboyVpnService.stop(app)
+            val err = st?.error
+            if (err is SvcError.Tun && android.net.VpnService.prepare(app) != null)
+                _state.update { it.copy(needsPermission = true) }
+            setState(Phase.FAILED, st?.message?.ifEmpty { null } ?: "سایفون وصل نشد. منطقه یا پروتکل را عوض کنید.")
+            return@runTask
+        }
+        var lat = -1L
+        for (i in 0 until 3) { lat = HealthTester.tunnelLatency(PsiphonRunner.LOCAL_SOCKS, 8_000); if (lat > 0) break; delay(800) }
+        val b = Tun2Socks.bytes()
+        baseUp = b?.first ?: 0; baseDown = b?.second ?: 0
+        _state.update { it.copy(phase = Phase.CONNECTED, message = "متصل با سایفون مستقیم", connected = true, current = null,
+            connectedSince = System.currentTimeMillis(), latencyMs = lat) }
+        startStats()
+        if (watchJob?.isActive != true) startWatchdog()
+    }
+
+    private val psiphonOnlyUp: Boolean get() = _state.value.connected && _state.value.current == null
 
     /** اتصال به سرور مشخص از لیست. */
     fun connectTo(entry: ServerEntry) = runTask(Task.CONNECT) {
@@ -417,6 +462,7 @@ object VpnController {
                 if (!_state.value.connected || switching) continue
                 val lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 6_000)
                 if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
+                if (psiphonOnlyUp) continue // سایفون خودش دوباره وصل می‌شود
                 if (++fails >= 2 && settings.autoFailover) { fails = 0; failover() }
             }
         }
@@ -494,7 +540,7 @@ object VpnController {
                 if (!_state.value.connected || switching) return@launch
                 var lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000)
                 if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000) }
-                if (lat <= 0 && settings.autoFailover) failover()
+                if (lat <= 0 && settings.autoFailover && !psiphonOnlyUp) failover()
             } finally { kickBusy = false }
         }
     }
