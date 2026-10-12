@@ -74,6 +74,11 @@ class AppSettings(context: Context) {
         get() = sp.getString("server_source", "auto") ?: "auto"
         set(v) { sp.edit().putString("server_source", v).apply() }
 
+    /** WARP: نویز UDP پیش از هندشیک WireGuard. */
+    var warpNoise: Boolean
+        get() = sp.getBoolean("warp_noise", true)
+        set(v) { sp.edit().putBoolean("warp_noise", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)

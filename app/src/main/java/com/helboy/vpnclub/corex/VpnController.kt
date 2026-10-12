@@ -20,7 +20,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** کار در حال اجرا — هر دکمه یک کار جدا. */
-enum class Task { NONE, SCAN_IP, RESCAN, INJECT, CONNECT, SUB, DEPLOY }
+enum class Task { NONE, SCAN_IP, RESCAN, INJECT, CONNECT, SUB, DEPLOY, WARP }
 
 /**
  * مغز برنامه (singleton هم‌عمر با پردازه، مستقل از Activity).
@@ -77,7 +77,10 @@ object VpnController {
         /** همه‌ی سرورهای هر ساب (حتی بدون پینگ) برای انتخاب دستی. */
         val subServers: Map<String, List<SubServer>> = emptyMap(),
         /** auto | mine */
-        val serverSource: String = "auto"
+        val serverSource: String = "auto",
+        /** WARP: حساب ثبت شده؟ نویز روشن؟ */
+        val warpRegistered: Boolean = false,
+        val warpNoise: Boolean = true
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -122,10 +125,12 @@ object VpnController {
             }
             initialized = true
         }
-        _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app),
+        _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasUserConfig(app),
             autoInject = settings.autoInjectAfterScan, mySubs = subStore.load(), serverSource = settings.serverSource) }
         _state.update { st -> st.copy(subServers = st.mySubs.associate { it.id to subStore.loadServers(it.id) }) }
         DiagLogger.sessionHeader(app)
+        XrayCore.warpNoise = settings.warpNoise
+        _state.update { it.copy(warpRegistered = WarpManager.account(app) != null, warpNoise = settings.warpNoise) }
         scope.launch {
             PsiphonRunner.state.collect { ps ->
                 _state.update { it.copy(psiphon = ps) }
@@ -176,7 +181,6 @@ object VpnController {
 
     /** روشن/خاموش کردن سایفون روی سرور (اگر وصلیم، بدون قطع سرور اعمال می‌شود). */
     fun setPsiphon(on: Boolean): String? {
-        if (on && !PsiphonRunner.hasConfig(app)) return "اول کانفیگ رسمی سایفون را وارد کنید"
         if (on && !PsiphonRunner.binaryAvailable(app)) return "موتور سایفون برای پردازنده‌ی این گوشی موجود نیست"
         settings.psiphonEnabled = on
         _state.update { it.copy(psiphonOn = on, message = if (on) "سایفون روشن شد" else "سایفون خاموش شد") }
@@ -188,13 +192,13 @@ object VpnController {
     /** ذخیره‌ی کانفیگ رسمی سایفون. null = موفق. */
     fun importPsiphonConfig(text: String): String? {
         val err = PsiphonRunner.saveUserConfig(app, text)
-        _state.update { it.copy(psiphonHasConfig = PsiphonRunner.hasConfig(app)) }
+        _state.update { it.copy(psiphonHasConfig = PsiphonRunner.hasUserConfig(app)) }
         return err
     }
 
     fun clearPsiphonConfig() {
         PsiphonRunner.clearUserConfig(app)
-        setPsiphon(false)
+        toast("کانفیگ رسمی پاک شد؛ سایفون با حالت رایگان کار می‌کند")
         _state.update { it.copy(psiphonHasConfig = false) }
     }
 
@@ -273,7 +277,7 @@ object VpnController {
         setTask(Task.INJECT, "تست کانفیگ ویرایش‌شده…")
         val (fresh, r) = engine.testConfig(cfg, old.variantId, old.useFrag)
         val wasCurrent = _state.value.connected && _state.value.current?.serverKey == old.serverKey
-        if (old.source.isNotEmpty()) recordSubEdit(old.source, old.config.raw, fresh, r)
+        if (old.source.startsWith("sub-")) recordSubEdit(old.source, old.config.raw, fresh, r)
         publish(_state.value.servers.map { if (it.serverKey == old.serverKey) fresh.copy(source = old.source) else it }.distinctBy { it.serverKey })
         if (wasCurrent && r is DelayResult.Ok) {
             setTask(Task.INJECT, "اتصال با کانفیگ جدید…")
@@ -471,18 +475,18 @@ object VpnController {
     /** اتصال سریع‌ترین در حالت «فقط ساب‌های من». */
     private suspend fun doConnectMine() {
         DiagLogger.section("CONNECT mine subs=${_state.value.mySubs.size}")
-        if (_state.value.servers.none { it.source.isNotEmpty() }) {
+        if (_state.value.servers.none { it.source.startsWith("sub-") }) {
             setState(Phase.TESTING, "رفرش ساب‌های من…")
             for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
         }
-        var pool = _state.value.servers.filter { it.source.isNotEmpty() }
+        var pool = _state.value.servers.filter { it.source.startsWith("sub-") }
         setTask(Task.CONNECT, "تست سرورهای ساب‌های من…")
         setState(Phase.TESTING, "یافتن سریع‌ترین سرور ساب‌های من…")
         var alive = engine.retestAll(pool) { d, a -> setTask(Task.CONNECT, "تست $d/${pool.size} · سالم: $a") }
         if (alive.isEmpty()) {
             setState(Phase.TESTING, "سرورها پاسخ ندادند؛ دریافت دوباره‌ی ساب‌ها…")
             for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
-            pool = _state.value.servers.filter { it.source.isNotEmpty() }
+            pool = _state.value.servers.filter { it.source.startsWith("sub-") }
             alive = pool.filter { it.latencyMs > 0 }
         }
         // اگر تست‌ها جواب ندادند (مثلاً ساب بدون VPN دریافت نشد)، سرورهای ذخیره‌شده‌ی ساب‌ها مستقیم امتحان می‌شوند
@@ -502,6 +506,65 @@ object VpnController {
     }
 
     private const val MAX_SUB_TEST = 60
+
+    // ════════════════════════════ WARP رایگان ════════════════════════════
+
+    private suspend fun ensureWarp(): WarpManager.Account? {
+        WarpManager.account(app)?.let { return it }
+        setTask(_state.value.task, "ثبت دستگاه در WARP…")
+        return try {
+            kotlinx.coroutines.withContext(Dispatchers.IO) { WarpManager.register(app) }.also { _state.update { s -> s.copy(warpRegistered = true) } }
+        } catch (e: Exception) {
+            DiagLogger.log("WARP register failed: ${e.javaClass.simpleName} ${e.message?.take(120)}")
+            toast("ثبت WARP ناموفق بود (${e.message?.take(60)})" + if (!_state.value.connected) " — اگر API کلادفلر بسته است، اول با سرور دیگری وصل شوید" else "")
+            null
+        }
+    }
+
+    /** اسکن اندپوینت‌ها: دو دور (۲۴ و بعد ۴۰ اندپوینت) تا سالم پیدا شود. */
+    private suspend fun doWarpScan(acc: WarpManager.Account): List<ServerEntry> {
+        DiagLogger.section("WARP scan noise=${settings.warpNoise}")
+        var found = engine.warpScan(acc, 24) { d, a -> setTask(_state.value.task, "اسکن اندپوینت WARP $d/24 · سالم: $a") }
+        if (found.isEmpty()) found = engine.warpScan(acc, 40) { d, a -> setTask(_state.value.task, "اسکن دوم WARP $d/40 · سالم: $a") }
+        val cur = _state.value.current
+        publish(found.take(5) + _state.value.servers.filterNot { it.source == "warp" && it.serverKey != cur?.serverKey })
+        DiagLogger.log("WARP_SCAN result alive=${found.size} best=${found.firstOrNull()?.latencyMs ?: -1}ms")
+        return found
+    }
+
+    /** اتصال به WARP رایگان: ثبت (اگر لازم) ← اسکن اندپوینت ← اتصال به سریع‌ترین. */
+    fun connectWarp() = runTask(Task.CONNECT) {
+        _state.update { it.copy(needsPermission = false) }
+        setState(Phase.CONNECTING, "WARP…")
+        val acc = ensureWarp() ?: run { setState(Phase.FAILED, "ثبت WARP ممکن نشد"); return@runTask }
+        val list = _state.value.servers.filter { it.source == "warp" && it.latencyMs > 0 }.ifEmpty { doWarpScan(acc) }
+        for (e in list.sortedBy { it.latencyMs }.take(5)) {
+            setTask(Task.CONNECT, "اتصال WARP ${e.config.dialHost}:${e.config.dialPort} (${e.latencyMs}ms)…")
+            if (activate(e)) { toast("متصل به WARP (${e.latencyMs}ms)"); return@runTask }
+            if (_state.value.needsPermission) return@runTask
+        }
+        setState(Phase.FAILED, "اندپوینت WARP سالمی پیدا نشد · «اسکن WARP» یا روشن/خاموش کردن نویز را امتحان کنید")
+    }
+
+    fun warpRescan() = runTask(Task.WARP) {
+        val acc = ensureWarp() ?: return@runTask
+        val found = doWarpScan(acc)
+        toast(if (found.isEmpty()) "اندپوینت WARP سالمی پیدا نشد" else "${found.size} اندپوینت WARP سالم · بهترین ${found.first().latencyMs}ms")
+    }
+
+    fun setWarpNoise(on: Boolean) {
+        settings.warpNoise = on; XrayCore.warpNoise = on
+        _state.update { it.copy(warpNoise = on) }
+        DiagLogger.log("WARP noise=$on")
+    }
+
+    /** حساب WARP تازه (کلید جدید). */
+    fun warpReset() = runTask(Task.WARP) {
+        WarpManager.clear(app)
+        _state.update { it.copy(warpRegistered = false) }
+        publish(_state.value.servers.filterNot { it.source == "warp" && it.serverKey != _state.value.current?.serverKey })
+        ensureWarp()?.let { toast("حساب WARP تازه ساخته شد") }
+    }
 
     // ════════════════════════════ نصب پنل کلادفلر ════════════════════════════
 
@@ -637,7 +700,7 @@ object VpnController {
         // سرور فعلی (اگر وصلیم) در لیست می‌ماند؛ بقیه کاملاً تازه
         val keep = listOfNotNull(_state.value.current.takeIf { _state.value.connected })
         // سرورهای «ساب‌های من» با ری‌اسکن پاک نمی‌شوند
-        val mine = _state.value.servers.filter { it.source.isNotEmpty() && it.latencyMs > 0 }
+        val mine = _state.value.servers.filter { it.source.startsWith("sub-") && it.latencyMs > 0 }
         var fresh = keep
         val want = HellboyEngine.TARGET_SERVERS - keep.size
         engine.findServers(disc, want, skipKeys = keep.map { it.serverKey }.toSet(),
@@ -870,7 +933,7 @@ object VpnController {
             return
         }
         if (netDownLogged) { netDownLogged = false; DiagLogger.log("NET_UP internet back") }
-        val others = _state.value.servers.filter { it.serverKey != cur?.serverKey && (!mineOnly || it.source.isNotEmpty()) }
+        val others = _state.value.servers.filter { it.serverKey != cur?.serverKey && (!mineOnly || it.source.startsWith("sub-")) }
         val alive = engine.retestAll(others).sortedBy { it.latencyMs }
         for (e in alive) {
             if (!currentCoroutineContext().isActive) return
@@ -884,7 +947,7 @@ object VpnController {
                 else { doRescan(); doInject() }
             } finally { setTask(Task.NONE, "") }
         }
-        for (e in _state.value.servers.filter { !mineOnly || it.source.isNotEmpty() }.sortedBy { it.latencyMs }) { if (activate(e)) return }
+        for (e in _state.value.servers.filter { !mineOnly || it.source.startsWith("sub-") }.sortedBy { it.latencyMs }) { if (activate(e)) return }
         markDisconnected("سرور سالمی پیدا نشد")
         setState(Phase.FAILED, "سرور سالمی پیدا نشد")
     }

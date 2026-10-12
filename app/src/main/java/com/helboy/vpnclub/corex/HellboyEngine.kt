@@ -410,6 +410,32 @@ class HellboyEngine(private val context: Context) {
         InjectOutcome(out, changed.get(), ordered)
     }
 
+    /**
+     * اسکن اندپوینت‌های WARP با هسته‌ی واقعی (WireGuard + نویز): [n] اندپوینت تصادفی، ۸ هم‌زمان.
+     * @return سالم‌ها، سریع‌ترین اول
+     */
+    suspend fun warpScan(acc: WarpManager.Account, n: Int, onProgress: (done: Int, alive: Int) -> Unit): List<ServerEntry> =
+        withContext(Dispatchers.IO) {
+            val cands = WarpManager.candidates(n)
+            DiagLogger.log("WARP_SCAN ${cands.size} endpoints noise=${XrayCore.warpNoise}")
+            val done = java.util.concurrent.atomic.AtomicInteger(); val alive = java.util.concurrent.atomic.AtomicInteger()
+            val gate = kotlinx.coroutines.sync.Semaphore(8)
+            cands.map { (ip, port) ->
+                async(Dispatchers.IO) {
+                    gate.acquire()
+                    try {
+                        val cfg = WarpManager.toConfig(acc, ip, port, "WARP · $ip:$port") ?: return@async null
+                        val e = ServerEntry(cfg, source = "warp")
+                        val r = delayTestR(e)
+                        DiagLogger.log("WARP_TEST $ip:$port -> ${when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log.take(60)}" }}")
+                        if (r is DelayResult.Ok) alive.incrementAndGet()
+                        onProgress(done.incrementAndGet(), alive.get())
+                        (r as? DelayResult.Ok)?.let { e.copy(latencyMs = it.ms, testedAt = System.currentTimeMillis()) }
+                    } finally { gate.release() }
+                }
+            }.mapNotNull { it.await() }.sortedBy { it.latencyMs }
+        }
+
     /** دریافت کانفیگ‌های یک ساب (با تونل اگر وصلیم). */
     suspend fun fetchSub(url: String): List<ProxyConfig> = withContext(Dispatchers.IO) {
         val lines = fetcher.fetchOne(url)

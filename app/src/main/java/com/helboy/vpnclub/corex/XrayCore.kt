@@ -141,7 +141,13 @@ class XrayCore(
             ))
             .put("outbounds", JSONArray().put(outbound).put(
                 JSONObject().put("tag", "direct").put("protocol", "freedom")
-            ))
+            ).also { arr ->
+                // WARP + نویز: بسته‌های تصادفی UDP پیش از هندشیک WireGuard (عبور از تشخیص WireGuard در ایران)
+                if (c.scheme == "wireguard" && warpNoise) arr.put(JSONObject().put("tag", NOISE_TAG).put("protocol", "freedom")
+                    .put("settings", JSONObject().put("noises", JSONArray()
+                        .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5"))
+                        .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5")))))
+            })
             .put("routing", JSONObject()
                 .put("domainStrategy", "AsIs")
                 .put("rules", JSONArray().also { rules ->
@@ -158,7 +164,33 @@ class XrayCore(
         return root.toString()
     }
 
+    /** WireGuard (WARP): فرمت تخت فورک patterniha مثل CoreOutboundBuilder پتنگ. */
+    private fun wireguardOutbound(c: ProxyConfig): JSONObject {
+        val q = c.query.toMap()
+        val host = dialOverride?.substringBefore(':') ?: c.dialHost
+        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
+        val endpoint = (if (host.contains(':')) "[$host]" else host) + ":" + port
+        val settings = JSONObject()
+            .put("secretKey", c.uuidOrUser)
+            .put("address", JSONArray((q["address"] ?: "172.16.0.2/32").split(",").map { it.trim() }.filter { it.isNotEmpty() }))
+            .put("peers", JSONArray().put(JSONObject().put("publicKey", q["publickey"] ?: q["publicKey"] ?: "")
+                .put("endpoint", endpoint).put("keepAlive", 10)
+                .also { p -> q["presharedkey"]?.ifBlank { null }?.let { p.put("preSharedKey", it) } }))
+            .put("mtu", q["mtu"]?.toIntOrNull() ?: 1280)
+            .put("remoteDNS", JSONArray(listOf("1.1.1.1", "1.0.0.1")))
+            // همیشه WireGuard فضای کاربر (gVisor) — بدون تلاش برای TUN کرنل
+            .put("noKernelTun", true)
+        q["reserved"]?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.takeIf { it.size == 3 }?.let { settings.put("reserved", JSONArray(it)) }
+        val out = JSONObject().put("protocol", "wireguard").put("settings", settings)
+        // بدون ترنسپورت؛ sockopt برای نویز (dialerProxy) و برای اینکه هسته اندپوینت را با سیستم بگیرد
+        val sockopt = JSONObject()
+        if (warpNoise) sockopt.put("dialerProxy", NOISE_TAG)
+        out.put("streamSettings", JSONObject().put("sockopt", sockopt))
+        return out
+    }
+
     private fun outboundFor(c: ProxyConfig): JSONObject {
+        if (c.scheme == "wireguard") return wireguardOutbound(c)
         val q0 = c.query.toMap()
         val addr = dialOverride?.substringBefore(':') ?: c.dialHost
         val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
@@ -308,7 +340,12 @@ class XrayCore(
         private val SUPPORTED_NETS = setOf("tcp", "ws", "grpc", "xhttp", "splithttp", "httpupgrade")
 
         /** آیا این کانفیگ را هسته‌ی ما می‌تواند اجرا کند؟ (hysteria2/kcp/quic/socks حذف) */
+        /** WARP: نویز UDP پیش از هندشیک (تنظیمات کاربر؛ پیش‌فرض روشن). */
+        @Volatile var warpNoise: Boolean = true
+        const val NOISE_TAG = "warp-noise"
+
         fun isSupported(c: ProxyConfig): Boolean {
+            if (c.scheme == "wireguard") return c.uuidOrUser.isNotBlank() && !c.query.toMap()["publickey"].isNullOrBlank()
             if (c.scheme !in setOf("vless", "vmess", "trojan", "ss")) return false
             if (c.uuidOrUser.isBlank()) return false
             val q = c.query.toMap()

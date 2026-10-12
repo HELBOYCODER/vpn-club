@@ -51,7 +51,7 @@ object DiagLogger {
     /** اسرار از لاگ حذف می‌شوند — لاگ قابل کپی/اشتراک است. */
     internal fun redact(m: String): String = m
         .replace(Regex("\"(id|password|user|publicKey|shortId|pass)\"\\s*:\\s*\"[^\"]*\""), "\"$1\":\"***\"")
-        .replace(Regex("(vless|vmess|trojan|ss|hysteria2|hy2|socks5?)://[^\\s@/]+@"), "$1://***@")
+        .replace(Regex("(vless|vmess|trojan|ss|hysteria2|hy2|socks5?|wireguard|wg)://[^\\s@/]+@"), "$1://***@")
         .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<uuid>")
 
     fun log(rawMsg: String) {

@@ -100,6 +100,8 @@ fun ServersScreen(
             TaskLine(ui)
         }
 
+        item(key = "warp") { WarpCard(ui) }
+
         // ── ساب‌های من (پنل‌های BPB / Zeus نصب‌شده + دستی) ──
         item(key = "subs-h") {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -185,7 +187,8 @@ private fun ServerRow(
                         else -> Chip("بدون اینجکت", TextTertiary)
                     }
                     IranVariants.byId(s.variantId)?.takeIf { it.id != "plain" }?.let { Chip(it.label, StatusAmber) }
-                    if (s.source.isNotEmpty()) Chip("ساب من", NeonCyan)
+                    if (s.source.startsWith("sub-")) Chip("ساب من", NeonCyan)
+                    if (s.source == "warp") Chip("WARP", StatusAmber)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {

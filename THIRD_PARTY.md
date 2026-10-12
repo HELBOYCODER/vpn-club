@@ -14,3 +14,5 @@
 - Psiphon options (direct/over-server mode, protocol presets incl. Conduit in-proxy, egress region, aggressive establishment) modeled on MahsaNG by GFW-knocker (GPL-3.0): https://github.com/GFW-knocker/MahsaNG
 - One-tap Cloudflare panel install modeled on BPB-Wizard by bia-pain-bache (GPL-3.0): https://github.com/bia-pain-bache/BPB-Wizard — BPB Panel code is downloaded at install time from https://github.com/bia-pain-bache/BPB-Worker-Panel (GPL-3.0), unmodified.
 - Zeus Panel (proprietary, personal non-commercial use) is downloaded at install time from its official repository https://github.com/panel-zeus/Z-E-U-S onto the user's own Cloudflare account; it is not bundled or modified by this app.
+- Psiphon engine built from the Shir-o-Khorshid fork (CluvexStudio/psiphon-tunnel-core, branch shirokhorshid, GPL-3.0) as pinned by Aether/PattNG; free mode uses Psiphon's public, signature-verified server list (assets/psiphon_servers.dat) and public channel, following patterniha/Aether (AGPL-3.0).
+- Cloudflare WARP: device registration via the public WARP API; keys generated on-device (X25519, RFC 7748).

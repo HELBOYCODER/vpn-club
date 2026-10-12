@@ -18,8 +18,10 @@ enum class PsiphonState { OFF, CONNECTING, ON, FAILED }
  * اجرا می‌شود (libpsiphon.so — tools/build_psiphon.sh). اعلان‌های JSON آن از stderr خوانده
  * می‌شود: «Tunnels» با count>0 یعنی وصل شد.
  *
- * کانفیگ رسمی (PropagationChannelId / SponsorId / ...) را کاربر از Psiphon Inc. می‌گیرد و
- * در برنامه وارد می‌کند؛ بدون آن سایفون فعال نمی‌شود.
+ * حالت رایگان (پیش‌فرض، مثل PattNG/Aether): کانال عمومی FFFF… + لیست عمومی و امضاشده‌ی سرورهای خود
+ * سایفون (RemoteServerListURLs + کلید امضای سایفون) + لیست همراه اپ (assets/psiphon_servers.dat، با -serverList)
+ * تا اولین اتصال بدون دانلود لیست ممکن باشد. موتور: فورک «شیر و خورشید» با اسکن لبه‌های CDN.
+ * کانفیگ رسمی واردشده توسط کاربر (اختیاری) روی این پیش‌فرض‌ها ادغام می‌شود.
  */
 object PsiphonRunner {
 
@@ -34,7 +36,64 @@ object PsiphonRunner {
 
     private fun configFile(ctx: Context) = File(ctx.filesDir, "psiphon_config.json")
 
-    fun hasConfig(ctx: Context): Boolean = loadUserConfig(ctx) != null
+    /** سایفون همیشه قابل اجراست (حالت رایگان)؛ کانفیگ کاربر فقط اختیاری است. */
+    fun hasConfig(ctx: Context): Boolean = true
+
+    /** کاربر کانفیگ رسمی خودش را وارد کرده؟ */
+    fun hasUserConfig(ctx: Context): Boolean = loadUserConfig(ctx) != null
+
+    // ── حالت رایگان: مقادیر عمومی سایفون (همان PattNG/Aether) ──
+    private const val PUBLIC_CHANNEL = "FFFFFFFFFFFFFFFF"
+    private const val SERVER_LIST_URL = "https://s3.amazonaws.com//psiphon/web/mjr4-p23r-puwl/server_list_compressed"
+    private const val SERVER_LIST_KEY = "MIICIDANBgkqhkiG9w0BAQEFAAOCAg0AMIICCAKCAgEAt7Ls+/39r+T6zNW7GiVpJfzq/xvL9SBH" +
+        "5rIFnk0RXYEYavax3WS6HOD35eTAqn8AniOwiH+DOkvgSKF2caqk/y1dfq47Pdymtwzp9ikpB1C5" +
+        "OfAysXzBiwVJlCdajBKvBZDerV1cMvRzCKvKwRmvDmHgphQQ7WfXIGbRbmmk6opMBh3roE42Kcot" +
+        "LFtqp0RRwLtcBRNtCdsrVsjiI1Lqz/lH+T61sGjSjQ3CHMuZYSQJZo/KrvzgQXpkaCTdbObxHqb6" +
+        "/+i1qaVOfEsvjoiyzTxJADvSytVtcTjijhPEV6XskJVHE1Zgl+7rATr/pDQkw6DPCNBS1+Y6fy7G" +
+        "stZALQXwEDN/qhQI9kWkHijT8ns+i1vGg00Mk/6J75arLhqcodWsdeG/M/moWgqQAnlZAGVtJI1O" +
+        "geF5fsPpXu4kctOfuZlGjVZXQNW34aOzm8r8S0eVZitPlbhcPiR4gT/aSMz/wd8lZlzZYsje/Jr8" +
+        "u/YtlwjjreZrGRmG8KMOzukV3lLmMppXFMvl4bxv6YFEmIuTsOhbLTwFgh7KYNjodLj/LsqRVfwz" +
+        "31PgWQFTEPICV7GCvgVlPRxnofqKSjgTWI4mxDhBpVcATvaoBl1L/6WLbFvBsoAUBItWwctO2xal" +
+        "KxF5szhGm8lccoc5MZr8kfE0uxMgsxz4er68iCID+rsCAQM="
+
+    /** پروتکل‌ها (همان دسته‌های Aether). CDN = عبور از لبه‌های CDN (fronting) — بهترین برای ایران. */
+    private val CDN_PROTOCOLS = listOf("FRONTED-MEEK-CDN-OSSH", "FRONTED-MEEK-CDN-HTTP-OSSH", "FRONTED-MEEK-CDN-QUIC-OSSH")
+    private val NON_INPROXY_PROTOCOLS = listOf("SSH", "OSSH", "TLS-OSSH", "UNFRONTED-MEEK-OSSH", "UNFRONTED-MEEK-HTTPS-OSSH",
+        "UNFRONTED-MEEK-SESSION-TICKET-OSSH", "QUIC-OSSH", "SHADOWSOCKS-OSSH", "FRONTED-MEEK-OSSH", "FRONTED-MEEK-CDN-OSSH",
+        "FRONTED-MEEK-HTTP-OSSH", "FRONTED-MEEK-CDN-HTTP-OSSH", "FRONTED-MEEK-QUIC-OSSH", "FRONTED-MEEK-CDN-QUIC-OSSH")
+    /** روی سرور (UpstreamProxy SOCKS) فقط پروتکل‌های TCP. */
+    private val CHAINED_PROTOCOLS = listOf("SSH", "OSSH", "TLS-OSSH", "UNFRONTED-MEEK-OSSH", "UNFRONTED-MEEK-HTTPS-OSSH",
+        "UNFRONTED-MEEK-SESSION-TICKET-OSSH", "SHADOWSOCKS-OSSH", "FRONTED-MEEK-OSSH", "FRONTED-MEEK-CDN-OSSH",
+        "FRONTED-MEEK-HTTP-OSSH", "FRONTED-MEEK-CDN-HTTP-OSSH")
+
+    /** کانفیگ پایه‌ی رایگان (بدون کانفیگ رسمی). */
+    internal fun publicBaseConfig(): JSONObject = JSONObject()
+        .put("PropagationChannelId", PUBLIC_CHANNEL)
+        .put("SponsorId", PUBLIC_CHANNEL)
+        .put("ClientPlatform", "Android_HellboyVPN")
+        .put("ClientVersion", "1")
+        .put("RemoteServerListURLs", org.json.JSONArray().put(JSONObject()
+            .put("URL", java.util.Base64.getEncoder().encodeToString(SERVER_LIST_URL.toByteArray()))))
+        .put("RemoteServerListSignaturePublicKey", SERVER_LIST_KEY)
+        .put("FrontedMeekCDNScanUseBuiltInSpec", true)
+
+    /**
+     * لیست سرور همراه اپ (فشرده‌ی امضاشده) را یک بار باز می‌کند: zlib ← JSON ← data (هر خط یک سرور).
+     * @return فایل برای -serverList، یا null
+     */
+    private fun bundledServerList(ctx: Context): File? = try {
+        val out = File(ctx.filesDir, "psiphon/server_list.txt")
+        val stamp = File(ctx.filesDir, "psiphon/server_list.ver")
+        val ver = ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime.toString()
+        if (!out.exists() || stamp.takeIf { it.exists() }?.readText() != ver) {
+            val raw = ctx.assets.open("psiphon_servers.dat").use { it.readBytes() }
+            val json = java.util.zip.InflaterInputStream(raw.inputStream()).use { it.readBytes() }.toString(Charsets.UTF_8)
+            val data = JSONObject(json).getString("data")
+            out.parentFile?.mkdirs(); out.writeText(data); stamp.writeText(ver)
+            DiagLogger.log("PSIPHON bundled server list unpacked: ${data.lines().count { it.isNotBlank() }} entries")
+        }
+        out
+    } catch (e: Exception) { DiagLogger.log("PSIPHON bundled list unavailable: ${e.message}"); null }
 
     fun binaryAvailable(ctx: Context): Boolean = binary(ctx).let { it.exists() && it.canExecute() }
 
@@ -61,7 +120,7 @@ object PsiphonRunner {
 
     fun clearUserConfig(ctx: Context) { configFile(ctx).delete() }
 
-    /** پروتکل‌های سایفون (مثل MahsaNG): auto = همه، normal = OSSH کلاسیک، conduit = از طریق داوطلبان Conduit (WebRTC). */
+    /** پروتکل‌های سایفون (مثل MahsaNG/Aether): auto، cdn (fronting)، normal = OSSH کلاسیک، conduit = داوطلبان Conduit (WebRTC). */
     private val NORMAL_PROTOCOLS = listOf("SSH", "OSSH", "TLS-OSSH", "QUIC-OSSH", "SHADOWSOCKS-OSSH")
     private val CONDUIT_PROTOCOLS = listOf(
         "INPROXY-WEBRTC-OSSH", "INPROXY-WEBRTC-UNFRONTED-MEEK-HTTPS-OSSH",
@@ -74,20 +133,33 @@ object PsiphonRunner {
         "SG" to "سنگاپور", "JP" to "ژاپن", "IN" to "هند")
 
     /** کانفیگ نهایی اجرا: کانفیگ کاربر + تنظیمات اپ. [upstreamSocks] = null یعنی سایفون مستقیم (بدون سرور زیرین). */
-    internal fun buildRunConfig(user: JSONObject, dataDir: String, upstreamSocks: Int?, st: AppSettings): JSONObject {
-        val cfg = JSONObject(user.toString())
-            .put("DataRootDirectory", dataDir)
+    internal fun buildRunConfig(user: JSONObject?, dataDir: String, upstreamSocks: Int?, st: AppSettings): JSONObject =
+        buildRunConfig(user, dataDir, upstreamSocks, st.psiphonRegion, st.psiphonProtocol, st.psiphonAggressive)
+
+    internal fun buildRunConfig(user: JSONObject?, dataDir: String, upstreamSocks: Int?, region: String, protocol: String,
+                                aggressive: Boolean): JSONObject {
+        // پایه‌ی رایگان؛ کانفیگ رسمی کاربر (اگر هست) کلیدهایش را بازنویسی می‌کند
+        val cfg = publicBaseConfig()
+        user?.keys()?.forEach { k -> cfg.put(k, user.get(k)) }
+        // Conduit فقط با in-proxy؛ بقیه بدون in-proxy (مثل Aether)
+        if (protocol != "conduit") {
+            cfg.put("InproxyTunnelProtocolPreferProbability", 0.0).put("InproxyTunnelProtocolSelectionProbability", 0.0)
+        }
+        when {
+            protocol == "normal" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(NORMAL_PROTOCOLS))
+            protocol == "conduit" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(CONDUIT_PROTOCOLS))
+            upstreamSocks != null -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(CHAINED_PROTOCOLS))
+            protocol == "cdn" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(CDN_PROTOCOLS)).put("DisableTactics", true)
+            else -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(NON_INPROXY_PROTOCOLS))
+        }
+        cfg.put("DataRootDirectory", dataDir)
             .put("LocalSocksProxyPort", LOCAL_SOCKS)
             .put("DisableLocalHTTPProxy", true)
             .put("EmitDiagnosticNotices", false)
         if (upstreamSocks != null) cfg.put("UpstreamProxyURL", "socks5://127.0.0.1:$upstreamSocks")
         else cfg.remove("UpstreamProxyURL")
-        if (st.psiphonRegion.length == 2) cfg.put("EgressRegion", st.psiphonRegion)
-        when (st.psiphonProtocol) {
-            "normal" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(NORMAL_PROTOCOLS))
-            "conduit" -> cfg.put("LimitTunnelProtocols", org.json.JSONArray(CONDUIT_PROTOCOLS))
-        }
-        if (st.psiphonAggressive) cfg.put("AggressiveEstablishment", true)
+        if (region.length == 2) cfg.put("EgressRegion", region)
+        if (aggressive) cfg.put("AggressiveEstablishment", true)
         if (!cfg.has("DNSResolverAlternateServers"))
             cfg.put("DNSResolverAlternateServers", org.json.JSONArray(listOf("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4")))
         return cfg
@@ -100,19 +172,21 @@ object PsiphonRunner {
      */
     fun start(ctx: Context, upstreamSocks: Int?, timeoutMs: Long = 75_000): Boolean {
         stop()
-        val user = loadUserConfig(ctx) ?: run { fail("کانفیگ سایفون وارد نشده"); return false }
+        val user = loadUserConfig(ctx)
         val bin = binary(ctx)
         if (!bin.exists()) { fail("موتور سایفون در این نسخه/پردازنده موجود نیست"); return false }
         val dataDir = File(ctx.filesDir, "psiphon").apply { mkdirs() }
         val cfg = buildRunConfig(user, dataDir.absolutePath, upstreamSocks, AppSettings.of(ctx))
-        DiagLogger.log("PSIPHON start ${if (upstreamSocks == null) "direct" else "over-server"} " +
+        DiagLogger.log("PSIPHON start ${if (upstreamSocks == null) "direct" else "over-server"} config=${if (user != null) "user" else "free/public"} " +
             "region=${cfg.optString("EgressRegion", "auto")} protocols=${cfg.optJSONArray("LimitTunnelProtocols")?.length() ?: "all"}")
         val cfgFile = File(dataDir, "run_config.json").apply { writeText(cfg.toString()) }
 
         _state.value = PsiphonState.CONNECTING
         val connected = CountDownLatch(1)
         return try {
-            val p = ProcessBuilder(bin.absolutePath, "-config", cfgFile.absolutePath)
+            val args = mutableListOf(bin.absolutePath, "-config", cfgFile.absolutePath, "-dataRootDirectory", dataDir.absolutePath)
+            bundledServerList(ctx)?.let { args += listOf("-serverList", it.absolutePath) }
+            val p = ProcessBuilder(args)
                 .directory(dataDir)
                 .start()
             proc = p

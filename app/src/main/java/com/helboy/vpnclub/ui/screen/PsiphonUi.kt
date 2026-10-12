@@ -47,7 +47,6 @@ fun PsiphonCard(ui: VpnController.UiState) {
     var mode by remember { mutableStateOf(st.psiphonMode) }
     val direct = mode == "direct"
     val sub = when {
-        !ui.psiphonHasConfig -> "کانفیگ سایفون وارد نشده — لمس کنید"
         !ui.psiphonOn -> "خاموش · ترافیک مستقیم از سرور"
         ui.psiphon == PsiphonState.ON && direct -> "روشن · سایفون مستقیم (بدون سرور)"
         ui.psiphon == PsiphonState.ON -> "روشن · ترافیک ← سایفون ← سرور"
@@ -63,14 +62,18 @@ fun PsiphonCard(ui: VpnController.UiState) {
                 text = "PSIPHON",
                 on = ui.psiphonOn,
                 busy = ui.psiphonOn && ui.psiphon == PsiphonState.CONNECTING,
-                enabled = ui.psiphonHasConfig,
+                enabled = true,
                 subtitle = err ?: sub,
                 onToggle = {
-                    if (!ui.psiphonHasConfig) showConfig = true
-                    else err = VpnController.setPsiphon(!ui.psiphonOn)
+                    err = VpnController.setPsiphon(!ui.psiphonOn)
                 },
             )
-            if (ui.psiphonHasConfig) PsiphonOptions(mode = mode, onMode = { mode = it; st.psiphonMode = it })
+            Text(if (ui.psiphonHasConfig) "کانفیگ رسمی شما فعال است" else "حالت رایگان · لیست عمومی سرورهای سایفون + موتور «شیر و خورشید» (بدون نیاز به کانفیگ)",
+                color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            PsiphonOptions(mode = mode, onMode = { mode = it; st.psiphonMode = it })
+            TextButton(onClick = { showConfig = true }) {
+                Text(if (ui.psiphonHasConfig) "تغییر کانفیگ رسمی" else "کانفیگ رسمی سایفون (اختیاری)", color = NeonCyan, fontSize = 12.sp)
+            }
         }
     }
     if (showConfig) PsiphonConfigDialog(onClose = { showConfig = false })
@@ -86,7 +89,7 @@ fun PsiphonConfigDialog(onClose: () -> Unit) {
         title = { Text("کانفیگ سایفون") },
         text = {
             Column {
-                Text("کانفیگ رسمی JSON که از Psiphon Inc. گرفته‌اید را بچسبانید (باید PropagationChannelId و SponsorId داشته باشد).",
+                Text("اختیاری: کانفیگ رسمی JSON از Psiphon Inc. (با PropagationChannelId و SponsorId). بدون آن، حالت رایگان استفاده می‌شود.",
                     color = TextSecondary, fontSize = 12.sp)
                 OutlinedTextField(
                     value = text, onValueChange = { text = it; error = null },
@@ -117,7 +120,7 @@ private fun PsiphonOptions(mode: String, onMode: (String) -> Unit) {
     var aggressive by remember { mutableStateOf(st.psiphonAggressive) }
     Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OptionRow("حالت", listOf("chain" to "روی سرور", "direct" to "مستقیم (بدون سرور)"), mode, onMode)
-        OptionRow("پروتکل", listOf("auto" to "خودکار", "normal" to "معمولی", "conduit" to "Conduit"), proto) {
+        OptionRow("پروتکل", listOf("auto" to "خودکار", "cdn" to "CDN (پیشنهادی ایران)", "normal" to "معمولی", "conduit" to "Conduit"), proto) {
             proto = it; st.psiphonProtocol = it
         }
         OptionRow("کشور", PsiphonRunner.REGIONS, region) { region = it; st.psiphonRegion = it }
@@ -128,7 +131,7 @@ private fun PsiphonOptions(mode: String, onMode: (String) -> Unit) {
             }
             Switch(checked = aggressive, onCheckedChange = { aggressive = it; st.psiphonAggressive = it })
         }
-        Text("تغییرات با اتصال بعدی اعمال می‌شود. Conduit از داوطلبان سایفون عبور می‌کند و در فیلترینگ شدید بهتر جواب می‌دهد.",
+        Text("تغییرات با اتصال بعدی اعمال می‌شود. CDN از لبه‌های CDN عبور می‌کند (fronting، فقط سایفون مستقیم)؛ Conduit از داوطلبان سایفون.",
             color = TextSecondary, fontSize = 11.sp)
     }
 }

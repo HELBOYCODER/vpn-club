@@ -14,7 +14,7 @@ import org.json.JSONObject
  */
 object LinkParser {
 
-    private val schemes = setOf("vless", "trojan", "hysteria2", "hy2", "vmess", "ss", "socks", "socks5")
+    private val schemes = setOf("vless", "trojan", "hysteria2", "hy2", "vmess", "ss", "socks", "socks5", "wireguard", "wg")
 
     fun parse(link: String): ProxyConfig? {
         val trimmed = link.trim()
@@ -26,6 +26,7 @@ object LinkParser {
                 "vmess" -> parseVmess(trimmed)
                 "ss" -> parseSs(trimmed)
                 "socks", "socks5" -> parseSocks(trimmed, scheme)
+                "wg" -> parseQueryStyle("wireguard" + trimmed.substring(2), "wireguard")
                 else -> parseQueryStyle(trimmed, scheme)
             }
         } catch (_: Exception) {

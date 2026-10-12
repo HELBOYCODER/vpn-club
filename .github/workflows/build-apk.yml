@@ -37,6 +37,9 @@ jobs:
       - name: Build Psiphon engine (libpsiphon.so)
         run: bash tools/build_psiphon.sh
 
+      - name: Refresh bundled Psiphon server list (signature-checked)
+        run: bash tools/fetch_psiphon_servers.sh
+
       - name: Read version from Gradle
         id: ver
         run: |
