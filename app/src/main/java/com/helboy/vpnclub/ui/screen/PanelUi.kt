@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.helboy.vpnclub.corex.CloudflareDeployer
 import com.helboy.vpnclub.corex.MySub
+import com.helboy.vpnclub.corex.SubServer
+import androidx.compose.foundation.clickable
 import com.helboy.vpnclub.corex.Task
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.components.Chip
@@ -192,6 +194,8 @@ fun MySubCard(sub: MySub, ui: VpnController.UiState) {
     val ctx = LocalContext.current
     val busy = ui.subBusyId == sub.id
     var confirmDelete by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    val servers = ui.subServers[sub.id].orEmpty()
     ClubCard(Modifier.fillMaxWidth(), border = if (sub.aliveCount > 0) NeonCyan.copy(alpha = 0.6f) else com.helboy.vpnclub.ui.theme.Palette.border) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -206,6 +210,16 @@ fun MySubCard(sub: MySub, ui: VpnController.UiState) {
                 if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = NeonCyan)
             }
             if (sub.lastError.isNotEmpty()) Text(sub.lastError, color = StatusAmber, fontSize = 11.sp)
+            // ── باز کردن سرورهای ساب برای انتخاب دستی ──
+            OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                Text(if (expanded) "▲ بستن سرورها" else "▼ سرورهای این ساب (${servers.size.fa()}) — انتخاب دستی",
+                    color = NeonCyan, fontSize = 12.sp)
+            }
+            if (expanded) {
+                if (servers.isEmpty()) Text("هنوز سروری دریافت نشده — «رفرش» را بزنید.", color = TextTertiary, fontSize = 12.sp)
+                servers.forEachIndexed { i, srv -> SubServerRow(i + 1, sub.id, srv, ui) }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 SmallBtn(Icons.Rounded.Refresh, "رفرش", !ui.testing) { VpnController.refreshSub(sub.id) }
                 SmallBtn(Icons.Rounded.NetworkPing, "پینگ", !ui.testing) { VpnController.pingSub(sub.id) }
@@ -258,4 +272,54 @@ fun AddSubDialog(onClose: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onClose) { Text("لغو") } },
     )
+}
+
+/** یک سرور از ساب: لمس = اتصال دستی (حتی اگر پینگ نداده). */
+@Composable
+private fun SubServerRow(n: Int, subId: String, srv: SubServer, ui: VpnController.UiState) {
+    val cfg = remember(srv.raw) { com.helboy.vpnclub.corex.LinkParser.parse(srv.raw) }
+    val active = ui.connected && cfg != null && ui.current?.config?.raw == srv.raw
+    val enabled = srv.supported && !ui.busyConnecting
+    Row(
+        Modifier.fillMaxWidth()
+            .background(if (active) StatusGreen.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled) { VpnController.connectSubServer(subId, srv) }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(n.fa(), color = TextTertiary, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(srv.name, color = if (srv.supported) TextPrimary else TextTertiary, fontSize = 12.sp, maxLines = 1)
+            Text(listOfNotNull(cfg?.scheme?.uppercase(), cfg?.query?.toMap()?.get("type"), cfg?.port?.toString()).joinToString(" · ") +
+                (if (srv.note.isNotEmpty()) " · ${srv.note}" else ""), color = TextTertiary, fontSize = 10.sp, maxLines = 1)
+        }
+        when {
+            active -> Text("متصل", color = StatusGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            srv.ms > 0 -> Text("${srv.ms.fa()}ms", color = StatusGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            !srv.supported -> Text("✗", color = StatusRed, fontSize = 12.sp)
+            srv.ms < 0 -> Text("بدون پینگ", color = StatusAmber, fontSize = 11.sp)
+            else -> Text("—", color = TextTertiary, fontSize = 11.sp)
+        }
+    }
+}
+
+/** انتخاب منبع سرورها: خودکار (ساب‌های عمومی + من) یا فقط ساب‌های من. */
+@Composable
+fun ServerSourceSelector(ui: VpnController.UiState) {
+    var err by remember { mutableStateOf<String?>(null) }
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("auto" to "خودکار (همه‌ی ساب‌ها)", "mine" to "فقط ساب‌های من").forEach { (k, label) ->
+                val sel = ui.serverSource == k
+                Text(label, color = if (sel) Color.Black else NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(if (sel) NeonCyan else NeonCyan.copy(alpha = 0.12f), RoundedCornerShape(50))
+                        .clickable { err = VpnController.setServerSource(k) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp))
+            }
+        }
+        Text(err ?: if (ui.serverSource == "mine") "دکمه‌ی اتصال، اسکن و تعویض خودکار فقط از سرورهای ساب‌های شما استفاده می‌کنند."
+                    else "سرورها از ساب‌های عمومی و ساب‌های شما پیدا می‌شوند.",
+            color = if (err != null) StatusAmber else TextTertiary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+    }
 }

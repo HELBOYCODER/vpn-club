@@ -99,7 +99,9 @@ class HellboyEngine(private val context: Context) {
         // دریافت ساب‌ها و اسکن کلادفلر همزمان
         val mine = SubStore(context).load().map { it.url }
         val (pair, cleanIps) = coroutineScope {
-            val subs = async { fetcher.fetchAll(defaultSubscriptions) }
+            // حالت «فقط ساب‌های من»: ساب‌های عمومی اصلاً دریافت نمی‌شوند
+            val onlyMine = settings.serverSource == "mine" && mine.isNotEmpty()
+            val subs = async { if (onlyMine) emptyList() else fetcher.fetchAll(defaultSubscriptions) }
             val my = async { if (mine.isEmpty()) emptyList() else fetcher.fetchAll(mine) }
             val ips = async { findCleanIps(onState) }
             (subs.await() to my.await()) to ips.await()
@@ -415,13 +417,19 @@ class HellboyEngine(private val context: Context) {
             .also { DiagLogger.log("SUB_FETCH ${java.net.URI(url).host} lines=${lines.size} parsed=${it.size}") }
     }
 
-    /** تست موازی چند کانفیگ (۸ هم‌زمان) — برای رفرش ساب. */
-    suspend fun testMany(cfgs: List<ProxyConfig>, source: String, onProgress: (done: Int, alive: Int) -> Unit): List<Pair<ServerEntry, DelayResult>> =
+    /**
+     * تست سرورهای یک ساب، مثل اسکنر اصلی:
+     *  دور ۱: همه با پروفایل «مستقیم» (سریع)
+     *  دور ۲: سرورهای CDN (ws/grpc/… پشت TLS) که جواب ندادند — مثل ورکرهای BPB/Zeus روی workers.dev که
+     *         SNI آن‌ها در ایران فیلتر است — با IP منتخب + پروفایل‌های فرگمنت ایران؛ اولین ترکیب سالم ذخیره می‌شود.
+     */
+    suspend fun testMany(cfgs: List<ProxyConfig>, source: String, onProgress: (done: Int, alive: Int) -> Unit,
+                         preferredIp: String? = null): List<Pair<ServerEntry, DelayResult>> =
         withContext(Dispatchers.IO) {
             val done = java.util.concurrent.atomic.AtomicInteger()
             val alive = java.util.concurrent.atomic.AtomicInteger()
             val gate = kotlinx.coroutines.sync.Semaphore(8)
-            cfgs.map { c ->
+            val first = cfgs.map { c ->
                 async(Dispatchers.IO) {
                     gate.acquire()
                     try {
@@ -431,7 +439,42 @@ class HellboyEngine(private val context: Context) {
                         e.copy(source = source) to r
                     } finally { gate.release() }
                 }
-            }.map { it.await() }
+            }.map { it.await() }.toMutableList()
+
+            // دور ۲: فرگمنت + IP تمیز برای سرورهای CDN ناموفق
+            val retry = first.withIndex().filter { (_, p) ->
+                p.second !is DelayResult.Ok && p.second !is DelayResult.ConfigError && injectable(p.first.config) &&
+                    (p.first.config.query.toMap()["security"] == "tls" || p.first.config.query.toMap()["tls"] == "tls")
+            }.take(16)
+            if (retry.isNotEmpty()) DiagLogger.log("SUB_TEST pass2 frag/cleanIp for ${retry.size} CDN servers (ip=${preferredIp ?: "-"})")
+            val variants = IranVariants.order(settings.carrierMode, learnedVariant).filter { it.id != "plain" }
+            retry.map { (idx, p) ->
+                async(Dispatchers.IO) {
+                    gate.acquire()
+                    try {
+                        val base = p.first
+                        val c = base.config
+                        val port = if (c.port in CloudflareScanner.CF_ALL_PORTS) c.port else 443
+                        val dials = listOfNotNull(preferredIp?.let { c.withDial(it, port) }, c)
+                        val combos = buildList {
+                            preferredIp?.let { add(IranVariants.PLAIN to c.withDial(it, port)) }
+                            for (v in variants.filter { !it.needsCf || base.cf }.take(2)) for (d in dials) add(v to d)
+                        }.take(4)
+                        for ((v, d) in combos) {
+                            val e = base.copy(config = d, variantId = v.id, useFrag = v.useFrag)
+                            val r = delayTestR(e)
+                            DiagLogger.log("SUB_TEST ${v.id} ${c.host}:${c.port} dial=${d.dialHost} -> ${when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log}" }}")
+                            if (r is DelayResult.Ok) {
+                                learnedVariant = v.id
+                                first[idx] = e.copy(latencyMs = r.ms, testedAt = System.currentTimeMillis()) to r
+                                onProgress(done.get(), alive.incrementAndGet())
+                                break
+                            }
+                        }
+                    } finally { gate.release() }
+                }
+            }.forEach { it.await() }
+            first
         }
 
     /**

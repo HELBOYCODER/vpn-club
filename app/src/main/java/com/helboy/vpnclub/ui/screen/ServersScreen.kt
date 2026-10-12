@@ -107,6 +107,7 @@ fun ServersScreen(
                     modifier = Modifier.weight(1f))
                 androidx.compose.material3.TextButton(onClick = { showAddSub = true }) { Text("+ افزودن ساب", color = NeonCyan) }
             }
+            ServerSourceSelector(ui)
             if (ui.mySubs.isEmpty()) Text("از «تنظیمات ← پنل شخصی روی کلادفلر» پنل BPB یا Zeus نصب کنید؛ لینک ساب خودکار اینجا می‌آید.",
                 color = TextTertiary, fontSize = 12.sp)
         }

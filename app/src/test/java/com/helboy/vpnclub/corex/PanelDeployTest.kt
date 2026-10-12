@@ -36,6 +36,21 @@ class PanelDeployTest {
         assertEquals(s, MySub.fromJson(s.toJson()))
     }
 
+    @Test fun subServerKeepsWorkingVariantAndDial() {
+        val raw = "vless://11111111-2222-3333-4444-555555555555@w.example.workers.dev:443?type=ws&security=tls&sni=w.example.workers.dev&host=w.example.workers.dev#B"
+        val s = SubServer(raw, 180, "frag", true, "irancell-ff", "104.16.1.1", 443, true)
+        val back = SubServer.fromJson(s.toJson())
+        assertEquals(s, back)
+        val e = back.toEntry("sub-1")!!
+        assertEquals("104.16.1.1", e.config.dialHost)
+        assertEquals("w.example.workers.dev", e.config.sniHost)
+        assertEquals("irancell-ff", e.variantId); assertTrue(e.useFrag); assertEquals("sub-1", e.source)
+        assertEquals(raw, e.config.raw)
+        // سرور تست‌نشده: بدون dial/variant
+        val plain = SubServer(raw).toEntry("sub-1")!!
+        assertFalse(plain.injected); assertEquals(null, plain.variantId)
+    }
+
     @Test fun serverEntryKeepsSource() {
         val c = LinkParser.parse("vless://11111111-2222-3333-4444-555555555555@a.example.com:443?type=ws&security=tls#A")!!
         val e = ServerEntry(c, cf = true, source = "sub-9", latencyMs = 120)

@@ -73,7 +73,11 @@ object VpnController {
         /** نصب پنل: مراحل زنده، نتیجه یا خطا. */
         val deploySteps: List<String> = emptyList(),
         val deployResult: CloudflareDeployer.Result? = null,
-        val deployError: String = ""
+        val deployError: String = "",
+        /** همه‌ی سرورهای هر ساب (حتی بدون پینگ) برای انتخاب دستی. */
+        val subServers: Map<String, List<SubServer>> = emptyMap(),
+        /** auto | mine */
+        val serverSource: String = "auto"
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -119,7 +123,8 @@ object VpnController {
             initialized = true
         }
         _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app),
-            autoInject = settings.autoInjectAfterScan, mySubs = subStore.load()) }
+            autoInject = settings.autoInjectAfterScan, mySubs = subStore.load(), serverSource = settings.serverSource) }
+        _state.update { st -> st.copy(subServers = st.mySubs.associate { it.id to subStore.loadServers(it.id) }) }
         DiagLogger.sessionHeader(app)
         scope.launch {
             PsiphonRunner.state.collect { ps ->
@@ -325,57 +330,144 @@ object VpnController {
     fun removeSub(id: String) {
         val cur = _state.value.current
         saveSubs(_state.value.mySubs.filterNot { it.id == id })
+        subStore.deleteServers(id)
+        _state.update { it.copy(subServers = it.subServers - id) }
+        if (_state.value.mySubs.isEmpty() && settings.serverSource == "mine") setServerSource("auto")
         publish(_state.value.servers.filterNot { it.source == id && it.serverKey != cur?.serverKey })
         toast("ساب حذف شد")
     }
 
     /** رفرش: دریافت تازه‌ی کانفیگ‌های ساب ← تست همه با اینترنت گوشی ← سالم‌ها به لیست سرورها. */
-    fun refreshSub(id: String) = runTask(Task.SUB) {
-        val sub = _state.value.mySubs.firstOrNull { it.id == id } ?: return@runTask
+    fun refreshSub(id: String) = runTask(Task.SUB) { doRefreshSub(id, fetch = true) }
+
+    /** پینگ: تست دوباره‌ی همه‌ی سرورهای ذخیره‌شده‌ی همین ساب (اگر چیزی ذخیره نیست، رفرش کامل). */
+    fun pingSub(id: String) = runTask(Task.SUB) { doRefreshSub(id, fetch = _state.value.subServers[id].isNullOrEmpty()) }
+
+    /**
+     * [fetch] = دریافت دوباره از لینک ساب؛ وگرنه فقط تست دوباره‌ی لیست ذخیره‌شده.
+     * همه‌ی سرورها (حتی ناسالم/پشتیبانی‌نشده با دلیل) برای نمایش و انتخاب دستی ذخیره می‌شوند.
+     * @return تعداد سالم
+     */
+    private suspend fun doRefreshSub(id: String, fetch: Boolean): Int {
+        val sub = _state.value.mySubs.firstOrNull { it.id == id } ?: return 0
         _state.update { it.copy(subBusyId = id) }
         try {
-            DiagLogger.section("SUB_REFRESH ${sub.name} (${sub.kind})")
-            setTask(Task.SUB, "دریافت ساب «${sub.name}»…")
-            val cfgs = try { engine.fetchSub(sub.url) } catch (e: Exception) { emptyList() }
+            DiagLogger.section("SUB_${if (fetch) "REFRESH" else "PING"} ${sub.name} (${sub.kind})")
+            val cfgs: List<ProxyConfig> = if (fetch) {
+                setTask(Task.SUB, "دریافت ساب «${sub.name}»…")
+                try { engine.fetchSub(sub.url) } catch (e: Exception) { DiagLogger.log("SUB_FETCH error ${e.message}"); emptyList() }
+            } else (_state.value.subServers[id] ?: emptyList()).mapNotNull { LinkParser.parse(it.raw) }
             if (cfgs.isEmpty()) {
                 updateSub(id) { it.copy(lastFetchAt = System.currentTimeMillis(), lastError = "کانفیگی دریافت نشد") }
-                toast("از «${sub.name}» کانفیگی دریافت نشد" + if (!_state.value.connected) " — workers.dev شاید بدون VPN باز نشود؛ اول وصل شوید و دوباره رفرش کنید" else "")
-                return@runTask
+                toast("از «${sub.name}» کانفیگی دریافت نشد" + if (!_state.value.connected) " — workers.dev شاید بدون VPN باز نشود؛ اول با حالت خودکار وصل شوید و دوباره رفرش کنید" else "")
+                return 0
             }
-            val supported = cfgs.filter { XrayCore.isSupported(it) }.take(40)
-            val results = engine.testMany(supported, id) { d, a -> setTask(Task.SUB, "تست «${sub.name}» $d/${supported.size} · سالم: $a") }
+            val (supported, unsupported) = cfgs.partition { XrayCore.isSupported(it) }
+            val toTest = supported.take(MAX_SUB_TEST)
+            val results = engine.testMany(toTest, id, { d, a -> setTask(Task.SUB, "تست «${sub.name}» $d/${toTest.size} · سالم: $a") },
+                preferredIp = _state.value.selectedIp.ifEmpty { null })
+            val tested = results.associateBy { it.first.config.raw }
+            val list = supported.map { c ->
+                val t = tested[c.raw]
+                when (val r = t?.second) {
+                    is DelayResult.Ok -> SubServer.of(t.first, r.ms,
+                        listOfNotNull(IranVariants.byId(t.first.variantId)?.takeIf { it.id != "plain" }?.label,
+                            t.first.config.dialHost.takeIf { t.first.injected }?.let { "IP $it" }).joinToString(" · "))
+                    is DelayResult.Fail -> SubServer(c.raw, -1, r.log.take(60))
+                    null -> SubServer(c.raw, 0, "تست نشده")
+                }
+            }.sortedWith(compareBy({ if (it.ms > 0) 0 else 1 }, { if (it.ms > 0) it.ms else Long.MAX_VALUE })) +
+                unsupported.map { SubServer(it.raw, -1, unsupportedReason(it), supported = false) }
+            subStore.saveServers(id, list)
+            _state.update { it.copy(subServers = it.subServers + (id to list)) }
             val alive = results.filter { it.second is DelayResult.Ok }.map { it.first }
-            // سرورهای قبلی همین ساب جایگزین می‌شوند (سرور متصل حفظ می‌شود)
+            // سرورهای قبلی همین ساب در لیست سرورها جایگزین می‌شوند (سرور متصل حفظ می‌شود)
             val cur = _state.value.current
-            val kept = _state.value.servers.filterNot { it.source == id && it.serverKey != cur?.serverKey }
-            publish(alive + kept)
+            publish(alive + _state.value.servers.filterNot { it.source == id && it.serverKey != cur?.serverKey })
             val best = alive.minOfOrNull { it.latencyMs } ?: -1
             updateSub(id) { it.copy(lastFetchAt = System.currentTimeMillis(), configCount = cfgs.size, aliveCount = alive.size, bestMs = best,
-                lastError = if (alive.isEmpty()) "هیچ کانفیگی پینگ نداد" else "") }
-            DiagLogger.log("SUB_REFRESH ${sub.name} configs=${cfgs.size} supported=${supported.size} alive=${alive.size} best=${best}ms")
-            toast("«${sub.name}»: ${alive.size} از ${supported.size} کانفیگ سالم" + if (best > 0) " · بهترین ${best}ms" else "")
+                lastError = when { alive.isNotEmpty() -> ""; supported.isEmpty() -> "هیچ کانفیگ پشتیبانی‌شده‌ای ندارد"; else -> "هیچ کانفیگی پینگ نداد؛ می‌توانید دستی امتحان کنید" }) }
+            DiagLogger.log("SUB_RESULT ${sub.name} configs=${cfgs.size} supported=${supported.size} tested=${toTest.size} alive=${alive.size} best=${best}ms")
+            unsupported.take(10).forEach { DiagLogger.log("SUB_UNSUPPORTED ${it.scheme} ${it.host}:${it.port} -> ${unsupportedReason(it)}") }
+            toast("«${sub.name}»: ${alive.size} از ${toTest.size} سالم" + (if (best > 0) " · بهترین ${best}ms" else "") +
+                (if (unsupported.isNotEmpty()) " · ${unsupported.size} پشتیبانی نمی‌شود" else ""))
+            return alive.size
         } finally { _state.update { it.copy(subBusyId = "") } }
     }
 
-    /** پینگ: تست دوباره‌ی سرورهای همین ساب در لیست (اگر نبود، رفرش کامل). */
-    fun pingSub(id: String) {
-        val mine = _state.value.servers.filter { it.source == id }
-        if (mine.isEmpty()) { refreshSub(id); return }
-        runTask(Task.SUB) {
-            _state.update { it.copy(subBusyId = id) }
-            try {
-                val name = _state.value.mySubs.firstOrNull { it.id == id }?.name.orEmpty()
-                setTask(Task.SUB, "پینگ سرورهای «$name»…")
-                val alive = engine.retestAll(mine) { d, a -> setTask(Task.SUB, "پینگ «$name» $d/${mine.size} · سالم: $a") }
-                val byKey = alive.associateBy { it.serverKey }
-                publish(_state.value.servers.map { s -> if (s.source == id) byKey[s.serverKey] ?: s.copy(latencyMs = -1) else s })
-                val best = alive.minOfOrNull { it.latencyMs } ?: -1
-                updateSub(id) { it.copy(aliveCount = alive.size, bestMs = best) }
-                DiagLogger.log("SUB_PING $name alive=${alive.size}/${mine.size} best=$best")
-                toast("«$name»: ${alive.size}/${mine.size} پینگ داد" + if (best > 0) " · بهترین ${best}ms" else "")
-            } finally { _state.update { it.copy(subBusyId = "") } }
+    private fun unsupportedReason(c: ProxyConfig): String {
+        val q = c.query.toMap()
+        return when {
+            c.scheme !in setOf("vless", "vmess", "trojan", "ss") -> "پروتکل ${c.scheme} پشتیبانی نمی‌شود"
+            listOf("allowInsecure", "insecure").any { q[it] == "1" || q[it] == "true" } -> "allowInsecure (هسته‌ی جدید رد می‌کند)"
+            (q["security"] ?: "") == "reality" && q["pbk"].isNullOrBlank() -> "Reality بدون کلید pbk"
+            else -> "ترنسپورت ${q["type"] ?: "tcp"} یا رمزنگاری پشتیبانی نمی‌شود"
         }
     }
+
+    /** اتصال دستی به یک سرور ساب (حتی اگر پینگ نداده باشد — تصمیم با کاربر). */
+    fun connectSubServer(subId: String, srv: SubServer) = runTask(Task.CONNECT) {
+        val e = srv.toEntry(subId) ?: run { toast("لینک این سرور خراب است"); return@runTask }
+        val cfg = e.config
+        if (!XrayCore.isSupported(cfg)) { toast("این سرور پشتیبانی نمی‌شود: ${srv.note}"); return@runTask }
+        DiagLogger.log("SUB_MANUAL_CONNECT ${cfg.scheme} ${cfg.host}:${cfg.port} dial=${cfg.dialHost} variant=${e.variantId ?: "-"} lastMs=${srv.ms}")
+        setTask(Task.CONNECT, "اتصال به ${label(e)}…")
+        setState(Phase.CONNECTING, "اتصال به ${label(e)}…")
+        if (activate(e)) {
+            val live = _state.value.current ?: e
+            publish(listOf(live.copy(latencyMs = _state.value.latencyMs.coerceAtLeast(1))) + _state.value.servers)
+            toast("وصل شد: ${label(e)}")
+        } else if (_state.value.connected) setState(Phase.CONNECTED, "این سرور وصل نشد؛ سرور قبلی حفظ شد")
+        else setState(Phase.FAILED, "این سرور وصل نشد — سرور دیگری از همین ساب را امتحان کنید")
+    }
+
+    /** منبع سرورها. null = موفق؛ وگرنه دلیل. */
+    fun setServerSource(v: String): String? {
+        if (v == "mine" && _state.value.mySubs.isEmpty()) return "اول یک ساب اضافه کنید؛ بدون ساب، حالت خودکار استفاده می‌شود"
+        settings.serverSource = v
+        _state.update { it.copy(serverSource = v) }
+        DiagLogger.log("SERVER_SOURCE $v")
+        toast(if (v == "mine") "فقط سرورهای ساب‌های من استفاده می‌شوند" else "خودکار: ساب‌های عمومی + ساب‌های من")
+        return null
+    }
+
+    /** حالت «فقط ساب‌های من» فعال و ساب داریم. */
+    private val mineOnly: Boolean get() = settings.serverSource == "mine" && _state.value.mySubs.isNotEmpty()
+
+    /** اتصال سریع‌ترین در حالت «فقط ساب‌های من». */
+    private suspend fun doConnectMine() {
+        DiagLogger.section("CONNECT mine subs=${_state.value.mySubs.size}")
+        if (_state.value.servers.none { it.source.isNotEmpty() }) {
+            setState(Phase.TESTING, "رفرش ساب‌های من…")
+            for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
+        }
+        var pool = _state.value.servers.filter { it.source.isNotEmpty() }
+        setTask(Task.CONNECT, "تست سرورهای ساب‌های من…")
+        setState(Phase.TESTING, "یافتن سریع‌ترین سرور ساب‌های من…")
+        var alive = engine.retestAll(pool) { d, a -> setTask(Task.CONNECT, "تست $d/${pool.size} · سالم: $a") }
+        if (alive.isEmpty()) {
+            setState(Phase.TESTING, "سرورها پاسخ ندادند؛ دریافت دوباره‌ی ساب‌ها…")
+            for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
+            pool = _state.value.servers.filter { it.source.isNotEmpty() }
+            alive = pool.filter { it.latencyMs > 0 }
+        }
+        // اگر تست‌ها جواب ندادند (مثلاً ساب بدون VPN دریافت نشد)، سرورهای ذخیره‌شده‌ی ساب‌ها مستقیم امتحان می‌شوند
+        val tried = alive.map { it.serverKey }.toMutableSet()
+        val stored = _state.value.mySubs.flatMap { sub ->
+            _state.value.subServers[sub.id].orEmpty().filter { it.supported }.mapNotNull { it.toEntry(sub.id) }
+        }.filter { it.serverKey !in tried }.sortedBy { if (it.latencyMs > 0) it.latencyMs else Long.MAX_VALUE }.take(8)
+        if (alive.isEmpty() && stored.isNotEmpty()) DiagLogger.log("CONNECT mine fallback to ${stored.size} stored sub servers")
+        for (e in alive.sortedBy { it.latencyMs } + stored) {
+            if (!currentCoroutineContext().isActive) return
+            setTask(Task.CONNECT, "اتصال به ${label(e)}" + (if (e.latencyMs > 0) " (${e.latencyMs}ms)" else "") + "…")
+            setState(Phase.CONNECTING, "اتصال به ${label(e)}…")
+            if (activate(e)) return
+            if (_state.value.needsPermission) return
+        }
+        setState(Phase.FAILED, "هیچ سروری از ساب‌های من وصل نشد · ساب را باز کنید و دستی امتحان کنید، یا منبع را «خودکار» کنید")
+    }
+
+    private const val MAX_SUB_TEST = 60
 
     // ════════════════════════════ نصب پنل کلادفلر ════════════════════════════
 
@@ -577,6 +669,7 @@ object VpnController {
 
     private suspend fun doConnectFastest() {
         _state.update { it.copy(needsPermission = false) }
+        if (mineOnly) { doConnectMine(); return }
         DiagLogger.section("CONNECT fastest servers=${_state.value.servers.size} selectedIp=${_state.value.selectedIp.ifEmpty { "-" }} net=${DiagLogger.networkSummary(app)}")
         // ۱) لیست خالی → ساخت: ری‌اسکن ← اسکن IP ← اینجکت
         if (_state.value.servers.isEmpty()) {
@@ -720,7 +813,10 @@ object VpnController {
                     DiagLogger.log("POOL_CHECK alive=${alive.size}/${current.size}")
                     if (alive.size <= WEAK_POOL) {
                         setTask(Task.RESCAN, "تازه‌سازی خودکار لیست…")
-                        try { doRescan(); doInject() } finally { setTask(Task.NONE, "") }
+                        try {
+                            if (mineOnly) for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
+                            else { doRescan(); doInject() }
+                        } finally { setTask(Task.NONE, "") }
                     }
                 }
             }
@@ -736,7 +832,7 @@ object VpnController {
             _state.update { it.copy(message = "اینترنت قطع است — منتظر بازگشت شبکه…") }
             return
         }
-        val others = _state.value.servers.filter { it.serverKey != cur?.serverKey }
+        val others = _state.value.servers.filter { it.serverKey != cur?.serverKey && (!mineOnly || it.source.isNotEmpty()) }
         val alive = engine.retestAll(others).sortedBy { it.latencyMs }
         for (e in alive) {
             if (!currentCoroutineContext().isActive) return
@@ -745,9 +841,12 @@ object VpnController {
         if (opMutex.isLocked) return
         opMutex.withLock {
             setTask(Task.RESCAN, "همه‌ی سرورها ضعیف شدند؛ لیست تازه…")
-            try { doRescan(); doInject() } finally { setTask(Task.NONE, "") }
+            try {
+                if (mineOnly) for (sub in _state.value.mySubs) doRefreshSub(sub.id, fetch = true)
+                else { doRescan(); doInject() }
+            } finally { setTask(Task.NONE, "") }
         }
-        for (e in _state.value.servers.sortedBy { it.latencyMs }) { if (activate(e)) return }
+        for (e in _state.value.servers.filter { !mineOnly || it.source.isNotEmpty() }.sortedBy { it.latencyMs }) { if (activate(e)) return }
         markDisconnected("سرور سالمی پیدا نشد")
         setState(Phase.FAILED, "سرور سالمی پیدا نشد")
     }

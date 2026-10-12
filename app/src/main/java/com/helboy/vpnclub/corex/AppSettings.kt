@@ -69,6 +69,11 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("auto_inject", true)
         set(v) { sp.edit().putBoolean("auto_inject", v).apply() }
 
+    /** منبع سرورها: auto = ساب‌های عمومی + ساب‌های من؛ mine = فقط ساب‌های من (اگر ساب نداریم، خودکار). */
+    var serverSource: String
+        get() = sp.getString("server_source", "auto") ?: "auto"
+        set(v) { sp.edit().putString("server_source", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)
