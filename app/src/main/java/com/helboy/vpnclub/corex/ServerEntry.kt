@@ -20,7 +20,9 @@ data class ServerEntry(
     val upBps: Double = 0.0,
     val testedAt: Long = 0,
     /** سرور پشت کلادفلر است (قابل تزریق IP تمیز). */
-    val cf: Boolean = false
+    val cf: Boolean = false,
+    /** شناسه‌ی «ساب من» که این سرور از آن آمده (خالی = ساب‌های عمومی/دستی). */
+    val source: String = ""
 ) {
     val id: String get() =
         "${config.scheme}|${config.host}|${config.port}|${config.uuidOrUser}|${config.dialHost}|${variantId ?: "-"}"
@@ -73,6 +75,7 @@ data class ServerEntry(
         .put("up", upBps)
         .put("at", testedAt)
         .put("cf", cf)
+        .put("src", source)
 
     companion object {
         fun fromJson(o: JSONObject?): ServerEntry? {
@@ -89,7 +92,8 @@ data class ServerEntry(
                 downBps = o.optDouble("down", 0.0),
                 upBps = o.optDouble("up", 0.0),
                 testedAt = o.optLong("at"),
-                cf = o.optBoolean("cf", false)
+                cf = o.optBoolean("cf", false),
+                source = o.optString("src")
             )
         }
 

@@ -64,6 +64,8 @@ fun ServersScreen(
 ) {
     var actionsFor by remember { mutableStateOf<ServerEntry?>(null) }
     var showImport by remember { mutableStateOf(false) }
+    var showAddSub by remember { mutableStateOf(false) }
+    if (showAddSub) AddSubDialog(onClose = { showAddSub = false })
     val clipboard = LocalClipboardManager.current
     actionsFor?.let { s -> ServerActionsDialog(s, onClose = { actionsFor = null }) }
     if (showImport) ImportConfigDialog(onClose = { showImport = false })
@@ -97,6 +99,18 @@ fun ServersScreen(
             }
             TaskLine(ui)
         }
+
+        // ── ساب‌های من (پنل‌های BPB / Zeus نصب‌شده + دستی) ──
+        item(key = "subs-h") {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("ساب‌های من · ${ui.mySubs.size.fa()}", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f))
+                androidx.compose.material3.TextButton(onClick = { showAddSub = true }) { Text("+ افزودن ساب", color = NeonCyan) }
+            }
+            if (ui.mySubs.isEmpty()) Text("از «تنظیمات ← پنل شخصی روی کلادفلر» پنل BPB یا Zeus نصب کنید؛ لینک ساب خودکار اینجا می‌آید.",
+                color = TextTertiary, fontSize = 12.sp)
+        }
+        for (sub in ui.mySubs) item(key = "sub-" + sub.id) { MySubCard(sub, ui) }
 
         if (ui.servers.isEmpty()) {
             item {
@@ -170,6 +184,7 @@ private fun ServerRow(
                         else -> Chip("بدون اینجکت", TextTertiary)
                     }
                     IranVariants.byId(s.variantId)?.takeIf { it.id != "plain" }?.let { Chip(it.label, StatusAmber) }
+                    if (s.source.isNotEmpty()) Chip("ساب من", NeonCyan)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {

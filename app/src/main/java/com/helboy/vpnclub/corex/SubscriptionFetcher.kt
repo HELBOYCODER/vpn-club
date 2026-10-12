@@ -53,12 +53,5 @@ class SubscriptionFetcher(
         String(Base64.getDecoder().decode(padded))
     } catch (_: Exception) { null }
 
-    private fun httpGet(url: String): String {
-        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = timeoutMs
-        conn.readTimeout = timeoutMs
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "VPNClub/1.0 (Android)")
-        return conn.inputStream.bufferedReader().use { it.readText() }
-    }
+    private fun httpGet(url: String): String = NetHttp.getText(url, "SUB")
 }

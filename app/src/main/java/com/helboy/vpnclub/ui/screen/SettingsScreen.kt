@@ -160,6 +160,8 @@ fun SettingsScreen(settings: AppSettings) {
             }
         }
 
+        PanelInstallCard()
+
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("عیب‌یابی", color = TextPrimary, fontWeight = FontWeight.SemiBold)

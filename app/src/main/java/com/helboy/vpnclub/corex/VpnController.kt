@@ -20,7 +20,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** کار در حال اجرا — هر دکمه یک کار جدا. */
-enum class Task { NONE, SCAN_IP, RESCAN, INJECT, CONNECT }
+enum class Task { NONE, SCAN_IP, RESCAN, INJECT, CONNECT, SUB, DEPLOY }
 
 /**
  * مغز برنامه (singleton هم‌عمر با پردازه، مستقل از Activity).
@@ -65,7 +65,15 @@ object VpnController {
         val selectedIpColo: String = "",
         /** نتیجه‌ی آخرین اینجکت روی هر سرور. */
         val injectReport: List<HellboyEngine.InjectResult> = emptyList(),
-        val autoInject: Boolean = true
+        val autoInject: Boolean = true,
+        /** «ساب‌های من» (پنل‌های نصب‌شده + دستی). */
+        val mySubs: List<MySub> = emptyList(),
+        /** ساب در حال رفرش/پینگ (برای نشانگر روی همان کارت). */
+        val subBusyId: String = "",
+        /** نصب پنل: مراحل زنده، نتیجه یا خطا. */
+        val deploySteps: List<String> = emptyList(),
+        val deployResult: CloudflareDeployer.Result? = null,
+        val deployError: String = ""
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -83,6 +91,7 @@ object VpnController {
     private lateinit var app: Context
     private lateinit var engine: HellboyEngine
     private lateinit var settings: AppSettings
+    private lateinit var subStore: SubStore
     @Volatile private var initialized = false
 
     /** فقط یک «کار» (اسکن/ری‌اسکن/اینجکت/اتصال) در هر لحظه. */
@@ -102,6 +111,7 @@ object VpnController {
             app = context.applicationContext
             engine = HellboyEngine(app)
             settings = AppSettings.of(app)
+            subStore = SubStore(app)
             _state.update {
                 it.copy(servers = engine.savedServers().sortedByDescending { e -> e.score },
                     cleanIps = engine.savedCleanIps(), selectedIp = settings.selectedIp)
@@ -109,7 +119,7 @@ object VpnController {
             initialized = true
         }
         _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app),
-            autoInject = settings.autoInjectAfterScan) }
+            autoInject = settings.autoInjectAfterScan, mySubs = subStore.load()) }
         DiagLogger.sessionHeader(app)
         scope.launch {
             PsiphonRunner.state.collect { ps ->
@@ -295,6 +305,116 @@ object VpnController {
         toast("$added کانفیگ اضافه شد · $alive پینگ داد" + if (supported.size < cfgs.size) " · ${cfgs.size - supported.size} پشتیبانی نشد" else "")
     }
 
+    // ════════════════════════════ ساب‌های من ════════════════════════════
+
+    private fun saveSubs(list: List<MySub>) { subStore.save(list); _state.update { it.copy(mySubs = list) } }
+    private fun updateSub(id: String, f: (MySub) -> MySub) = saveSubs(_state.value.mySubs.map { if (it.id == id) f(it) else it })
+
+    /** افزودن ساب (دستی یا بعد از نصب پنل) و رفرش فوری. null = موفق؛ وگرنه دلیل. */
+    fun addSub(name: String, url: String, kind: String = "manual", panelUrl: String = ""): String? {
+        val u = url.trim()
+        if (!(u.startsWith("https://") || u.startsWith("http://"))) return "لینک ساب باید با https:// شروع شود"
+        if (_state.value.mySubs.any { it.url == u }) return "این ساب از قبل اضافه شده"
+        val sub = MySub(MySub.newId(), name.trim().ifEmpty { runCatching { java.net.URI(u).host }.getOrDefault("ساب") }, u, kind, panelUrl)
+        saveSubs(_state.value.mySubs + sub)
+        DiagLogger.log("SUB_ADD ${sub.kind} ${runCatching { java.net.URI(u).host }.getOrDefault("?")}")
+        refreshSub(sub.id)
+        return null
+    }
+
+    fun removeSub(id: String) {
+        val cur = _state.value.current
+        saveSubs(_state.value.mySubs.filterNot { it.id == id })
+        publish(_state.value.servers.filterNot { it.source == id && it.serverKey != cur?.serverKey })
+        toast("ساب حذف شد")
+    }
+
+    /** رفرش: دریافت تازه‌ی کانفیگ‌های ساب ← تست همه با اینترنت گوشی ← سالم‌ها به لیست سرورها. */
+    fun refreshSub(id: String) = runTask(Task.SUB) {
+        val sub = _state.value.mySubs.firstOrNull { it.id == id } ?: return@runTask
+        _state.update { it.copy(subBusyId = id) }
+        try {
+            DiagLogger.section("SUB_REFRESH ${sub.name} (${sub.kind})")
+            setTask(Task.SUB, "دریافت ساب «${sub.name}»…")
+            val cfgs = try { engine.fetchSub(sub.url) } catch (e: Exception) { emptyList() }
+            if (cfgs.isEmpty()) {
+                updateSub(id) { it.copy(lastFetchAt = System.currentTimeMillis(), lastError = "کانفیگی دریافت نشد") }
+                toast("از «${sub.name}» کانفیگی دریافت نشد" + if (!_state.value.connected) " — workers.dev شاید بدون VPN باز نشود؛ اول وصل شوید و دوباره رفرش کنید" else "")
+                return@runTask
+            }
+            val supported = cfgs.filter { XrayCore.isSupported(it) }.take(40)
+            val results = engine.testMany(supported, id) { d, a -> setTask(Task.SUB, "تست «${sub.name}» $d/${supported.size} · سالم: $a") }
+            val alive = results.filter { it.second is DelayResult.Ok }.map { it.first }
+            // سرورهای قبلی همین ساب جایگزین می‌شوند (سرور متصل حفظ می‌شود)
+            val cur = _state.value.current
+            val kept = _state.value.servers.filterNot { it.source == id && it.serverKey != cur?.serverKey }
+            publish(alive + kept)
+            val best = alive.minOfOrNull { it.latencyMs } ?: -1
+            updateSub(id) { it.copy(lastFetchAt = System.currentTimeMillis(), configCount = cfgs.size, aliveCount = alive.size, bestMs = best,
+                lastError = if (alive.isEmpty()) "هیچ کانفیگی پینگ نداد" else "") }
+            DiagLogger.log("SUB_REFRESH ${sub.name} configs=${cfgs.size} supported=${supported.size} alive=${alive.size} best=${best}ms")
+            toast("«${sub.name}»: ${alive.size} از ${supported.size} کانفیگ سالم" + if (best > 0) " · بهترین ${best}ms" else "")
+        } finally { _state.update { it.copy(subBusyId = "") } }
+    }
+
+    /** پینگ: تست دوباره‌ی سرورهای همین ساب در لیست (اگر نبود، رفرش کامل). */
+    fun pingSub(id: String) {
+        val mine = _state.value.servers.filter { it.source == id }
+        if (mine.isEmpty()) { refreshSub(id); return }
+        runTask(Task.SUB) {
+            _state.update { it.copy(subBusyId = id) }
+            try {
+                val name = _state.value.mySubs.firstOrNull { it.id == id }?.name.orEmpty()
+                setTask(Task.SUB, "پینگ سرورهای «$name»…")
+                val alive = engine.retestAll(mine) { d, a -> setTask(Task.SUB, "پینگ «$name» $d/${mine.size} · سالم: $a") }
+                val byKey = alive.associateBy { it.serverKey }
+                publish(_state.value.servers.map { s -> if (s.source == id) byKey[s.serverKey] ?: s.copy(latencyMs = -1) else s })
+                val best = alive.minOfOrNull { it.latencyMs } ?: -1
+                updateSub(id) { it.copy(aliveCount = alive.size, bestMs = best) }
+                DiagLogger.log("SUB_PING $name alive=${alive.size}/${mine.size} best=$best")
+                toast("«$name»: ${alive.size}/${mine.size} پینگ داد" + if (best > 0) " · بهترین ${best}ms" else "")
+            } finally { _state.update { it.copy(subBusyId = "") } }
+        }
+    }
+
+    // ════════════════════════════ نصب پنل کلادفلر ════════════════════════════
+
+    fun clearDeploy() { if (_state.value.task != Task.DEPLOY) _state.update { it.copy(deploySteps = emptyList(), deployResult = null, deployError = "") } }
+
+    /** نصب پنل BPB / Zeus با توکن کلادفلر؛ لینک ساب خودکار به «ساب‌های من» اضافه و رفرش می‌شود. */
+    fun deployPanel(panel: CloudflareDeployer.Panel, token: String, workerName: String) = runTask(Task.DEPLOY) {
+        _state.update { it.copy(deploySteps = emptyList(), deployResult = null, deployError = "") }
+        try {
+            val r = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                CloudflareDeployer.deploy(panel, token, workerName) { step ->
+                    _state.update { it.copy(deploySteps = it.deploySteps + step) }
+                    setTask(Task.DEPLOY, step)
+                }
+            }
+            _state.update { it.copy(deployResult = r) }
+            DiagLogger.log("CF_DEPLOY done ${r.panel} host=${r.host} sub=${if (r.subUrl.isNotEmpty()) "yes" else "no"}")
+            if (r.subUrl.isNotEmpty()) {
+                val sub = MySub(MySub.newId(), "${r.panel.label} · ${r.workerName}", r.subUrl,
+                    if (r.panel == CloudflareDeployer.Panel.BPB) "bpb" else "zeus", r.panelUrl)
+                saveSubs(_state.value.mySubs + sub)
+                _state.update { it.copy(deploySteps = it.deploySteps + "لینک ساب به «ساب‌های من» اضافه شد") }
+                // ورکر تازه چند ثانیه طول می‌کشد تا در همه‌ی لبه‌ها فعال شود؛ رفرش بعد از پایان همین کار
+                scope.launch {
+                    delay(4_000)
+                    while (opMutex.isLocked) delay(200)
+                    refreshSub(sub.id)
+                }
+            }
+        } catch (e: CloudflareDeployer.DeployException) {
+            DiagLogger.log("CF_DEPLOY fail ${e.message}")
+            _state.update { it.copy(deployError = e.message ?: "خطا") }
+        } catch (e: Exception) {
+            DiagLogger.log("CF_DEPLOY fail ${e.javaClass.simpleName}: ${e.message}")
+            _state.update { it.copy(deployError = "خطای شبکه: ${e.message ?: e.javaClass.simpleName}" +
+                if (!_state.value.connected) " — اگر کلادفلر/گیت‌هاب بدون VPN باز نمی‌شود، اول وصل شوید و دوباره نصب کنید" else "") }
+        }
+    }
+
     /** سریع‌ترین اتصال: همه‌ی سرورها هم‌زمان تست و اتصال به کم‌تاخیرترین. */
     fun connectFastest() = runTask(Task.CONNECT) { doConnectFastest() }
 
@@ -390,13 +510,15 @@ object VpnController {
             cleanIps = if (it.cleanIps.isEmpty()) disc.cleanIps else it.cleanIps) }
         // سرور فعلی (اگر وصلیم) در لیست می‌ماند؛ بقیه کاملاً تازه
         val keep = listOfNotNull(_state.value.current.takeIf { _state.value.connected })
+        // سرورهای «ساب‌های من» با ری‌اسکن پاک نمی‌شوند
+        val mine = _state.value.servers.filter { it.source.isNotEmpty() && it.latencyMs > 0 }
         var fresh = keep
         val want = HellboyEngine.TARGET_SERVERS - keep.size
         engine.findServers(disc, want, skipKeys = keep.map { it.serverKey }.toSet(),
             onFound = { e ->
                 fresh = (fresh + e).distinctBy { it.serverKey }
                 setTask(Task.RESCAN, "سرور سالم: ${fresh.size}/${HellboyEngine.TARGET_SERVERS}")
-                publish(fresh)
+                publish(fresh + mine)
             },
             onState = { p -> setTask(Task.RESCAN, "${p.message} · سالم: ${fresh.size}/${HellboyEngine.TARGET_SERVERS}") },
             preferredIp = _state.value.selectedIp.ifEmpty { null })

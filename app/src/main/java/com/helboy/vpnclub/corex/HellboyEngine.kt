@@ -97,11 +97,18 @@ class HellboyEngine(private val context: Context) {
         onState(Progress(Phase.FETCHING, "دریافت لینک‌های ساب و اسکن IP تمیز…"))
 
         // دریافت ساب‌ها و اسکن کلادفلر همزمان
-        val (raws, cleanIps) = coroutineScope {
+        val mine = SubStore(context).load().map { it.url }
+        val (pair, cleanIps) = coroutineScope {
             val subs = async { fetcher.fetchAll(defaultSubscriptions) }
+            val my = async { if (mine.isEmpty()) emptyList() else fetcher.fetchAll(mine) }
             val ips = async { findCleanIps(onState) }
-            subs.await() to ips.await()
+            (subs.await() to my.await()) to ips.await()
         }
+        val (publicRaws, myRaws) = pair
+        // سرورهای «ساب‌های من» اول و همیشه در نمونه (نه قربانی انتخاب تصادفی)
+        val myParsed = myRaws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }.filter { XrayCore.isSupported(it) }
+        DiagLogger.log("DISCOVER mySubs=${mine.size} myConfigs=${myParsed.size} public=${publicRaws.size}")
+        val raws = myRaws + publicRaws
 
         val parsed = raws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
             .filter { XrayCore.isSupported(it) }
@@ -114,7 +121,11 @@ class HellboyEngine(private val context: Context) {
 
         onState(Progress(Phase.TESTING, "غربال سریع ${minOf(parsed.size, MAX_PREFILTER)} سرور (هندشیک واقعی)…",
             configCount = parsed.size, cleanIpCount = cleanIps.size))
-        val sample = if (parsed.size > MAX_PREFILTER) parsed.shuffled(SecureRandom()).take(MAX_PREFILTER) else parsed
+        val myKeys = myParsed.map { ServerEntry(it).serverKey }.toSet()
+        val (myPart, publicPart) = parsed.partition { ServerEntry(it).serverKey in myKeys }
+        val sample = if (parsed.size > MAX_PREFILTER)
+            myPart.take(MAX_PREFILTER / 2) + publicPart.shuffled(SecureRandom()).take(MAX_PREFILTER - minOf(myPart.size, MAX_PREFILTER / 2))
+        else parsed
         val alive = prefilter(sample)
         if (alive.isEmpty()) {
             onState(Progress(Phase.FAILED, "هیچ سروری به TCP پاسخ نداد (اینترنت قطع است؟)",
@@ -396,6 +407,32 @@ class HellboyEngine(private val context: Context) {
         DiagLogger.log("INJECT_SUM ok=${ordered.count { it.ok }} fail=${ordered.count { !it.ok }} changed=${changed.get()}")
         InjectOutcome(out, changed.get(), ordered)
     }
+
+    /** دریافت کانفیگ‌های یک ساب (با تونل اگر وصلیم). */
+    suspend fun fetchSub(url: String): List<ProxyConfig> = withContext(Dispatchers.IO) {
+        val lines = fetcher.fetchOne(url)
+        lines.mapNotNull { LinkParser.parse(it) }.distinctBy { ServerEntry(it).serverKey }
+            .also { DiagLogger.log("SUB_FETCH ${java.net.URI(url).host} lines=${lines.size} parsed=${it.size}") }
+    }
+
+    /** تست موازی چند کانفیگ (۸ هم‌زمان) — برای رفرش ساب. */
+    suspend fun testMany(cfgs: List<ProxyConfig>, source: String, onProgress: (done: Int, alive: Int) -> Unit): List<Pair<ServerEntry, DelayResult>> =
+        withContext(Dispatchers.IO) {
+            val done = java.util.concurrent.atomic.AtomicInteger()
+            val alive = java.util.concurrent.atomic.AtomicInteger()
+            val gate = kotlinx.coroutines.sync.Semaphore(8)
+            cfgs.map { c ->
+                async(Dispatchers.IO) {
+                    gate.acquire()
+                    try {
+                        val (e, r) = testConfig(c)
+                        if (r is DelayResult.Ok) alive.incrementAndGet()
+                        onProgress(done.incrementAndGet(), alive.get())
+                        e.copy(source = source) to r
+                    } finally { gate.release() }
+                }
+            }.map { it.await() }
+        }
 
     /**
      * تست یک کانفیگ ویرایش‌شده/واردشده: تشخیص «پشت کلادفلر» با DNS و تست تونل واقعی
