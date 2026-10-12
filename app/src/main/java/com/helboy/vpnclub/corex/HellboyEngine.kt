@@ -276,10 +276,15 @@ class HellboyEngine(private val context: Context) {
     /** اسکن تازه‌ی IP تمیز کلادفلر: کش بازبینی + اسکن؛ تمیزترین‌ها (کمترین زمان هندشیک+HTTP) اول. */
     suspend fun freshCleanIps(onProgress: (tested: Int, found: Int) -> Unit = { _, _ -> }): List<CloudflareScanner.CleanIp> =
         withContext(Dispatchers.IO) {
-            val cached = CloudflareScanner.revalidate(store.loadCleanIps().take(30))
+            val t0 = System.currentTimeMillis()
+            val prev = store.loadCleanIps().take(30)
+            val cached = CloudflareScanner.revalidate(prev)
+            DiagLogger.log("SCAN_CACHE revalidated ${cached.size}/${prev.size}")
             val fresh = CloudflareScanner.scan(perRange = 12, ports = listOf(443), maxConcurrency = 64,
                 timeoutMs = 2_000, onProgress = onProgress)
             val all = (cached + fresh).distinctBy { it.ip }.sortedBy { it.tlsMs }.take(24)
+            DiagLogger.log("SCAN_DONE fresh=${fresh.size} total=${all.size} in ${System.currentTimeMillis() - t0}ms")
+            all.forEachIndexed { i, ip -> DiagLogger.log("SCAN_IP #${i + 1} ${ip.ip}:${ip.port} ${ip.tlsMs}ms colo=${ip.colo.ifEmpty { "?" }}") }
             if (all.isNotEmpty()) store.saveCleanIps(all)
             all
         }
@@ -287,23 +292,56 @@ class HellboyEngine(private val context: Context) {
     fun savedCleanIps(): List<CloudflareScanner.CleanIp> = store.loadCleanIps()
 
     /**
-     * تزریق تمیزترین IP به سرورهای پشت کلادفلر:
-     *  ۱) پروب سبک و موازی (TLS/WS-101) هر سرور × ۶ تمیزترین IP، بدون هسته
-     *  ۲) تمیزترینِ پروب‌گذشته با تونل واقعی تأیید می‌شود؛ اگر نشد آدرس قبلی می‌ماند
-     * @return (لیست جدید، تعداد سرورهایی که IP جدید گرفتند)
+     * انتخاب IP منتخب: از بین [candidates] (سریع‌ترین‌ها اول) هر کدام با اینترنت خود گوشی ۳ بار پینگ
+     * می‌شود؛ اولین IP پایدار (هر ۳ بار جواب) با کمترین میانه برنده است. null = هیچ‌کدام پایدار نبود.
+     */
+    suspend fun pickBestIp(candidates: List<CloudflareScanner.CleanIp>): CloudflareScanner.CleanIp? =
+        withContext(Dispatchers.IO) {
+            val top = candidates.take(6)
+            val pinged = top.map { c -> async(Dispatchers.IO) { c to CloudflareScanner.ping(c.ip, c.port, tries = 3) } }.map { it.await() }
+            pinged.forEach { (c, p) -> DiagLogger.log("PICK_IP ping ${c.ip} scan=${c.tlsMs}ms direct=${p?.tlsMs?.let { "${it}ms" } ?: "FAIL"} colo=${p?.colo ?: c.colo}") }
+            pinged.mapNotNull { it.second }.minByOrNull { it.tlsMs }
+        }
+
+    /** پینگ مستقیم یک IP (دستی) با اینترنت گوشی. */
+    suspend fun pingIp(ip: String): CloudflareScanner.CleanIp? = withContext(Dispatchers.IO) {
+        CloudflareScanner.ping(ip).also { DiagLogger.log("PING_IP $ip -> ${it?.let { r -> "${r.tlsMs}ms colo=${r.colo}" } ?: "FAIL"}") }
+    }
+
+    /** نتیجه‌ی اینجکت روی یک سرور (برای نمایش و لاگ). */
+    data class InjectResult(
+        val serverKey: String, val name: String, val ip: String,
+        val ok: Boolean, val ms: Long, val reason: String
+    )
+
+    data class InjectOutcome(val list: List<ServerEntry>, val changed: Int, val report: List<InjectResult>)
+
+    /**
+     * اینجکت IP منتخب به سرورهای لیست (۱۰ سرور برتر):
+     *  ۱) سرورهای غیرقابل‌تزریق (Reality/مستقیم) با دلیل رد می‌شوند
+     *  ۲) پروب سبک پروتکل (TLS با SNI سرور / WS-101) روی IP — بدون هسته
+     *  ۳) تست تونل واقعی (هسته‌ی Xray) با اینترنت گوشی؛ فقط اگر پینگ داد اعمال می‌شود
+     * هر مرحله با دلیل دقیق لاگ می‌شود.
      */
     suspend fun injectCleanIps(
         entries: List<ServerEntry>,
         ips: List<CloudflareScanner.CleanIp>,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
-    ): Pair<List<ServerEntry>, Int> = withContext(Dispatchers.IO) {
-        if (ips.isEmpty()) return@withContext entries to 0
+    ): InjectOutcome = withContext(Dispatchers.IO) {
+        if (ips.isEmpty()) return@withContext InjectOutcome(entries, 0, emptyList())
         val top = ips.take(6)
         fun portFor(e: ServerEntry, ip: CloudflareScanner.CleanIp) =
             if (e.config.port in CloudflareScanner.CF_ALL_PORTS) e.config.port else ip.port
+        fun nameOf(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)
+        DiagLogger.section("INJECT ${top.joinToString { it.ip }} -> ${entries.size} servers")
 
+        val report = java.util.concurrent.ConcurrentHashMap<String, InjectResult>()
         val targets = entries.filter { it.canInject }
-        entries.filter { !it.canInject }.forEach { DiagLogger.log("INJECT skip ${it.config.host}: ${it.injectBlocker}") }
+        entries.filter { !it.canInject }.forEach {
+            val why = it.injectBlocker ?: "غیرقابل تزریق"
+            DiagLogger.log("INJECT_SKIP ${it.config.scheme} ${it.config.host}:${it.config.port} net=${it.config.query.toMap()["type"] ?: "tcp"} sec=${it.config.query.toMap()["security"] ?: "-"} cf=${it.cf} -> $why")
+            report[it.serverKey] = InjectResult(it.serverKey, nameOf(it), "", false, -1, why)
+        }
         val pool = Executors.newFixedThreadPool(48)
         val probes = targets.associate { e ->
             e.serverKey to top.map { ip ->
@@ -312,33 +350,65 @@ class HellboyEngine(private val context: Context) {
         }
         val chosen = HashMap<String, CloudflareScanner.CleanIp?>()
         for ((k, futs) in probes) {
-            chosen[k] = futs.mapNotNull { f -> runCatching { f.get(6, TimeUnit.SECONDS) }.getOrNull() }
-                .firstOrNull { it.second > 0 }?.first
+            val res = futs.mapNotNull { f -> runCatching { f.get(6, TimeUnit.SECONDS) }.getOrNull() }
+            val e = targets.first { it.serverKey == k }
+            DiagLogger.log("INJECT_PROBE ${e.config.host} sni=${e.config.sniHost} " + res.joinToString(" ") { (ip, ms) -> "${ip.ip}=${if (ms > 0) "${ms}ms" else "x"}" })
+            chosen[k] = res.firstOrNull { it.second > 0 }?.first
         }
         pool.shutdownNow()
-        DiagLogger.log("INJECT_PROBE targets=${targets.size} withIp=${chosen.values.count { it != null }}")
+        DiagLogger.log("INJECT_PROBE_SUM targets=${targets.size} withIp=${chosen.values.count { it != null }}")
 
         val done = java.util.concurrent.atomic.AtomicInteger()
         val changed = java.util.concurrent.atomic.AtomicInteger()
         val out = entries.map { e ->
             async(Dispatchers.IO) {
                 var best = e
-                val ip = chosen[e.serverKey]
-                if (ip != null) {
-                    val port = portFor(e, ip)
-                    if (e.config.dialHost != ip.ip || e.config.dialPort != port) {
+                if (e.canInject) {
+                    val ip = chosen[e.serverKey]
+                    if (ip == null) {
+                        val why = "سرور روی IP ${top.first().ip} جواب TLS/WebSocket نداد (دامنه شاید روی کلادفلر نیست یا فیلتر است)"
+                        DiagLogger.log("INJECT_FAIL ${e.config.host} probe: no response on ${top.joinToString { it.ip }}")
+                        report[e.serverKey] = InjectResult(e.serverKey, nameOf(e), top.first().ip, false, -1, why)
+                    } else {
+                        val port = portFor(e, ip)
                         val cand = e.copy(config = e.config.withDial(ip.ip, port))
-                        val ms = delayTest(cand)
-                        DiagLogger.log("INJECT ${e.config.host} -> ${ip.ip} ${if (ms > 0) "OK ${ms}ms" else "fail"}")
-                        if (ms > 0) { best = cand.copy(latencyMs = ms, testedAt = System.currentTimeMillis()); changed.incrementAndGet() }
+                        val r = delayTestR(cand)
+                        when (r) {
+                            is DelayResult.Ok -> {
+                                best = cand.copy(latencyMs = r.ms, testedAt = System.currentTimeMillis())
+                                if (e.config.dialHost != ip.ip || e.config.dialPort != port) changed.incrementAndGet()
+                                DiagLogger.log("INJECT_OK ${e.config.host} -> ${ip.ip}:$port tunnel=${r.ms}ms variant=${e.variantId ?: "-"}")
+                                report[e.serverKey] = InjectResult(e.serverKey, nameOf(e), ip.ip, true, r.ms, "پینگ تونل ${r.ms}ms با اینترنت گوشی")
+                            }
+                            is DelayResult.Fail -> {
+                                DiagLogger.log("INJECT_FAIL ${e.config.host} -> ${ip.ip}:$port tunnel: ${r.log}")
+                                report[e.serverKey] = InjectResult(e.serverKey, nameOf(e), ip.ip, false, -1,
+                                    "پروب گذشت ولی تونل واقعی پینگ نداد (${r.log.take(60)}) — آدرس قبلی حفظ شد")
+                            }
+                        }
                     }
                 }
                 onProgress(done.incrementAndGet(), entries.size)
                 best
             }
         }.map { it.await() }
-        out to changed.get()
+        val ordered = entries.mapNotNull { report[it.serverKey] }
+        DiagLogger.log("INJECT_SUM ok=${ordered.count { it.ok }} fail=${ordered.count { !it.ok }} changed=${changed.get()}")
+        InjectOutcome(out, changed.get(), ordered)
     }
+
+    /**
+     * تست یک کانفیگ ویرایش‌شده/واردشده: تشخیص «پشت کلادفلر» با DNS و تست تونل واقعی
+     * با اینترنت گوشی. پروفایل فایروال [variantId] حفظ می‌شود (برای ویرایش).
+     */
+    suspend fun testConfig(cfg: ProxyConfig, variantId: String? = null, useFrag: Boolean = false): Pair<ServerEntry, DelayResult> =
+        withContext(Dispatchers.IO) {
+            val (_, cf) = resolveHost(cfg.host)
+            val e = ServerEntry(cfg, variantId, useFrag, cf = cf)
+            val r = delayTestR(e)
+            DiagLogger.log("TEST_CONFIG ${cfg.scheme} ${cfg.host}:${cfg.port} cf=$cf variant=${variantId ?: "-"} -> ${when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log}" }}")
+            e.copy(latencyMs = (r as? DelayResult.Ok)?.ms ?: -1L, testedAt = System.currentTimeMillis()) to r
+        }
 
     /**
      * اینجکت دستی یک IP به یک سرور (انتخاب کاربر): آدرس dial عوض می‌شود و نتیجه‌ی تست واقعی

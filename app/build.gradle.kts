@@ -12,22 +12,22 @@ android {
         applicationId = "com.helboy.vpnclub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 39
-        versionName = "3.6.0"
+        versionCode = 40
+        versionName = "3.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // امضای ثابت: بدون آن هر بیلد CI با یک کلید debug تصادفی امضا می‌شد و نسخه‌ی جدید
-    // روی نسخه‌ی قبلی نصب نمی‌شد. کلید از Secretهای گیت‌هاب (HB_KEYSTORE_*) می‌آید.
-    val hbKeystore = System.getenv("HB_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    // روی نسخه‌ی قبلی نصب نمی‌شد. کلید از Secretهای گیت‌هاب (HELLBOY_KEYSTORE_*) می‌آید.
+    val hbKeystore = System.getenv("HELLBOY_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
     signingConfigs {
         if (hbKeystore != null) {
             create("hellboy") {
                 storeFile = hbKeystore
-                storePassword = System.getenv("HB_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("HB_KEY_ALIAS") ?: "hellboy"
-                keyPassword = System.getenv("HB_KEYSTORE_PASSWORD")
+                storePassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("HELLBOY_KEY_ALIAS") ?: "hellboyvpn"
+                keyPassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
             }
         }
     }
@@ -87,8 +87,11 @@ dependencies {
 
     // OkHttp for fetching VPNGate mirror feeds
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // QR کد برای اشتراک کانفیگ (فقط هسته‌ی جاوا، بدون دوربین)
+    implementation("com.google.zxing:core:3.5.3")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

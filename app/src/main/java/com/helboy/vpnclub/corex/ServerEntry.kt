@@ -159,7 +159,7 @@ class ServerStore(context: Context) {
             val arr = JSONArray(ipsFile.readText())
             (0 until arr.length()).mapNotNull { i ->
                 arr.optJSONObject(i)?.let {
-                    CloudflareScanner.CleanIp(it.optString("ip"), it.optInt("port", 443), it.optLong("ms"))
+                    CloudflareScanner.CleanIp(it.optString("ip"), it.optInt("port", 443), it.optLong("ms"), it.optString("colo"))
                 }
             }.filter { it.ip.isNotEmpty() }
         } catch (_: Exception) { emptyList() }
@@ -168,7 +168,7 @@ class ServerStore(context: Context) {
     fun saveCleanIps(list: List<CloudflareScanner.CleanIp>) = synchronized(lock) {
         try {
             ipsFile.writeText(JSONArray().apply {
-                list.forEach { put(JSONObject().put("ip", it.ip).put("port", it.port).put("ms", it.tlsMs)) }
+                list.forEach { put(JSONObject().put("ip", it.ip).put("port", it.port).put("ms", it.tlsMs).put("colo", it.colo)) }
             }.toString())
         } catch (_: Exception) {}
     }

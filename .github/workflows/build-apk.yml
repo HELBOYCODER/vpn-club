@@ -46,19 +46,19 @@ jobs:
 
       - name: Restore release signing key
         env:
-          HB_KEYSTORE_B64: ${{ secrets.HB_KEYSTORE_B64 }}
+          HELLBOY_KEYSTORE_B64: ${{ secrets.HELLBOY_KEYSTORE_B64 }}
         run: |
-          if [ -n "$HB_KEYSTORE_B64" ]; then
-            echo "$HB_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hellboy-release.jks"
-            echo "HB_KEYSTORE=$RUNNER_TEMP/hellboy-release.jks" >> "$GITHUB_ENV"
+          if [ -n "$HELLBOY_KEYSTORE_B64" ]; then
+            echo "$HELLBOY_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hellboyvpn-release.jks"
+            echo "HELLBOY_KEYSTORE=$RUNNER_TEMP/hellboyvpn-release.jks" >> "$GITHUB_ENV"
             echo "Release key restored"
           else
-            echo "::warning::HB_KEYSTORE_B64 secret missing — APK will be debug-signed and won't install over previous versions"
+            echo "::warning::HELLBOY_KEYSTORE_B64 secret missing — APK will be debug-signed and won't install over previous versions"
           fi
 
       - name: Build Android Release APK
         env:
-          HB_KEYSTORE_PASSWORD: ${{ secrets.HB_KEYSTORE_PASSWORD }}
+          HELLBOY_KEYSTORE_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Print signing certificate
@@ -79,7 +79,9 @@ jobs:
           path: dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk
           retention-days: 90
 
+      # بدون کلید دائمی، ریلیز منتشر نمی‌شود (فایل با کلید موقت روی نسخه‌ی کاربران نصب نمی‌شود)
       - name: Create or Update GitHub Release
+        if: env.HELLBOY_KEYSTORE != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

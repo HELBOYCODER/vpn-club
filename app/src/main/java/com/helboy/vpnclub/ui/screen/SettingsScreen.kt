@@ -163,7 +163,7 @@ fun SettingsScreen(settings: AppSettings) {
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("عیب‌یابی", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("لاگ هر تست (سرور، پروفایل، خطا) روی همین گوشی ذخیره می‌شود.",
+                Text("لاگ دقیق هر مرحله (اسکن، IP منتخب، پینگ مستقیم، اینجکت هر سرور با دلیل، اتصال) روی همین گوشی ذخیره می‌شود — اگر مشکلی بود «ارسال فایل» را بزنید و بفرستید.",
                     color = TextSecondary, fontSize = 12.sp)
                 OutlinedButton(onClick = { showLog = true }) { Text("نمایش لاگ تشخیصی") }
             }
@@ -260,12 +260,17 @@ private fun AppPickerDialog(ctx: Context, settings: AppSettings, onClose: () -> 
 @Composable
 private fun LogDialog(onClose: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    var lines by remember { mutableStateOf(DiagLogger.tail(60)) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var lines by remember { mutableStateOf(DiagLogger.tail(400)) }
+    var copied by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(lines.joinToString("\n"))) }) {
-                Text("کپی", color = NeonCyan)
+            Row {
+                TextButton(onClick = { clipboard.setText(AnnotatedString(DiagLogger.fullText())); copied = true }) {
+                    Text(if (copied) "کپی شد ✓" else "کپی کامل", color = NeonCyan)
+                }
+                TextButton(onClick = { shareLogFile(ctx) }) { Text("ارسال فایل", color = NeonCyan) }
             }
         },
         dismissButton = {
@@ -274,16 +279,27 @@ private fun LogDialog(onClose: () -> Unit) {
                 TextButton(onClick = onClose) { Text("بستن") }
             }
         },
-        title = { Text("لاگ تشخیصی") },
+        title = { Text("لاگ تشخیصی · ${lines.size} خط آخر") },
         text = {
-            Column(Modifier.height(360.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.height(380.dp).verticalScroll(rememberScrollState(Int.MAX_VALUE))) {
                 Text(
                     if (lines.isEmpty()) "لاگی ثبت نشده." else lines.joinToString("\n"),
-                    fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                 )
             }
         },
     )
+}
+
+/** فایل کامل لاگ (تا ۳۰۰۰ خط، بدون اسرار) برای ارسال در تلگرام/ایمیل. */
+private fun shareLogFile(ctx: Context) {
+    val f = DiagLogger.exportFile(ctx) ?: return
+    val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".logs", f)
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+        .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        .putExtra(android.content.Intent.EXTRA_SUBJECT, "Hellboy VPN log")
+        .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(android.content.Intent.createChooser(send, "ارسال لاگ").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 private fun versionName(ctx: Context): String = try {

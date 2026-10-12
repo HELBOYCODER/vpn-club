@@ -59,7 +59,13 @@ object VpnController {
         val selectedIp: String = "",
         val psiphonOn: Boolean = false,
         val psiphon: PsiphonState = PsiphonState.OFF,
-        val psiphonHasConfig: Boolean = false
+        val psiphonHasConfig: Boolean = false,
+        /** پینگ مستقیم IP منتخب با اینترنت گوشی (−۱ = هنوز/ناموفق). */
+        val selectedIpMs: Long = -1,
+        val selectedIpColo: String = "",
+        /** نتیجه‌ی آخرین اینجکت روی هر سرور. */
+        val injectReport: List<HellboyEngine.InjectResult> = emptyList(),
+        val autoInject: Boolean = true
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -102,7 +108,9 @@ object VpnController {
             }
             initialized = true
         }
-        _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app)) }
+        _state.update { it.copy(psiphonOn = settings.psiphonEnabled, psiphonHasConfig = PsiphonRunner.hasConfig(app),
+            autoInject = settings.autoInjectAfterScan) }
+        DiagLogger.sessionHeader(app)
         scope.launch {
             PsiphonRunner.state.collect { ps ->
                 _state.update { it.copy(psiphon = ps) }
@@ -122,6 +130,9 @@ object VpnController {
     }
 
     fun settings(): AppSettings = settings
+
+    /** پیام کوتاه از UI (مثلاً «کپی شد»). */
+    fun notify(msg: String) = toast(msg)
     fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
 
     // ════════════════════════════ دکمه‌ها ════════════════════════════
@@ -136,10 +147,14 @@ object VpnController {
     }
 
     /** اسکنر IP تمیز کلادفلر. */
-    fun scanIps() = runTask(Task.SCAN_IP) { doScanIps() }
+    fun scanIps() = runTask(Task.SCAN_IP) {
+        DiagLogger.section("SCAN_IP net=${DiagLogger.networkSummary(app)}")
+        doScanIps()
+        maybeAutoInject()
+    }
 
     /** لیست تازه‌ی ۱۰ سرور سالم تصادفی از کل ساب‌ها (جایگزین لیست قبلی). */
-    fun rescanServers() = runTask(Task.RESCAN) { doRescan() }
+    fun rescanServers() = runTask(Task.RESCAN) { DiagLogger.section("RESCAN"); doRescan() }
 
     /** تزریق IPهای اسکن‌شده به سرورهای لیست. */
     fun injectIps() = runTask(Task.INJECT) { doInject() }
@@ -173,8 +188,47 @@ object VpnController {
         val v = ip.trim()
         if (!isValidIpv4(v)) return false
         settings.selectedIp = v
-        _state.update { it.copy(selectedIp = v, message = "IP منتخب: $v") }
+        _state.update { it.copy(selectedIp = v, selectedIpMs = -1, selectedIpColo = "", message = "IP منتخب: $v — در حال پینگ…") }
+        DiagLogger.log("PICK_IP manual $v")
+        scope.launch {
+            val p = engine.pingIp(v)
+            if (_state.value.selectedIp == v) _state.update {
+                it.copy(selectedIpMs = p?.tlsMs ?: -1, selectedIpColo = p?.colo.orEmpty(),
+                    message = if (p != null) "IP منتخب: $v · پینگ ${p.tlsMs}ms (${p.colo})" else "IP منتخب: $v · با اینترنت گوشی پینگ نداد")
+            }
+        }
         return true
+    }
+
+    /** دکمه‌ی «منتخب»: بهترین IP (پایدارترین پینگ مستقیم) از اسکن آخر؛ اگر اسکنی نیست، اول اسکن. */
+    fun pickSelectedIp() = runTask(Task.SCAN_IP) {
+        DiagLogger.section("PICK_IP button cached=${_state.value.cleanIps.size}")
+        if (_state.value.cleanIps.isEmpty()) doScanIps() else choosePick(_state.value.cleanIps)
+        val st = _state.value
+        if (st.selectedIp.isNotEmpty()) toast("IP منتخب: ${st.selectedIp}" + if (st.selectedIpMs > 0) " · پینگ ${st.selectedIpMs}ms" else " · پینگ مستقیم نداد")
+        maybeAutoInject()
+    }
+
+    fun setAutoInject(on: Boolean) {
+        settings.autoInjectAfterScan = on
+        _state.update { it.copy(autoInject = on) }
+    }
+
+    /** اینجکت خودکار بعد از انتخاب IP (اگر روشن و سرور داریم). */
+    private suspend fun maybeAutoInject() {
+        if (settings.autoInjectAfterScan && _state.value.servers.isNotEmpty() && _state.value.selectedIp.isNotEmpty()) {
+            DiagLogger.log("AUTO_INJECT after pick")
+            doInject()
+        }
+    }
+
+    private suspend fun choosePick(ips: List<CloudflareScanner.CleanIp>) {
+        setTask(Task.SCAN_IP, "پینگ IPهای برتر با اینترنت گوشی…")
+        val best = engine.pickBestIp(ips)
+        val pick = best ?: ips.firstOrNull() ?: return
+        settings.selectedIp = pick.ip
+        _state.update { it.copy(selectedIp = pick.ip, selectedIpMs = best?.tlsMs ?: -1, selectedIpColo = pick.colo) }
+        DiagLogger.log("PICK_IP auto ${pick.ip} direct=${best?.tlsMs ?: "FAIL"} colo=${pick.colo}")
     }
 
     /** اینجکت دستی IP منتخب روی یک سرور مشخص (اگر همان سرور متصل است، اتصال روی IP جدید می‌رود). */
@@ -193,6 +247,52 @@ object VpnController {
             toast(if (activate(updated)) "اتصال روی $ip رفت (${updated.latencyMs}ms)" else "اتصال با $ip برقرار نشد؛ IP قبلی حفظ شد")
         } else toast(if (ok) "$ip روی ${label(entry)} اینجکت شد (${updated.latencyMs}ms)"
                      else "$ip روی ${label(entry)} اعمال شد ولی تست جواب نداد — IP دیگری امتحان کنید")
+    }
+
+    /**
+     * ویرایش کانفیگ یک سرور: کانفیگ تازه تست می‌شود و جایگزین می‌شود (حتی اگر پینگ نداد، با
+     * وضعیت «بدون پاسخ» — انتخاب کاربر حفظ می‌شود). اگر همان سرور وصل است، اتصال روی کانفیگ جدید می‌رود.
+     */
+    fun editServer(old: ServerEntry, cfg: ProxyConfig) = runTask(Task.INJECT) {
+        DiagLogger.section("EDIT ${old.config.host}:${old.config.port} -> ${cfg.host}:${cfg.port}")
+        setTask(Task.INJECT, "تست کانفیگ ویرایش‌شده…")
+        val (fresh, r) = engine.testConfig(cfg, old.variantId, old.useFrag)
+        val wasCurrent = _state.value.connected && _state.value.current?.serverKey == old.serverKey
+        publish(_state.value.servers.map { if (it.serverKey == old.serverKey) fresh else it }.distinctBy { it.serverKey })
+        if (wasCurrent && r is DelayResult.Ok) {
+            setTask(Task.INJECT, "اتصال با کانفیگ جدید…")
+            toast(if (activate(fresh)) "کانفیگ ذخیره و اتصال روی آن رفت (${r.ms}ms)" else "کانفیگ ذخیره شد ولی اتصال برقرار نشد؛ کانفیگ قبلی حفظ شد")
+        } else toast(when (r) {
+            is DelayResult.Ok -> "کانفیگ ذخیره شد · پینگ ${r.ms}ms"
+            is DelayResult.Fail -> "کانفیگ ذخیره شد ولی پینگ نداد (${r.log.take(50)})"
+        })
+    }
+
+    /** حذف یک سرور از لیست (اگر وصل است، اول قطع). */
+    fun removeServer(e: ServerEntry) {
+        if (_state.value.connected && _state.value.current?.serverKey == e.serverKey) disconnect()
+        publish(_state.value.servers.filterNot { it.serverKey == e.serverKey })
+        DiagLogger.log("REMOVE ${e.config.host}:${e.config.port}")
+        toast("سرور حذف شد")
+    }
+
+    /** وارد کردن کانفیگ از متن (کلیپ‌بورد / QR دیگران): همه تست و به لیست اضافه می‌شوند. */
+    fun importConfigs(text: String) = runTask(Task.RESCAN) {
+        val cfgs = ConfigEditor.parseMany(text)
+        DiagLogger.section("IMPORT parsed=${cfgs.size}")
+        if (cfgs.isEmpty()) { toast("لینک کانفیگ معتبری پیدا نشد"); return@runTask }
+        val supported = cfgs.filter { XrayCore.isSupported(it) }
+        if (supported.isEmpty()) { toast("این کانفیگ‌ها پشتیبانی نمی‌شوند"); return@runTask }
+        val existing = _state.value.servers.map { it.serverKey }.toSet()
+        var added = 0; var alive = 0
+        supported.take(30).forEachIndexed { i, c ->
+            setTask(Task.RESCAN, "تست کانفیگ ${i + 1}/${minOf(supported.size, 30)}…")
+            val (e, r) = engine.testConfig(c)
+            if (e.serverKey in existing) return@forEachIndexed
+            added++; if (r is DelayResult.Ok) alive++
+            publish((_state.value.servers + e).distinctBy { it.serverKey })
+        }
+        toast("$added کانفیگ اضافه شد · $alive پینگ داد" + if (supported.size < cfgs.size) " · ${cfgs.size - supported.size} پشتیبانی نشد" else "")
     }
 
     /** سریع‌ترین اتصال: همه‌ی سرورها هم‌زمان تست و اتصال به کم‌تاخیرترین. */
@@ -272,12 +372,11 @@ object VpnController {
             setTask(Task.SCAN_IP, "اسکن IP تمیز… $tested بررسی · $found تمیز")
         }
         _state.update { it.copy(cleanIps = ips, cleanIpCount = ips.size) }
-        // از هر اسکن فقط یک IP منتخب: سریع‌ترین
-        ips.firstOrNull()?.let { best ->
-            settings.selectedIp = best.ip
-            _state.update { it.copy(selectedIp = best.ip) }
-        }
-        toast(if (ips.isEmpty()) "IP تمیزی پیدا نشد" else "${ips.size} IP بررسی شد · IP منتخب: ${ips.first().ip} (${ips.first().tlsMs}ms)")
+        if (ips.isEmpty()) { toast("IP تمیزی پیدا نشد — اینترنت را بررسی و دوباره اسکن کنید"); return ips }
+        // از هر اسکن فقط یک IP منتخب: پایدارترین پینگ مستقیم با اینترنت گوشی
+        choosePick(ips)
+        val s = _state.value
+        toast("${ips.size} IP تمیز · منتخب: ${s.selectedIp}" + (if (s.selectedIpMs > 0) " (${s.selectedIpMs}ms ${s.selectedIpColo})" else " (پینگ مستقیم نداد)"))
         return ips
     }
 
@@ -313,11 +412,18 @@ object VpnController {
         if (sel.isEmpty()) return 0
         // فقط «یک» IP منتخب — تا برنامه بین چند IP سردرگم نشود
         val ips = listOf(CloudflareScanner.CleanIp(sel, 443, _state.value.cleanIps.firstOrNull { it.ip == sel }?.tlsMs ?: 0))
-        setTask(Task.INJECT, "تزریق $sel به سرورها…")
-        val (list, changed) = engine.injectCleanIps(_state.value.servers, ips) { d, t ->
-            setTask(Task.INJECT, "تزریق IP تمیز ($d/$t)")
+        // ۱۰ سرور برتر (بقیه‌ی لیست دست‌نخورده می‌ماند)
+        val all = _state.value.servers
+        val top = all.sortedByDescending { it.score }.take(HellboyEngine.TARGET_SERVERS)
+        setTask(Task.INJECT, "اینجکت $sel روی ${top.size} سرور برتر…")
+        val outcome = engine.injectCleanIps(top, ips) { d, t ->
+            setTask(Task.INJECT, "اینجکت و پینگ با اینترنت گوشی ($d/$t)")
         }
+        val changed = outcome.changed
+        val byKey = outcome.list.associateBy { it.serverKey }
+        val list = all.map { byKey[it.serverKey] ?: it }
         publish(list)
+        _state.update { it.copy(injectReport = outcome.report) }
         val eligible = list.count { it.canInject }
 
         // ── ریشه‌ی باگ: قبلاً فقط لیست عوض می‌شد و اتصال زنده روی IP قبلی می‌ماند ──
@@ -332,19 +438,24 @@ object VpnController {
                     curMsg = if (activate(updated)) " · اتصال فعلی روی ${updated.config.dialHost} رفت"
                              else " · اتصال با IP جدید برقرار نشد؛ IP قبلی حفظ شد"
                 }
-                else -> curMsg = " · برای سرور فعلی IP تمیزِ بهتری جواب نداد"
+                updated != null && updated.config.dialHost == sel -> curMsg = " · سرور فعلی روی همین IP است"
+                else -> curMsg = " · IP منتخب روی سرور فعلی پینگ نداد؛ آدرس قبلی حفظ شد"
             }
+            DiagLogger.log("INJECT_CURRENT ${cur.config.host}${curMsg}")
         }
+        val okN = outcome.report.count { it.ok }
+        val failN = outcome.report.count { !it.ok && it.ip.isNotEmpty() }
         toast(when {
-            eligible == 0 -> "هیچ‌کدام از این ۱۰ سرور پشت کلادفلر نیستند؛ «ری‌اسکن» بزنید"
-            changed == 0 -> "IP تمیز جدیدی روی سرورها جواب نداد"
-            else -> "IP تمیز به $changed از $eligible سرور قابل‌تزریق اعمال شد"
+            eligible == 0 -> "هیچ‌کدام از سرورها پشت کلادفلر نیستند؛ «ری‌اسکن» بزنید"
+            okN == 0 -> "$sel روی هیچ سروری پینگ نداد · IP دیگری انتخاب کنید (جزئیات در گزارش)"
+            else -> "$sel روی $okN سرور پینگ داد" + (if (failN > 0) " · $failN ناموفق" else "") + (if (changed > 0) " · $changed سرور IP جدید گرفت" else "")
         } + curMsg)
         return changed
     }
 
     private suspend fun doConnectFastest() {
         _state.update { it.copy(needsPermission = false) }
+        DiagLogger.section("CONNECT fastest servers=${_state.value.servers.size} selectedIp=${_state.value.selectedIp.ifEmpty { "-" }} net=${DiagLogger.networkSummary(app)}")
         // ۱) لیست خالی → ساخت: ری‌اسکن ← اسکن IP ← اینجکت
         if (_state.value.servers.isEmpty()) {
             setState(Phase.TESTING, "یافتن سرورهای سالم…")
@@ -398,6 +509,8 @@ object VpnController {
     }
 
     private suspend fun tryActivate(e: ServerEntry): Boolean {
+        DiagLogger.log("ACTIVATE start ${e.config.scheme} ${e.config.host}:${e.config.port} dial=${e.config.dialHost}:${e.config.dialPort} " +
+            "sni=${e.config.sniHost} net=${e.config.query.toMap()["type"] ?: "tcp"} variant=${e.variantId ?: "-"} frag=${e.useFrag} testMs=${e.latencyMs} psiphon=${settings.psiphonEnabled}")
         CurrentConfigHolder.save(app, e)
         HellboyVpnService.start(app)
         // با سایفون، اولین اتصال تا ~۷۵ ثانیه طول می‌کشد (سایفون قبل از تونل سیستم وصل می‌شود)
@@ -422,7 +535,8 @@ object VpnController {
             if (lat > 0) break
             delay(500)
         }
-        if (lat <= 0) { DiagLogger.log("ACTIVATE no_data ${e.config.host}"); return false }
+        if (lat <= 0) { DiagLogger.log("ACTIVATE no_data ${e.config.host} (service up but no traffic through tunnel)"); return false }
+        DiagLogger.log("ACTIVATE ok ${e.config.host} dial=${e.config.dialHost} tunnelLatency=${lat}ms port=${HellboyVpnService.activeSocksPort}")
         val b = Tun2Socks.bytes()
         baseUp = b?.first ?: 0; baseDown = b?.second ?: 0
         val now = System.currentTimeMillis()
@@ -555,8 +669,9 @@ object VpnController {
 
     /** لیست را مرتب (سریع‌ترین اول)، به ۱۰ محدود، در state و دیسک می‌نویسد. */
     private fun publish(list: List<ServerEntry>) {
+        // سقف لیست ۳۰ (کانفیگ‌های ویرایش/واردشده‌ی کاربر نباید با کپ ۱۰ حذف شوند)؛ اینجکت روی ۱۰ برتر
         val sorted = list.distinctBy { it.serverKey }.sortedByDescending { it.score }
-            .take(HellboyEngine.TARGET_SERVERS)
+            .take(MAX_LIST)
         _state.update { it.copy(servers = sorted) }
         engine.saveServers(sorted)
     }
@@ -574,6 +689,8 @@ object VpnController {
         val p = s.split(".")
         return p.size == 4 && p.all { x -> x.toIntOrNull()?.let { it in 0..255 } == true && x.length <= 3 }
     }
+
+    private const val MAX_LIST = 30
 
     private fun label(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)
 

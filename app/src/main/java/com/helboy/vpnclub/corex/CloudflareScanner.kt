@@ -41,7 +41,8 @@ object CloudflareScanner {
     /** SNI تست — دامنه‌ای پشت کلادفلر. */
     const val TEST_SNI = "speed.cloudflare.com"
 
-    data class CleanIp(val ip: String, val port: Int, val tlsMs: Long)
+    /** IP تمیز: [tlsMs] = هندشیک TLS + پاسخ واقعی /cdn-cgi/trace؛ [colo] = دیتاسنتر کلادفلر (مثلاً FRA). */
+    data class CleanIp(val ip: String, val port: Int, val tlsMs: Long, val colo: String = "")
 
     /**
      * اسکن: از هر رنج [perRange] IP می‌سازد و همه را موازی تست می‌کند.
@@ -63,10 +64,10 @@ object CloudflareScanner {
 
         val futures = candidates.map { (ip, port) ->
             pool.submit {
-                val ms = probeTls(ip, port, timeoutMs)
+                val (ms, colo) = probeDetailed(ip, port, timeoutMs)
                 val done = tested.incrementAndGet()
                 if (ms > 0) {
-                    results[ip] = CleanIp(ip, port, ms)
+                    results[ip] = CleanIp(ip, port, ms, colo)
                     cleanCount.incrementAndGet()
                 }
                 if (done % 32 == 0 || done == total) onProgress(done, cleanCount.get())
@@ -107,7 +108,22 @@ object CloudflareScanner {
      * هندشیک واقعی TLS با SNI کلادفلر.
      * @return میلی‌ثانیه یا -۱ در صورت شکست
      */
-    internal fun probeTls(ip: String, port: Int, timeoutMs: Int): Long {
+    internal fun probeTls(ip: String, port: Int, timeoutMs: Int): Long = probeDetailed(ip, port, timeoutMs).first
+
+    /**
+     * پینگ مستقیم یک IP با اینترنت خود گوشی (سوکت‌های اپ از تونل VPN خارج‌اند):
+     * [tries] بار هندشیک+trace، میانه‌ی موفق‌ها. null = این IP الان جواب نمی‌دهد.
+     */
+    fun ping(ip: String, port: Int = 443, tries: Int = 3, timeoutMs: Int = 2_500): CleanIp? {
+        val ok = (0 until tries).mapNotNull { probeDetailed(ip, port, timeoutMs).takeIf { it.first > 0 } }
+        if (ok.isEmpty()) return null
+        val sorted = ok.sortedBy { it.first }
+        val mid = sorted[sorted.size / 2]
+        return CleanIp(ip, port, mid.first, mid.second)
+    }
+
+    /** مثل [probeTls] ولی colo (کد دیتاسنتر) را هم برمی‌گرداند. */
+    internal fun probeDetailed(ip: String, port: Int, timeoutMs: Int): Pair<Long, String> {
         var raw: Socket? = null
         var tls: SSLSocket? = null
         return try {
@@ -126,7 +142,7 @@ object CloudflareScanner {
 
             val start = System.currentTimeMillis()
             tls.startHandshake()
-            if (tls.session == null) return -1L
+            if (tls.session == null) return -1L to ""
             // اثبات «لبه‌ی واقعی کلادفلر»: درخواست HTTP واقعی و دیدن colo= در پاسخ.
             // هندشیک به‌تنهایی کافی نیست؛ بعضی IPها TLS می‌دهند ولی دیتا را قطع می‌کنند.
             val out = tls.outputStream
@@ -142,10 +158,11 @@ object CloudflareScanner {
                 sb.append(String(buf, 0, n))
                 if (sb.contains("colo=")) break
             }
-            if (!sb.contains("colo=")) return -1L
-            System.currentTimeMillis() - start
+            if (!sb.contains("colo=")) return -1L to ""
+            val colo = sb.toString().substringAfter("colo=").takeWhile { it.isLetterOrDigit() }.take(5)
+            (System.currentTimeMillis() - start) to colo
         } catch (_: Exception) {
-            -1L
+            -1L to ""
         } finally {
             runCatching { tls?.close() }
             runCatching { raw?.close() }
@@ -177,8 +194,8 @@ object CloudflareScanner {
         if (cached.isEmpty()) return emptyList()
         val pool = Executors.newFixedThreadPool(16)
         val futures = cached.map { c -> pool.submit(java.util.concurrent.Callable {
-            val ms = probeTls(c.ip, c.port, timeoutMs)
-            if (ms > 0) CleanIp(c.ip, c.port, ms) else null
+            val (ms, colo) = probeDetailed(c.ip, c.port, timeoutMs)
+            if (ms > 0) CleanIp(c.ip, c.port, ms, colo) else null
         }) }
         pool.shutdown()
         val ok = futures.mapNotNull { f -> runCatching { f.get(timeoutMs + 3_000L, TimeUnit.MILLISECONDS) }.getOrNull() }

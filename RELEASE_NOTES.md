@@ -1,17 +1,15 @@
-# 🔥 Hellboy VPN v3.6.0 — سایفون کامل / Full Psiphon
+# 🔥 Hellboy VPN v3.7.0 — کلید جدید، اشتراک کانفیگ، IP منتخب
 
 ## 🇮🇷 فارسی
-- **سایفون مستقیم (بدون سرور):** اگر هیچ سروری جواب نداد، حالت «مستقیم» را انتخاب کنید؛ دکمه‌ی اتصال فقط با سایفون وصل می‌شود.
-- **سایفون روی سرور** مثل قبل: ترافیک ← سایفون ← سرور.
-- **انتخاب پروتکل:** خودکار / معمولی (OSSH) / **Conduit** (عبور از داوطلبان سایفون، برای فیلترینگ شدید).
-- **انتخاب کشور خروجی** (آلمان، هلند، انگلیس، آمریکا و …) و **اتصال تهاجمی** برای وصل شدن سریع‌تر.
-- DNS جایگزین (1.1.1.1 / 8.8.8.8) برای سایفون؛ اگر سایفون مستقیم بیفتد، اتصال بسته و وضعیت اعلام می‌شود.
-- با کلید امضای دائمی Hellboy VPN؛ روی ۳.۵.۱ مستقیم آپدیت می‌شود.
+- **کلید امضای کاملاً جدید Hellboy VPN** — ⚠️ فقط این یک بار نسخه‌ی قبلی را حذف و این را نصب کنید.
+- **کانفیگ‌ها:** کپی لینک، **QR کد** برای دیگران، اشتراک در تلگرام/واتساپ، **ویرایش** (نام، آدرس، پورت، SNI، Host، Path یا لینک خام)، حذف، **افزودن کانفیگ** از کلیپ‌بورد، «کپی ۱۰ برتر». لینک‌های اشتراکی IP تمیز تزریق‌شده را دارند.
+- **اسکنر:** فقط یک **IP منتخب** که با اینترنت خود گوشی ۳ بار پینگ می‌شود (پایدارترین برنده است)؛ دکمه‌ی **«منتخب»**، کپی، ویرایش دستی، نمایش دیتاسنتر (colo).
+- **اینجکت خودکار روی ۱۰ سرور برتر** بعد از هر اسکن: پروب پروتکل ← تست تونل واقعی با اینترنت گوشی؛ فقط اگر پینگ داد اعمال می‌شود. **گزارش** هر سرور با دلیل دقیق موفقیت/شکست.
+- **لاگ دقیق** (تا ۳۰۰۰ خط، بدون اسرار): مشخصات گوشی و شبکه، هر IP اسکن‌شده، پینگ‌ها، اینجکت هر سرور، اتصال — با «کپی کامل» و «ارسال فایل».
 
 ## 🇬🇧 English
-- **Direct Psiphon (no server):** when no server works, pick "Direct" mode and the connect button uses Psiphon alone.
-- **Psiphon over server** as before: traffic → Psiphon → server.
-- **Protocol choice:** Auto / Normal (OSSH) / **Conduit** (via Psiphon volunteer in-proxies, for heavy filtering).
-- **Egress country** selection and **aggressive establishment** for faster connects.
-- Alternate DNS resolvers for Psiphon; if direct Psiphon drops, the tunnel closes and the status is shown.
-- Signed with the permanent Hellboy VPN key; installs as an update over 3.5.1.
+- **Brand-new Hellboy VPN signing key** — ⚠️ one time only: uninstall the previous version, then install.
+- **Configs:** copy link, **QR code** for others, share, **edit** (name, address, port, SNI, Host, Path or raw link), delete, **import** from clipboard, "copy top 10". Shared links carry the injected clean IP.
+- **Scanner:** a single **selected IP**, pinged 3× over the phone's own internet (most stable wins); **"Pick"** button, copy, manual edit, Cloudflare colo shown.
+- **Auto-inject into the top 10 servers** after each scan: protocol probe → real tunnel test over the phone's internet; applied only if it pings. Per-server **report** with exact reason.
+- **Detailed log** (up to 3000 lines, secrets redacted): device & network, every scanned IP, pings, per-server inject, connect — with "copy all" and "send file".

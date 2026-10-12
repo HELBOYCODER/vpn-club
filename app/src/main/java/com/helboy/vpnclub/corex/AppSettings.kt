@@ -64,6 +64,11 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("psiphon_aggressive", false)
         set(v) { sp.edit().putBoolean("psiphon_aggressive", v).apply() }
 
+    /** بعد از هر اسکن، IP منتخب خودکار روی ۱۰ سرور برتر اینجکت و با اینترنت گوشی تأیید شود. */
+    var autoInjectAfterScan: Boolean
+        get() = sp.getBoolean("auto_inject", true)
+        set(v) { sp.edit().putBoolean("auto_inject", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)

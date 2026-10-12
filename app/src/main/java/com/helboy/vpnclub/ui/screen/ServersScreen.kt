@@ -20,6 +20,18 @@ import androidx.compose.material.icons.rounded.Vaccines
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.helboy.vpnclub.corex.ConfigEditor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,6 +62,11 @@ fun ServersScreen(
     onRescan: () -> Unit,
     onInject: () -> Unit,
 ) {
+    var actionsFor by remember { mutableStateOf<ServerEntry?>(null) }
+    var showImport by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    actionsFor?.let { s -> ServerActionsDialog(s, onClose = { actionsFor = null }) }
+    if (showImport) ImportConfigDialog(onClose = { showImport = false })
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -67,6 +84,16 @@ fun ServersScreen(
                 ActionButton("اینجکت به همه", Icons.Rounded.Vaccines,
                     running = ui.task == Task.INJECT, enabled = !ui.testing && ui.servers.isNotEmpty(),
                     accent = StatusAmber, onClick = onInject, modifier = Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionButton("افزودن کانفیگ", Icons.Rounded.Add, running = false, enabled = !ui.testing,
+                    accent = NeonIndigo, onClick = { showImport = true }, modifier = Modifier.weight(1f))
+                ActionButton("کپی ۱۰ برتر", Icons.Rounded.ContentCopy, running = false, enabled = ui.servers.isNotEmpty(),
+                    accent = NeonIndigo, onClick = {
+                        val links = ui.servers.sortedByDescending { it.score }.take(10).joinToString("\n") { ConfigEditor.shareLink(it) }
+                        clipboard.setText(AnnotatedString(links))
+                        VpnController.notify("لینک ${minOf(10, ui.servers.size)} سرور برتر کپی شد (با IP تمیز)")
+                    }, modifier = Modifier.weight(1f))
             }
             TaskLine(ui)
         }
@@ -98,7 +125,8 @@ fun ServersScreen(
                         selectedIp = ui.selectedIp,
                         busy = ui.testing,
                         onClick = { if (!ui.busyConnecting) onConnect(s) },
-                        onInject = { VpnController.injectInto(s) })
+                        onInject = { VpnController.injectInto(s) },
+                        onMore = { actionsFor = s })
                 }
             }
         }
@@ -119,7 +147,7 @@ fun TaskLine(ui: VpnController.UiState) {
 @Composable
 private fun ServerRow(
     rank: Int, s: ServerEntry, active: Boolean, selectedIp: String, busy: Boolean,
-    onClick: () -> Unit, onInject: () -> Unit,
+    onClick: () -> Unit, onInject: () -> Unit, onMore: () -> Unit,
 ) {
     ClubCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -148,6 +176,9 @@ private fun ServerRow(
                 Text(if (s.latencyMs > 0) "${s.latencyMs.fa()} ms" else "بدون پاسخ",
                     color = if (s.latencyMs > 0) StatusGreen else StatusAmber, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 if (active) Text("متصل", color = StatusGreen, fontSize = 11.sp)
+                IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Rounded.MoreVert, "کپی · QR · ویرایش", tint = TextSecondary)
+                }
                 // اینجکت دستی IP منتخب روی همین سرور
                 if (s.canInjectManual) {
                     androidx.compose.material3.TextButton(onClick = onInject, enabled = !busy && selectedIp.isNotEmpty(),

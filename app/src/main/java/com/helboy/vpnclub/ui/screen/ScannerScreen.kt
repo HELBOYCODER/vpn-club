@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Radar
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.Switch
 import androidx.compose.material.icons.rounded.Vaccines
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,7 +73,7 @@ fun ScannerScreen(
     ) {
         item {
             Text("اسکنر IP تمیز", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("از هر اسکن فقط سریع‌ترین IP منتخب می‌شود · لمس هر IP = انتخاب آن",
+            Text("اسکن ← پینگ مستقیم با اینترنت گوشی ← یک IP منتخب ← اینجکت خودکار روی ۱۰ سرور برتر",
                 color = TextSecondary, fontSize = 12.sp)
 
             // ── IP منتخب ──
@@ -80,8 +82,15 @@ fun ScannerScreen(
                     Text("IP منتخب برای اینجکت", color = TextSecondary, fontSize = 12.sp)
                     if (!editing) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(ui.selectedIp.ifEmpty { "— هنوز انتخاب نشده —" }, color = TextPrimary,
-                                fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f)) {
+                                Text(ui.selectedIp.ifEmpty { "— هنوز انتخاب نشده —" }, color = TextPrimary,
+                                    fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                if (ui.selectedIp.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (ui.selectedIpMs > 0) Chip("پینگ مستقیم ${ui.selectedIpMs.fa()}ms", StatusGreen)
+                                    else Chip(if (ui.task == Task.SCAN_IP) "در حال پینگ…" else "پینگ مستقیم نداد", StatusAmber)
+                                    if (ui.selectedIpColo.isNotEmpty()) Chip(ui.selectedIpColo, NeonCyan)
+                                }
+                            }
                             if (ui.selectedIp.isNotEmpty()) IconButton(onClick = { clipboard.setText(AnnotatedString(ui.selectedIp)) }) {
                                 Icon(Icons.Rounded.ContentCopy, "کپی", tint = TextSecondary)
                             }
@@ -111,12 +120,45 @@ fun ScannerScreen(
                 ActionButton("اسکن IP", Icons.Rounded.Radar,
                     running = ui.task == Task.SCAN_IP, enabled = !ui.testing,
                     accent = NeonCyan, onClick = onScan, modifier = Modifier.weight(1f))
-                ActionButton("اینجکت به همه", Icons.Rounded.Vaccines,
+                ActionButton("منتخب", Icons.Rounded.Star,
+                    running = false, enabled = !ui.testing,
+                    accent = StatusGreen, onClick = { VpnController.pickSelectedIp() }, modifier = Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionButton("اینجکت به ۱۰ سرور برتر", Icons.Rounded.Vaccines,
                     running = ui.task == Task.INJECT,
                     enabled = !ui.testing && ui.selectedIp.isNotEmpty() && ui.servers.isNotEmpty(),
                     accent = StatusAmber, onClick = onInject, modifier = Modifier.weight(1f))
             }
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("اینجکت خودکار", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("بعد از هر اسکن/انتخاب، IP منتخب روی ۱۰ سرور برتر اینجکت و پینگ می‌شود", color = TextSecondary, fontSize = 11.sp)
+                }
+                Switch(checked = ui.autoInject, onCheckedChange = { VpnController.setAutoInject(it) })
+            }
             TaskLine(ui)
+        }
+        if (ui.injectReport.isNotEmpty()) {
+            item {
+                ClubCard(Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("گزارش آخرین اینجکت · ${ui.injectReport.count { it.ok }.fa()} موفق از ${ui.injectReport.size.fa()}",
+                            color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        ui.injectReport.forEach { r ->
+                            Row(verticalAlignment = Alignment.Top) {
+                                Text(if (r.ok) "✓" else "✗", color = if (r.ok) StatusGreen else StatusRed,
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(r.name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                    Text(r.reason, color = TextSecondary, fontSize = 11.sp)
+                                }
+                                if (r.ok) Text("${r.ms.fa()}ms", color = StatusGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
         if (ui.cleanIps.isEmpty()) {
             item {
@@ -132,6 +174,7 @@ fun ScannerScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text((i + 1).fa(), color = TextTertiary, fontSize = 13.sp, modifier = Modifier.padding(end = 12.dp))
                     Text(ip.ip, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    if (ip.colo.isNotEmpty()) Chip(ip.colo, TextTertiary)
                     if (selected) Chip("منتخب", NeonCyan) else if (i == 0) Chip("سریع‌ترین", StatusGreen)
                     Text("  ${ip.tlsMs.fa()} ms", color = StatusGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
