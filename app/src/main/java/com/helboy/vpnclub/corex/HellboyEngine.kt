@@ -447,7 +447,9 @@ class HellboyEngine(private val context: Context) {
                     (p.first.config.query.toMap()["security"] == "tls" || p.first.config.query.toMap()["tls"] == "tls")
             }.take(16)
             if (retry.isNotEmpty()) DiagLogger.log("SUB_TEST pass2 frag/cleanIp for ${retry.size} CDN servers (ip=${preferredIp ?: "-"})")
+            // فرگمنت (irancell-ff) اول: همان چیزی که فیلتر SNI روی workers.dev را دور می‌زند؛ بعد ECH/IPv6
             val variants = IranVariants.order(settings.carrierMode, learnedVariant).filter { it.id != "plain" }
+                .sortedBy { if (it.id == learnedVariant) -1 else if (it.finalMask != null && !it.ipv6) 0 else 1 }
             retry.map { (idx, p) ->
                 async(Dispatchers.IO) {
                     gate.acquire()
@@ -458,8 +460,8 @@ class HellboyEngine(private val context: Context) {
                         val dials = listOfNotNull(preferredIp?.let { c.withDial(it, port) }, c)
                         val combos = buildList {
                             preferredIp?.let { add(IranVariants.PLAIN to c.withDial(it, port)) }
-                            for (v in variants.filter { !it.needsCf || base.cf }.take(2)) for (d in dials) add(v to d)
-                        }.take(4)
+                            for (v in variants.filter { !it.needsCf || base.cf }.take(2)) for (d in dials.reversed()) add(v to d)
+                        }.take(5)
                         for ((v, d) in combos) {
                             val e = base.copy(config = d, variantId = v.id, useFrag = v.useFrag)
                             val r = delayTestR(e)
@@ -603,7 +605,9 @@ class HellboyEngine(private val context: Context) {
         if (!cand.behindCf || !injectable(c)) return c
         if (v.ipv6 && v.ipv6Prefix != null) return c.withDial(IranVariants.randomIpv6(v.ipv6Prefix, rng), c.port)
         // با IP منتخب کاربر همیشه همان را تزریق کن؛ بدون آن، گاهی آدرس اصلی را هم امتحان کن
-        if (!pinned && v.id == "plain" && cursor % 3 == 2) return c
+        // یک‌سوم کاندیدها با آدرس اصلی خودشان (حتی با IP منتخب) — تا اگر IP منتخب برای پروکسی کند/فیلتر
+        // بود، همه‌ی سرورهای کلادفلر با هم نسوزند (لاگ کاربر: همه «->IP منتخب fail»)
+        if (v.id == "plain" && cursor % 3 == 2) return c
         if (cleanIps.isEmpty()) return c
         val ip = cleanIps[cursor % cleanIps.size]
         val port = if (c.port in CloudflareScanner.CF_ALL_PORTS) c.port else ip.port
@@ -615,7 +619,12 @@ class HellboyEngine(private val context: Context) {
 
     companion object {
         const val PARALLEL_TESTS = 8
-        const val TEST_URL = "https://cp.cloudflare.com/generate_204"
+        /**
+         * آدرس تست تاخیر: گوگل، نه کلادفلر. ورکرهای کلادفلر (BPB / Zeus / edgetunnel و همه‌ی سرورهای
+         * workers.dev) نمی‌توانند مستقیم به IPهای خود کلادفلر وصل شوند؛ تست با cp.cloudflare.com
+         * برای این سرورها همیشه timeout می‌داد در حالی که خود سرور سالم بود (لاگ کاربر: تست ✗، اتصال دستی ۱۷۶ms).
+         */
+        const val TEST_URL = "https://www.gstatic.com/generate_204"
         const val DELAY_TIMEOUT_MS = 8_000L
         const val MAX_DELAY_MS = 4_000L
         const val MAX_TCP_MS = 2_500L

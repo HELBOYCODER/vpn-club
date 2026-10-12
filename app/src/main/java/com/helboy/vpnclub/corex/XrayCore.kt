@@ -170,7 +170,8 @@ class XrayCore(
         when (c.scheme) {
             "vless" -> settings.put("id", c.uuidOrUser)
                 .put("flow", q0["flow"] ?: "")
-                .put("encryption", "none")
+                // VLESS Encryption (mlkem768x25519plus…) از لینک؛ پیش‌فرض none
+                .put("encryption", q0["encryption"]?.takeIf { it.startsWith("mlkem") } ?: "none")
             "vmess" -> settings.put("id", c.uuidOrUser)
                 .put("alterId", (q0["alterId"] ?: "0").toIntOrNull() ?: 0)
                 .put("security", q0["encryption"] ?: "auto")
@@ -197,14 +198,17 @@ class XrayCore(
                 .put("path", q["path"] ?: "/")
                 .put("host", q["host"] ?: c.sniHost))
             "grpc" -> stream.put("network", "grpc").put("grpcSettings", JSONObject()
-                .put("serviceName", q["serviceName"] ?: q["path"] ?: ""))
+                .put("serviceName", q["serviceName"] ?: q["path"] ?: "")
+                .put("multiMode", q["mode"] == "multi")
+                .also { g -> q["authority"]?.ifBlank { null }?.let { g.put("authority", it) } })
             "tcp" -> {
                 val headerType = q["headerType"]
                 if (headerType == "http") {
                     stream.put("network", "tcp").put("tcpSettings", JSONObject()
                         .put("header", JSONObject().put("type", "http")
                             .put("request", JSONObject()
-                                .put("headers", JSONObject().put("Host", q["host"] ?: c.sniHost)))))
+                                .put("path", JSONArray((q["path"]?.ifBlank { null } ?: "/").split(",")))
+                                .put("headers", JSONObject().put("Host", JSONArray((q["host"] ?: c.sniHost).split(",")))))))
                 } else {
                     stream.put("network", "tcp")
                 }
@@ -213,7 +217,8 @@ class XrayCore(
         }
 
         // TLS: همیشه با SNI واقعی (دامنه اصلی)، روی IP تزریق‌شده
-        val tlsEnabled = q["tls"] == "tls" || q["security"] == "tls" || c.scheme == "trojan"
+        val tlsEnabled = q["security"] != "reality" &&
+            (q["tls"] == "tls" || q["security"] == "tls" || (c.scheme == "trojan" && q["security"] != "none"))
         if (tlsEnabled) {
             // پروفایل ایران — اگر این کانفیگ یک Variant داشت، تنظیماتش را اعمال کن
             val variant = effectiveVariant
@@ -221,11 +226,11 @@ class XrayCore(
                 .put("serverName", c.sniHost)
                 .put("fingerprint", variant?.fingerprint ?: q["fp"]?.ifEmpty { null } ?: "chrome")
                 .put("alpn", JSONArray(alpnFor(net, variant?.alpn, q["alpn"])))
-            // ECH — روش همراه‌اول ۱
-            val ech = variant?.echConfigList
+            // ECH — روش همراه‌اول ۱ (پروفایل) یا ech خود لینک
+            val ech = variant?.echConfigList ?: q["ech"]
             if (!ech.isNullOrBlank()) tls.put("echConfigList", ech)
-            // cipherSuites — روش ایرانسل (semi-python)
-            val cs = variant?.cipherSuites
+            // cipherSuites — روش ایرانسل (semi-python) یا cs/pcs خود لینک (PattNG)
+            val cs = variant?.cipherSuites ?: q["cs"] ?: q["pcs"]
             if (!cs.isNullOrBlank()) tls.put("cipherSuites", cs)
             stream.put("security", "tls").put("tlsSettings", tls)
         }
@@ -236,7 +241,8 @@ class XrayCore(
                 .put("fingerprint", q["fp"] ?: "chrome")
                 .put("publicKey", q["pbk"] ?: "")
                 .put("shortId", q["sid"] ?: "")
-                .put("spiderX", q["spx"] ?: ""))
+                .put("spiderX", q["spx"] ?: "")
+                .also { r -> q["pqv"]?.ifBlank { null }?.let { r.put("mldsa65Verify", it) } })
         }
 
         val protocol = when (c.scheme) {
@@ -250,7 +256,8 @@ class XrayCore(
         }
 
         // finalmask — تکه‌بندی داخل هسته (فورک patterniha/Xray-core) — روش F&F
-        activeVariant?.finalMask?.let { stream.put("finalmask", it) }
+        // پروفایل فعال اولویت دارد؛ وگرنه fm خود لینک (فرمت PattNG: JSON)
+        (activeVariant?.finalMask ?: q["fm"]?.let { runCatching { JSONObject(it) }.getOrNull() })?.let { stream.put("finalmask", it) }
 
         val out = JSONObject().put("protocol", protocol).put("settings", settings).put("streamSettings", stream)
 

@@ -98,9 +98,6 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        // سایفون روی سرور — کلید آتش/یخ با فونت هلبوی
-        PsiphonCard(ui)
-
         // گزینه‌ی سریع‌ترین اتصال
         ClubCard(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -273,7 +273,8 @@ object VpnController {
         setTask(Task.INJECT, "تست کانفیگ ویرایش‌شده…")
         val (fresh, r) = engine.testConfig(cfg, old.variantId, old.useFrag)
         val wasCurrent = _state.value.connected && _state.value.current?.serverKey == old.serverKey
-        publish(_state.value.servers.map { if (it.serverKey == old.serverKey) fresh else it }.distinctBy { it.serverKey })
+        if (old.source.isNotEmpty()) recordSubEdit(old.source, old.config.raw, fresh, r)
+        publish(_state.value.servers.map { if (it.serverKey == old.serverKey) fresh.copy(source = old.source) else it }.distinctBy { it.serverKey })
         if (wasCurrent && r is DelayResult.Ok) {
             setTask(Task.INJECT, "اتصال با کانفیگ جدید…")
             toast(if (activate(fresh)) "کانفیگ ذخیره و اتصال روی آن رفت (${r.ms}ms)" else "کانفیگ ذخیره شد ولی اتصال برقرار نشد؛ کانفیگ قبلی حفظ شد")
@@ -281,6 +282,34 @@ object VpnController {
             is DelayResult.Ok -> "کانفیگ ذخیره شد · پینگ ${r.ms}ms"
             is DelayResult.Fail -> "کانفیگ ذخیره شد ولی پینگ نداد (${r.log.take(50)})"
         })
+    }
+
+    /** ثبت ویرایش روی لیست ذخیره‌شده‌ی ساب (لینک اصلی نگه داشته می‌شود تا رفرش ویرایش را پاک نکند). */
+    private fun recordSubEdit(subId: String, oldRaw: String, fresh: ServerEntry, r: DelayResult) {
+        val list = _state.value.subServers[subId].orEmpty()
+        val old = list.firstOrNull { it.raw == oldRaw }
+        val orig = old?.origRaw?.ifEmpty { null } ?: oldRaw
+        val ms = (r as? DelayResult.Ok)?.ms ?: -1
+        val upd = SubServer(fresh.config.raw, ms, "ویرایش‌شده" + if (r is DelayResult.Fail) " · ${r.log.take(40)}" else "", true, origRaw = orig)
+        val newList = if (old != null) list.map { if (it.raw == oldRaw) upd else it } else listOf(upd) + list
+        subStore.saveServers(subId, newList)
+        _state.update { it.copy(subServers = it.subServers + (subId to newList)) }
+        DiagLogger.log("SUB_EDIT $subId ${fresh.config.host}:${fresh.config.port} -> ${if (ms > 0) "${ms}ms" else "no ping"}")
+    }
+
+    /** ویرایش یک سرور داخل ساب (از لیست باز شده‌ی ساب). */
+    fun editSubServer(subId: String, srv: SubServer, cfg: ProxyConfig) = runTask(Task.INJECT) {
+        DiagLogger.section("SUB_EDIT ${cfg.host}:${cfg.port}")
+        setTask(Task.INJECT, "تست کانفیگ ویرایش‌شده…")
+        val (fresh, r) = engine.testConfig(cfg)
+        recordSubEdit(subId, srv.raw, fresh, r)
+        val entry = fresh.copy(source = subId)
+        val oldKey = srv.toEntry(subId)?.serverKey
+        val wasCurrent = _state.value.connected && _state.value.current?.serverKey == oldKey
+        if (r is DelayResult.Ok) publish(listOf(entry) + _state.value.servers.filterNot { it.serverKey == oldKey })
+        if (wasCurrent && r is DelayResult.Ok) {
+            toast(if (activate(entry)) "ذخیره شد و اتصال روی کانفیگ جدید رفت (${r.ms}ms)" else "ذخیره شد ولی اتصال برقرار نشد؛ قبلی حفظ شد")
+        } else toast(when (r) { is DelayResult.Ok -> "ذخیره شد · پینگ ${r.ms}ms"; is DelayResult.Fail -> "ذخیره شد ولی پینگ نداد (${r.log.take(50)})" })
     }
 
     /** حذف یک سرور از لیست (اگر وصل است، اول قطع). */
@@ -353,10 +382,14 @@ object VpnController {
         _state.update { it.copy(subBusyId = id) }
         try {
             DiagLogger.section("SUB_${if (fetch) "REFRESH" else "PING"} ${sub.name} (${sub.kind})")
-            val cfgs: List<ProxyConfig> = if (fetch) {
+            val cfgs0: List<ProxyConfig> = if (fetch) {
                 setTask(Task.SUB, "دریافت ساب «${sub.name}»…")
                 try { engine.fetchSub(sub.url) } catch (e: Exception) { DiagLogger.log("SUB_FETCH error ${e.message}"); emptyList() }
-            } else (_state.value.subServers[id] ?: emptyList()).mapNotNull { LinkParser.parse(it.raw) }
+            } else (_state.value.subServers[id] ?: emptyList()).mapNotNull { LinkParser.parse(it.origRaw.ifEmpty { it.raw }) }
+            // ویرایش‌های کاربر روی سرورهای ساب: لینک اصلی ← لینک ویرایش‌شده (با رفرش از بین نمی‌رود)
+            val overrides = (_state.value.subServers[id] ?: emptyList()).filter { it.edited }.associate { it.origRaw to it.raw }
+            val cfgs = cfgs0.map { c -> overrides[c.raw]?.let { LinkParser.parse(it) } ?: c }
+            val origOf = cfgs0.mapNotNull { c -> overrides[c.raw]?.let { it to c.raw } }.toMap()
             if (cfgs.isEmpty()) {
                 updateSub(id) { it.copy(lastFetchAt = System.currentTimeMillis(), lastError = "کانفیگی دریافت نشد") }
                 toast("از «${sub.name}» کانفیگی دریافت نشد" + if (!_state.value.connected) " — workers.dev شاید بدون VPN باز نشود؛ اول با حالت خودکار وصل شوید و دوباره رفرش کنید" else "")
@@ -371,10 +404,11 @@ object VpnController {
                 val t = tested[c.raw]
                 when (val r = t?.second) {
                     is DelayResult.Ok -> SubServer.of(t.first, r.ms,
-                        listOfNotNull(IranVariants.byId(t.first.variantId)?.takeIf { it.id != "plain" }?.label,
-                            t.first.config.dialHost.takeIf { t.first.injected }?.let { "IP $it" }).joinToString(" · "))
-                    is DelayResult.Fail -> SubServer(c.raw, -1, r.log.take(60))
-                    null -> SubServer(c.raw, 0, "تست نشده")
+                        listOfNotNull(if (origOf[c.raw] != null) "ویرایش‌شده" else null,
+                            IranVariants.byId(t.first.variantId)?.takeIf { it.id != "plain" }?.label,
+                            t.first.config.dialHost.takeIf { t.first.injected }?.let { "IP $it" }).joinToString(" · "), origOf[c.raw].orEmpty())
+                    is DelayResult.Fail -> SubServer(c.raw, -1, r.log.take(60), origRaw = origOf[c.raw].orEmpty())
+                    null -> SubServer(c.raw, 0, "تست نشده", origRaw = origOf[c.raw].orEmpty())
                 }
             }.sortedWith(compareBy({ if (it.ms > 0) 0 else 1 }, { if (it.ms > 0) it.ms else Long.MAX_VALUE })) +
                 unsupported.map { SubServer(it.raw, -1, unsupportedReason(it), supported = false) }
@@ -806,6 +840,8 @@ object VpnController {
                 if (!_state.value.connected || switching || opMutex.isLocked) continue
                 val current = _state.value.servers
                 if (current.isEmpty()) continue
+                // اینترنت خود گوشی قطع است: تست/ری‌اسکن بی‌فایده است (لاگ: یک ساعت دریافت ساب ناموفق)
+                if (internetDown()) { DiagLogger.log("POOL_CHECK skipped — internet down"); continue }
                 opMutex.withLock {
                     val alive = engine.retestAll(current)
                     val keepCur = _state.value.current?.let { c -> current.firstOrNull { it.serverKey == c.serverKey } }
@@ -828,10 +864,12 @@ object VpnController {
         val cur = _state.value.current
         _state.update { it.copy(message = "قطعی تشخیص داده شد — تعویض سرور…") }
         DiagLogger.log("FAILOVER from ${cur?.config?.host}")
-        if (HealthTester.tcpPing("1.1.1.1", 443, 2_500) < 0 && HealthTester.tcpPing("8.8.8.8", 443, 2_500) < 0) {
-            _state.update { it.copy(message = "اینترنت قطع است — منتظر بازگشت شبکه…") }
+        if (internetDown()) {
+            if (!netDownLogged) { netDownLogged = true; DiagLogger.log("NET_DOWN underlying internet unreachable (1.1.1.1/8.8.8.8) — waiting, no failover/rescan") }
+            _state.update { it.copy(message = "اینترنت گوشی قطع است — منتظر بازگشت شبکه…") }
             return
         }
+        if (netDownLogged) { netDownLogged = false; DiagLogger.log("NET_UP internet back") }
         val others = _state.value.servers.filter { it.serverKey != cur?.serverKey && (!mineOnly || it.source.isNotEmpty()) }
         val alive = engine.retestAll(others).sortedBy { it.latencyMs }
         for (e in alive) {
@@ -912,6 +950,13 @@ object VpnController {
     }
 
     private const val MAX_LIST = 30
+
+    @Volatile private var netDownLogged = false
+
+    /** اینترنت زیرین گوشی (خارج از تونل) قطع است؟ دو مقصد مستقل TCP. */
+    private fun internetDown(): Boolean =
+        HealthTester.tcpPing("1.1.1.1", 443, 2_500) < 0 && HealthTester.tcpPing("8.8.8.8", 443, 2_500) < 0 &&
+            HealthTester.tcpPing("9.9.9.9", 443, 2_500) < 0
 
     private fun label(e: ServerEntry) = e.config.tag.ifEmpty { e.config.host }.take(32)
 

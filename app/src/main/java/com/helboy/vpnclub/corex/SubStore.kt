@@ -42,7 +42,11 @@ data class MySub(
 data class SubServer(
     val raw: String, val ms: Long = 0, val note: String = "", val supported: Boolean = true,
     val variant: String = "", val dialHost: String = "", val dialPort: Int = 0, val frag: Boolean = false,
+    /** اگر کاربر ویرایش کرده: لینک اصلیِ ساب (تا با رفرش، ویرایش روی همان سرور حفظ شود). */
+    val origRaw: String = "",
 ) {
+    val edited: Boolean get() = origRaw.isNotEmpty()
+
     val name: String get() = LinkParser.parse(raw)?.let { it.tag.ifEmpty { it.host } } ?: raw.take(30)
 
     /** ServerEntry آماده‌ی اتصال با همان ترکیبی که تست شد. */
@@ -53,14 +57,14 @@ data class SubServer(
     }
 
     fun toJson(): JSONObject = JSONObject().put("raw", raw).put("ms", ms).put("note", note).put("ok", supported)
-        .put("v", variant).put("dh", dialHost).put("dp", dialPort).put("frag", frag)
+        .put("v", variant).put("dh", dialHost).put("dp", dialPort).put("frag", frag).put("orig", origRaw)
 
     companion object {
         fun fromJson(o: JSONObject) = SubServer(o.optString("raw"), o.optLong("ms"), o.optString("note"), o.optBoolean("ok", true),
-            o.optString("v"), o.optString("dh"), o.optInt("dp"), o.optBoolean("frag"))
+            o.optString("v"), o.optString("dh"), o.optInt("dp"), o.optBoolean("frag"), o.optString("orig"))
 
-        fun of(e: ServerEntry, ms: Long, note: String) = SubServer(e.config.raw, ms, note, true,
-            e.variantId.orEmpty(), e.config.dialHost, e.config.dialPort, e.useFrag)
+        fun of(e: ServerEntry, ms: Long, note: String, origRaw: String = "") = SubServer(e.config.raw, ms, note, true,
+            e.variantId.orEmpty(), e.config.dialHost, e.config.dialPort, e.useFrag, origRaw)
     }
 }
 

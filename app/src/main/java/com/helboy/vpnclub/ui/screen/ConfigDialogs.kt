@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import com.helboy.vpnclub.ui.theme.TextTertiary
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,45 +146,64 @@ fun QrDialog(title: String, text: String, onClose: () -> Unit) {
     )
 }
 
-/** ویرایش کانفیگ: فیلدها یا متن خام لینک. پس از ذخیره، تست واقعی و جایگزینی. */
+/** ویرایش کانفیگ یک سرور لیست (دستی، اسکن یا ساب). */
 @Composable
-fun EditConfigDialog(s: ServerEntry, onClose: () -> Unit) {
-    val f0 = remember(s) { ConfigEditor.fieldsOf(s.config) }
-    var name by remember { mutableStateOf(f0.name) }
-    var address by remember { mutableStateOf(f0.address) }
-    var port by remember { mutableStateOf(f0.port) }
-    var sni by remember { mutableStateOf(f0.sni) }
-    var host by remember { mutableStateOf(f0.host) }
-    var path by remember { mutableStateOf(f0.path) }
+fun EditConfigDialog(s: ServerEntry, onClose: () -> Unit) =
+    FullConfigEditor(s.config, onSave = { VpnController.editServer(s, it) }, onClose = onClose)
+
+/**
+ * ویرایشگر کامل کانفیگ با همه‌ی گزینه‌های PattNG:
+ *  سرور (نام، آدرس، پورت، UUID/رمز، flow/encryption/method) · ترنسپورت (tcp/ws/httpupgrade/xhttp/grpc و فیلدهایشان)
+ *  · امنیت (none/tls/reality: SNI، fingerprint، ALPN، ECH، cipher suites، pbk/sid/spx/pqv) · پیشرفته (FinalMask)
+ *  و حالت «لینک خام» برای تغییر کامل.
+ */
+@Composable
+fun FullConfigEditor(config: com.helboy.vpnclub.corex.ProxyConfig, onSave: (com.helboy.vpnclub.corex.ProxyConfig) -> Unit, onClose: () -> Unit) {
+    val p0 = remember(config) { ConfigEditor.paramsOf(config) }
+    var name by remember { mutableStateOf(config.tag) }
+    var address by remember { mutableStateOf(config.host) }
+    var port by remember { mutableStateOf(config.port.toString()) }
+    var secret by remember { mutableStateOf(config.uuidOrUser) }
+    val params = remember { androidx.compose.runtime.mutableStateMapOf<String, String>().apply { putAll(p0) } }
     var rawMode by remember { mutableStateOf(false) }
-    var raw by remember { mutableStateOf(s.config.raw.ifEmpty { s.config.toShareLink() }) }
+    var raw by remember { mutableStateOf(config.raw.ifEmpty { config.toShareLink() }) }
     var error by remember { mutableStateOf<String?>(null) }
-    val transport = ConfigEditor.hasTransportFields(s.config)
+    val transport = ConfigEditor.hasTransportFields(config)
+    val net = params["type"] ?: "tcp"
+    val sec = params["security"] ?: "none"
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("ویرایش کانفیگ · ${s.config.scheme.uppercase()}") },
+        title = { Text("ویرایش کانفیگ · ${config.scheme.uppercase()}") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = { rawMode = false }) { Text("فیلدها", color = if (!rawMode) NeonCyan else TextSecondary, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { rawMode = false }) { Text("فرم کامل", color = if (!rawMode) NeonCyan else TextSecondary, fontWeight = FontWeight.Bold) }
                     TextButton(onClick = { rawMode = true }) { Text("لینک خام", color = if (rawMode) NeonCyan else TextSecondary, fontWeight = FontWeight.Bold) }
                 }
                 if (rawMode) {
-                    OutlinedTextField(raw, { raw = it; error = null }, Modifier.fillMaxWidth().height(180.dp),
+                    OutlinedTextField(raw, { raw = it; error = null }, Modifier.fillMaxWidth().height(200.dp),
                         textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
                         label = { Text("لینک کانفیگ") })
                 } else {
-                    Field("نام", name) { name = it }
-                    Field("آدرس سرور (دامنه یا IP)", address) { address = it }
-                    Field("پورت", port, KeyboardType.Number) { port = it.filter(Char::isDigit).take(5) }
+                    Section("سرور")
+                    Field("نام (Remarks)", name) { name = it }
+                    Field("آدرس (Address)", address) { address = it }
+                    Field("پورت (Port)", port, KeyboardType.Number) { port = it.filter(Char::isDigit).take(5) }
+                    Field(if (config.scheme == "vless" || config.scheme == "vmess") "UUID (id)" else "رمز (Password)", secret) { secret = it }
+                    ConfigEditor.protocolSpecs(config.scheme).forEach { SpecField(it, params) }
                     if (transport) {
-                        Field("SNI", sni) { sni = it }
-                        Field("Host", host) { host = it }
-                        Field("Path", path) { path = it }
+                        Section("ترنسپورت (Network)")
+                        Choice(ConfigEditor.NETWORKS, net) { params["type"] = it }
+                        ConfigEditor.transportSpecs(net).forEach { SpecField(it, params) }
+                        Section("امنیت (Security)")
+                        Choice(if (config.scheme == "vmess") listOf("none", "tls") else ConfigEditor.SECURITIES, sec) { params["security"] = it }
+                        ConfigEditor.securitySpecs(sec).forEach { SpecField(it, params) }
+                        Section("پیشرفته")
+                        SpecField(ConfigEditor.FINALMASK, params)
+                        Text("allowInsecure در هسته‌ی جدید Xray حذف شده و قابل تنظیم نیست. پروفایل‌های فرگمنت ایران (همراه اول/ایرانسل) خودکار روی تست و اتصال اعمال می‌شوند.",
+                            color = TextTertiary, fontSize = 10.sp)
                     }
-                    Text("UUID/رمز و بقیه‌ی تنظیمات دست‌نخورده می‌مانند. برای تغییر کامل از «لینک خام» استفاده کنید.",
-                        color = TextSecondary, fontSize = 11.sp)
                 }
                 error?.let { Text(it, color = StatusRed, fontSize = 12.sp) }
             }
@@ -188,15 +211,44 @@ fun EditConfigDialog(s: ServerEntry, onClose: () -> Unit) {
         confirmButton = {
             TextButton(onClick = {
                 val r = if (rawMode) ConfigEditor.fromLink(raw)
-                        else ConfigEditor.apply(s.config, ConfigEditor.Fields(name, address, port, sni, host, path))
+                        else ConfigEditor.applyFull(config, name, address, port, secret, params.toMap())
                 when (r) {
-                    is ConfigEditor.Result.Ok -> { VpnController.editServer(s, r.config); onClose() }
+                    is ConfigEditor.Result.Ok -> { onSave(r.config); onClose() }
                     is ConfigEditor.Result.Invalid -> error = r.reason
                 }
             }) { Text("ذخیره و تست", color = NeonCyan, fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("لغو") } },
     )
+}
+
+@Composable
+private fun Section(title: String) {
+    Text(title, color = NeonCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+}
+
+/** انتخاب از چند گزینه (چیپ‌های افقی). */
+@Composable
+private fun Choice(options: List<String>, value: String, onPick: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { o ->
+            val sel = o == value
+            Text(o.ifEmpty { "—" }, color = if (sel) Color.Black else NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(if (sel) NeonCyan else NeonCyan.copy(alpha = 0.12f), RoundedCornerShape(50))
+                    .clickable { onPick(o) }.padding(horizontal = 10.dp, vertical = 5.dp))
+        }
+    }
+}
+
+/** فیلد یک پارامتر لینک: متن آزاد + چیپ‌های پیشنهادی (اگر گزینه دارد). */
+@Composable
+private fun SpecField(spec: ConfigEditor.Spec, params: MutableMap<String, String>) {
+    val v = params[spec.key].orEmpty()
+    OutlinedTextField(v, { params[spec.key] = it }, Modifier.fillMaxWidth(), singleLine = spec.key !in setOf("extra", "fm", "ech"),
+        label = { Text(spec.label, fontSize = 12.sp) },
+        placeholder = { if (spec.hint.isNotEmpty()) Text(spec.hint, fontSize = 11.sp, color = TextTertiary) },
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp))
+    if (spec.options.isNotEmpty()) Choice(spec.options, v) { params[spec.key] = it }
 }
 
 @Composable

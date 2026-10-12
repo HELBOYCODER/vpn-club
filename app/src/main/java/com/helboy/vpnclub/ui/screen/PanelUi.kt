@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NetworkPing
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Refresh
@@ -280,6 +281,8 @@ private fun SubServerRow(n: Int, subId: String, srv: SubServer, ui: VpnControlle
     val cfg = remember(srv.raw) { com.helboy.vpnclub.corex.LinkParser.parse(srv.raw) }
     val active = ui.connected && cfg != null && ui.current?.config?.raw == srv.raw
     val enabled = srv.supported && !ui.busyConnecting
+    var menu by remember { mutableStateOf(false) }
+    if (menu) SubServerActionsDialog(subId, srv, onClose = { menu = false })
     Row(
         Modifier.fillMaxWidth()
             .background(if (active) StatusGreen.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
@@ -300,6 +303,43 @@ private fun SubServerRow(n: Int, subId: String, srv: SubServer, ui: VpnControlle
             srv.ms < 0 -> Text("بدون پینگ", color = StatusAmber, fontSize = 11.sp)
             else -> Text("—", color = TextTertiary, fontSize = 11.sp)
         }
+        IconButton(onClick = { menu = true }, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Rounded.MoreVert, "ویرایش · کپی · QR", tint = TextSecondary, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** منوی یک سرور ساب: اتصال · ویرایش کامل · کپی · QR · اشتراک. */
+@Composable
+private fun SubServerActionsDialog(subId: String, srv: SubServer, onClose: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    val ctx = LocalContext.current
+    val cfg = remember(srv.raw) { com.helboy.vpnclub.corex.LinkParser.parse(srv.raw) }
+    var mode by remember { mutableStateOf("menu") }
+    // لینک اشتراکی با IP تمیزِ تست‌شده (اگر دارد)
+    val link = remember(srv) { srv.toEntry(subId)?.config?.toShareLink() ?: srv.raw }
+    when {
+        mode == "edit" && cfg != null -> FullConfigEditor(cfg, onSave = { VpnController.editSubServer(subId, srv, it) }, onClose = onClose)
+        mode == "qr" -> QrDialog(srv.name, link, onClose = { mode = "menu" })
+        else -> AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text(srv.name, maxLines = 1) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (srv.edited) Text("این سرور ویرایش شده؛ با رفرش ساب، ویرایش حفظ می‌شود.", color = TextTertiary, fontSize = 11.sp)
+                    if (!srv.supported) Text("پشتیبانی نمی‌شود: ${srv.note} — با «ویرایش» می‌توانید درستش کنید.", color = StatusAmber, fontSize = 11.sp)
+                    OutlinedButton(onClick = { VpnController.connectSubServer(subId, srv); onClose() }, enabled = srv.supported, modifier = Modifier.fillMaxWidth()) {
+                        Text("اتصال به این سرور", color = StatusGreen) }
+                    OutlinedButton(onClick = { mode = "edit" }, enabled = cfg != null, modifier = Modifier.fillMaxWidth()) {
+                        Text("ویرایش کامل کانفیگ", color = StatusAmber) }
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(link)); VpnController.notify("لینک کپی شد") }, modifier = Modifier.fillMaxWidth()) {
+                        Text("کپی لینک", color = NeonCyan) }
+                    OutlinedButton(onClick = { mode = "qr" }, modifier = Modifier.fillMaxWidth()) { Text("QR کد", color = NeonCyan) }
+                    OutlinedButton(onClick = { shareText(ctx, link) }, modifier = Modifier.fillMaxWidth()) { Text("اشتراک", color = NeonCyan) }
+                }
+            },
+            confirmButton = { TextButton(onClick = onClose) { Text("بستن") } },
+        )
     }
 }
 

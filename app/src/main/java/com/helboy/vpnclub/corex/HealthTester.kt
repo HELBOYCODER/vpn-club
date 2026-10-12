@@ -164,14 +164,24 @@ object HealthTester {
      * @return میلی‌ثانیه یا -۱
      */
     fun tunnelLatency(socksPort: Int, timeoutMs: Int = 6_000): Long {
+        // اول گوگل (برای ورکرهای کلادفلر که به IP خود کلادفلر وصل نمی‌شوند)، بعد کلادفلر
+        for (u in TUNNEL_TEST_URLS) {
+            val ms = latencyVia(socksPort, u, timeoutMs)
+            if (ms > 0) return ms
+        }
+        return -1L
+    }
+
+    private val TUNNEL_TEST_URLS = listOf("https://www.gstatic.com/generate_204", "https://cp.cloudflare.com/generate_204")
+
+    private fun latencyVia(socksPort: Int, url: String, timeoutMs: Int): Long {
         return try {
             val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
-            val conn = URL("https://cp.cloudflare.com/generate_204")
-                .openConnection(proxy) as HttpURLConnection
+            val conn = URL(url).openConnection(proxy) as HttpURLConnection
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
             conn.instanceFollowRedirects = false
-            conn.setRequestProperty("User-Agent", "VPNClub/2.0")
+            conn.setRequestProperty("User-Agent", "HellboyVPN/3")
             val start = System.currentTimeMillis()
             val code = conn.responseCode
             conn.disconnect()

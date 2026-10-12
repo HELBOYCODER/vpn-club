@@ -25,6 +25,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.helboy.vpnclub.corex.AppSettings
 import com.helboy.vpnclub.corex.DiagLogger
+import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.components.ClubCard
 import com.helboy.vpnclub.ui.fa
 import com.helboy.vpnclub.ui.theme.DarkBg
@@ -161,6 +163,9 @@ fun SettingsScreen(settings: AppSettings) {
         }
 
         PanelInstallCard()
+
+        // سایفون (از صفحه‌ی اول به اینجا منتقل شد) — کلید آتش/یخ + حالت/پروتکل/کشور
+        PsiphonCard(VpnController.state.collectAsState().value)
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
