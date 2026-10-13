@@ -44,10 +44,36 @@ object IranVariants {
         "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
 
     /**
+     * cipherSuites ی پنل Netra (CSFM_DEFAULT_CS): اول سه سوئیت TLS 1.3، بعد ECDHE های TLS 1.2.
+     * کانفیگ‌های Netra این را در پارامتر cs لینک می‌فرستند.
+     */
+    const val CIPHER_NETRA =
+        "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:" + CIPHER_SEMI_PYTHON
+
+    /**
+     * finalMask پنل Netra (CSFM_DEFAULT_FM) — همان چیزی که کانفیگ‌های Netra را روی ایران خوب وصل می‌کند:
+     *  ۱) ClientHello (tlshello) در سه تکه: 0 (فقط سرآیند رکورد)، 104، و بقیه با تکه‌های ۱ بایتی؛ بدون تاخیر
+     *  ۲) بسته‌ی اول بعد از آن (1-1) در تکه‌های 114 و ۱ بایتی با ۱ms تاخیر، حداکثر ۱۱ تکه
+     * هسته‌ی ما (patterniha v26.9.30) آرایه‌ی lengths/delays را می‌پذیرد؛ فقط آخرین عضو lengths نباید ۰ باشد.
+     */
+    fun fmNetra(): JSONObject = JSONObject().put("tcp", JSONArray().put(
+        JSONObject().put("type", "fragment").put("settings", JSONObject()
+            .put("packets", "tlshello")
+            .put("lengths", JSONArray(listOf("0", "104", "1")))
+            .put("delays", JSONArray(listOf("0")))
+            .put("maxSplit", "0"))
+    ).put(
+        JSONObject().put("type", "fragment").put("settings", JSONObject()
+            .put("packets", "1-1")
+            .put("lengths", JSONArray(listOf("114", "1")))
+            .put("delays", JSONArray(listOf("1")))
+            .put("maxSplit", "11"))
+    ))
+
+    /**
      * finalMask ی tlshello-0-len (متد F&F) — فرمت فورک patterniha/Xray-core:
      * fragment اول: packets tlshello، length 104؛ fragment دوم: packets 1-1، length 114.
-     * توجه: length/delay/maxSplit رشته‌ی تکی هستند — آرایه‌ی "lengths" توسط هسته رد می‌شود
-     * (خطای "LengthMin can't be 0" — اثبات‌شده روی redroid با باینری واقعی).
+     * (فرمت تکی length/delay — هسته‌ی فعلی هر دو فرمت تکی و آرایه‌ای را می‌پذیرد.)
      */
     fun fmTlsHello(): JSONObject = JSONObject().put("tcp", JSONArray().put(
         JSONObject().put("type", "fragment").put("settings", JSONObject()
@@ -92,6 +118,11 @@ object IranVariants {
 
     /** کل لیست — به ترتیب اولویت: MCI اول (ECH > IPv6)، بعد ایرانسل. */
     fun all(rng: java.security.SecureRandom = java.security.SecureRandom()): List<Variant> = listOf(
+        // روش Netra — فرگمنت دومرحله‌ای داخل هسته + cipherSuites نترا (هر دو اپراتور).
+        // فرگمنت داخل هسته است؛ FragmentProxy محلی خاموش تا ClientHello دوبار تکه نشود.
+        Variant("netra-ff", "all", echConfigList = null, cipherSuites = CIPHER_NETRA,
+            fingerprint = "chrome", finalMask = fmNetra(), alpn = "http/1.1",
+            useFrag = false, label = "روش Netra · Fragment"),
         // همراه اول ۱ — ECH
         Variant("mci-ech", "mci", echConfigList = ECH_CONFIG, cipherSuites = null,
             fingerprint = "chrome", finalMask = null, alpn = "h2,http/1.1",

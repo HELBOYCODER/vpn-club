@@ -79,6 +79,34 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("warp_noise", true)
         set(v) { sp.edit().putBoolean("warp_noise", v).apply() }
 
+    /**
+     * سبک اتصال (مثل ZeroNet):
+     *  normal = بهترین سرور تست‌شده (پیش‌فرض) ؛ fast = اولین سروری که کار کند، بدون تست همه ؛
+     *  gaming = کمترین پینگ، بدون سرورهای پشت CDN، سایت‌های ایرانی مستقیم، و وسط بازی سرور عوض نمی‌شود ؛
+     *  secure = فقط سرورهای رمزگذاری‌شده (TLS / REALITY)
+     */
+    var connStyle: String
+        get() = sp.getString("conn_style", "normal") ?: "normal"
+        set(v) { sp.edit().putString("conn_style", v).apply() }
+
+    /** DNS تونل: 1.1.1.1 | 8.8.8.8 | 9.9.9.9 | 94.140.14.14 (ضد تبلیغ) | آدرس دلخواه. */
+    var dnsServer: String
+        get() = sp.getString("dns_server", "1.1.1.1") ?: "1.1.1.1"
+        set(v) { sp.edit().putString("dns_server", v).apply() }
+
+    /** قوانین مسیریابی کاربر (هر خط یک دامنه / IP / CIDR / geosite:… / geoip:…). */
+    var directRules: String
+        get() = sp.getString("rules_direct", "") ?: ""
+        set(v) { sp.edit().putString("rules_direct", v).apply() }
+
+    var blockRules: String
+        get() = sp.getString("rules_block", "") ?: ""
+        set(v) { sp.edit().putString("rules_block", v).apply() }
+
+    var proxyRules: String
+        get() = sp.getString("rules_proxy", "") ?: ""
+        set(v) { sp.edit().putString("rules_proxy", v).apply() }
+
     /** جلوه‌ی خون و آتش روی پوسته. */
     var skinEffects: Boolean
         get() = sp.getBoolean("skin_fx", true)

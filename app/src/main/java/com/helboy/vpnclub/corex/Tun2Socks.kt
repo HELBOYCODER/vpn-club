@@ -67,10 +67,12 @@ class Tun2Socks(private val context: Context) {
             .setMtu(mtu)
             .addAddress(VPN_IP, 30)
             .addRoute("0.0.0.0", 0)
-            .addDnsServer("1.1.1.1")
-            .addDnsServer("8.8.8.8")
             .setSession("Hellboy VPN")
             .setBlocking(true)
+        // DNS انتخابی کاربر (تنظیمات) + یک پشتیبان متفاوت
+        val dns = runCatching { AppSettings.of(context).dnsServer }.getOrDefault("1.1.1.1").trim()
+        for (d in listOf(dns, if (dns == "8.8.8.8") "1.1.1.1" else "8.8.8.8").distinct())
+            runCatching { builder.addDnsServer(d) }.onFailure { DiagLogger.log("TUN dns $d rejected: ${it.message}") }
         if (ipv6) {
             builder.addAddress(VPN_IP6, 126)
             builder.addRoute("::", 0) // نشت IPv6 را می‌بندد

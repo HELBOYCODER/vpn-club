@@ -126,43 +126,79 @@ class XrayCore(
      * فیلترینگ SNI-based ایران است.
      */
     fun buildConfig(c: ProxyConfig): String {
-        val outbound = outboundFor(c)
+        val outbound = outboundFor(c).put("tag", "proxy")
+        val serverless = c.scheme == SERVERLESS
+        val rp = routingPrefs()
+        val socksIn = JSONObject()
+            .put("tag", "socks-in")
+            .put("listen", "127.0.0.1")
+            .put("port", socksPort)
+            .put("protocol", "socks")
+            .put("settings", JSONObject()
+                .put("auth", "noauth")
+                .put("udp", true))
+        // قوانین دامنه‌ای (ایران مستقیم، لیست‌های کاربر) بدون sniff هرگز مطابقت نمی‌کنند — تون فقط IP می‌دهد.
+        // routeOnly: مقصد عوض نمی‌شود، فقط برای مسیریابی خوانده می‌شود.
+        if (useRouting) socksIn.put("sniffing", JSONObject().put("enabled", true)
+            .put("destOverride", JSONArray(listOf("http", "tls", "quic"))).put("routeOnly", true))
         val root = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
-            .put("inbounds", JSONArray().put(
-                JSONObject()
-                    .put("tag", "socks-in")
-                    .put("listen", "127.0.0.1")
-                    .put("port", socksPort)
-                    .put("protocol", "socks")
-                    .put("settings", JSONObject()
-                        .put("auth", "noauth")
-                        .put("udp", true))
-            ))
+            .put("inbounds", JSONArray().put(socksIn))
             .put("outbounds", JSONArray().put(outbound).put(
                 JSONObject().put("tag", "direct").put("protocol", "freedom")
+            ).put(
+                JSONObject().put("tag", "block").put("protocol", "blackhole")
             ).also { arr ->
                 // WARP + نویز: بسته‌های تصادفی UDP پیش از هندشیک WireGuard (عبور از تشخیص WireGuard در ایران)
                 if (c.scheme == "wireguard" && warpNoise) arr.put(JSONObject().put("tag", NOISE_TAG).put("protocol", "freedom")
                     .put("settings", JSONObject().put("noises", JSONArray()
                         .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5"))
                         .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5")))))
+                // بدون سرور: DNS گوشی (پورت ۵۳) به DNS داخلی هسته می‌رود که با DoH از روی فرگمنت می‌پرسد
+                if (serverless) arr.put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
             })
             .put("routing", JSONObject()
                 .put("domainStrategy", "AsIs")
                 .put("rules", JSONArray().also { rules ->
-                    // ترافیک داخلی ایران از تونل خارج — حفظ دسترسی به سرویس‌های داخلی (قابل خاموش‌کردن)
-                    if (useRouting && bypassIran()) {
-                        rules.put(JSONObject().put("type", "field")
-                            .put("ip", JSONArray(listOf("geoip:ir")))
-                            .put("outboundTag", "direct"))
-                        rules.put(JSONObject().put("type", "field")
-                            .put("domain", JSONArray(listOf("geosite:category-ir")))
-                            .put("outboundTag", "direct"))
+                    fun rule(key: String, values: List<String>, out: String) {
+                        if (values.isNotEmpty()) rules.put(JSONObject().put("type", "field")
+                            .put(key, JSONArray(values)).put("outboundTag", out))
+                    }
+                    if (serverless) {
+                        rules.put(JSONObject().put("type", "field").put("network", "udp").put("port", "53").put("outboundTag", "dns-out"))
+                        // QUIC (UDP 443) را ببند تا مرورگر/اپ‌ها روی TCP بیایند که فرگمنت رویش کار می‌کند
+                        rules.put(JSONObject().put("type", "field").put("network", "udp").put("port", "443").put("outboundTag", "block"))
+                    }
+                    if (useRouting) {
+                        // قوانین کاربر: مسدود > مستقیم (مثل پروفایل‌های مسیریابی ZeroNet)
+                        val (bIp, bDom) = splitRules(rp.block)
+                        rule("domain", bDom, "block"); rule("ip", bIp, "block")
+                        val (dIp, dDom) = splitRules(rp.direct)
+                        rule("domain", dDom, "direct"); rule("ip", dIp, "direct")
+                        // ترافیک داخلی ایران از تونل خارج — حفظ دسترسی به سرویس‌های داخلی (قابل خاموش‌کردن)
+                        if (rp.bypassIran) {
+                            rule("ip", listOf("geoip:ir", "geoip:private"), "direct")
+                            rule("domain", listOf("geosite:category-ir"), "direct")
+                        }
+                        val (pIp, pDom) = splitRules(rp.proxy)
+                        rule("domain", pDom, "proxy"); rule("ip", pIp, "proxy")
                     }
                 }))
+        if (serverless) root.put("dns", JSONObject()
+            // DoH اول (با فرگمنت، بدون مسمومیت DNS ایران)؛ اگر DoH بسته بود DNS سیستم (localhost) به‌عنوان آخرین چاره
+            .put("servers", JSONArray(listOf("https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query", "localhost")))
+            .put("queryStrategy", "UseIPv4"))
         return root.toString()
     }
+
+    /** تنظیمات مسیریابی کاربر (فقط هسته‌ی سرویس). */
+    data class RoutingPrefs(val bypassIran: Boolean, val direct: String, val block: String, val proxy: String)
+
+    private fun routingPrefs(): RoutingPrefs = try {
+        appContext?.let { val s = AppSettings.of(it)
+            RoutingPrefs(s.bypassIran || s.connStyle == "gaming", s.directRules, s.blockRules, s.proxyRules) }
+            ?: RoutingPrefs(true, "", "", "")
+    } catch (_: Exception) { RoutingPrefs(true, "", "", "") }
 
     /** WireGuard (WARP): فرمت تخت فورک patterniha مثل CoreOutboundBuilder پتنگ. */
     private fun wireguardOutbound(c: ProxyConfig): JSONObject {
@@ -189,8 +225,61 @@ class XrayCore(
         return out
     }
 
+    /**
+     * بدون سرور (SERVERLESS، مثل ZeroNet 0.3.2 و Serverless بی‌پی‌بی): اتصال مستقیم از خود گوشی،
+     * ClientHello تکه‌تکه تا فیلتر SNI اسم سایت را نخواند؛ DNS با DoH از روی همین مسیر.
+     * سایت‌هایی که «آدرس IP»شان بسته است (مثل تلگرام) با این روش باز نمی‌شوند.
+     */
+    private fun serverlessOutbound(): JSONObject = JSONObject().put("protocol", "freedom")
+        .put("settings", JSONObject()
+            .put("domainStrategy", "UseIPv4")
+            .put("fragment", JSONObject().put("packets", "tlshello").put("length", "100-200").put("interval", "1-2")))
+
+    /**
+     * Hysteria2 (hy2://) روی هسته‌ی patterniha: پروتکل hysteria نسخه‌ی ۲، ترنسپورت hysteria روی QUIC،
+     * obfs=salamander به‌صورت finalmask ی UDP، و pinSHA256/insecure با پین گواهی.
+     */
+    private fun hysteriaOutbound(c: ProxyConfig): JSONObject {
+        val q = c.query.toMap()
+        val host = dialOverride?.substringBefore(':') ?: c.dialHost
+        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
+        val tls = JSONObject().put("serverName", c.sniHost)
+            .put("alpn", JSONArray((q["alpn"]?.ifBlank { null } ?: "h3").split(",").map { it.trim() }))
+        pinFor(c, quic = true)?.let { tls.put("pinnedPeerCertSha256", it) }
+        val stream = JSONObject().put("network", "hysteria")
+            .put("hysteriaSettings", JSONObject().put("version", 2).put("auth", c.uuidOrUser))
+            .put("security", "tls").put("tlsSettings", tls)
+        if (q["obfs"] == "salamander") stream.put("finalmask", JSONObject().put("udp", JSONArray().put(
+            JSONObject().put("type", "salamander").put("settings", JSONObject().put("password", q["obfs-password"] ?: "")))))
+        return JSONObject().put("protocol", "hysteria")
+            .put("settings", JSONObject().put("version", 2).put("address", host).put("port", port))
+            .put("streamSettings", stream)
+    }
+
+    /**
+     * پین گواهی (جایگزین allowInsecure که هسته‌ی جدید حذف کرده — مثل v2rayNG):
+     *  pcs / pinSHA256 خود لینک، وگرنه برای کانفیگ insecure گواهی سرور یک بار گرفته و پین می‌شود.
+     */
+    private fun pinFor(c: ProxyConfig, quic: Boolean): String? {
+        val q = c.query.toMap()
+        listOf(q["pcs"], q["pinSHA256"], q["pinsha256"]).firstNotNullOfOrNull { validPin(it) }?.let { return it }
+        if (!isInsecure(q)) return null
+        val host = dialOverride?.substringBefore(':') ?: c.dialHost
+        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
+        val key = "$host:$port/${c.sniHost}/$quic"
+        pinCache[key]?.let { return it }
+        return try {
+            val req = JSONObject().put("address", host).put("port", port).put("serverName", c.sniHost).put("timeoutMs", 3_000).toString()
+            val res = JSONObject(if (quic) Libv2ray.fetchQuicCertSha256(req) else Libv2ray.fetchTlsCertSha256(req))
+            validPin(res.optString("sha256"))?.also { pinCache[key] = it }
+                .also { DiagLogger.log("CERT_PIN ${c.host}:${c.port} quic=$quic -> ${if (it != null) "ok" else "fail ${res.optString("error").take(80)}"}") }
+        } catch (e: Throwable) { DiagLogger.log("CERT_PIN ${c.host} err ${e.message?.take(80)}"); null }
+    }
+
     private fun outboundFor(c: ProxyConfig): JSONObject {
         if (c.scheme == "wireguard") return wireguardOutbound(c)
+        if (c.scheme == SERVERLESS) return serverlessOutbound()
+        if (c.scheme == "hysteria2" || c.scheme == "hy2") return hysteriaOutbound(c)
         val q0 = c.query.toMap()
         val addr = dialOverride?.substringBefore(':') ?: c.dialHost
         val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
@@ -212,23 +301,26 @@ class XrayCore(
         }
 
         val stream = JSONObject()
-        val q = c.query.toMap()
+        // مقدار خالی (host= یا path=) مثل «نبودن» رفتار شود — ZeroNet 0.3.2: کانفیگ پنل‌ها با host خالی
+        // پینگ می‌دادند ولی چیزی رد نمی‌کردند (Host خالی در درخواست WS)
+        val q = c.query.toMap().filterValues { it.isNotBlank() }
         val net = q["type"] ?: q["network"] ?: "tcp"
+        val hostHdr = q["host"] ?: c.sniHost
         when (net) {
             "ws" -> stream.put("network", "ws").put("wsSettings", JSONObject()
                 .put("path", q["path"] ?: "/")
-                .put("headers", JSONObject().put("Host", q["host"] ?: c.sniHost)))
+                .put("headers", JSONObject().put("Host", hostHdr)))
             "xhttp", "splithttp" -> {
                 val xs = JSONObject()
                     .put("path", q["path"] ?: "/")
-                    .put("host", q["host"] ?: c.sniHost)
+                    .put("host", hostHdr)
                     .put("mode", q["mode"] ?: "auto")
                 q["extra"]?.let { ex -> runCatching { JSONObject(ex) }.getOrNull()?.let { xs.put("extra", it) } }
                 stream.put("network", "xhttp").put("xhttpSettings", xs)
             }
             "httpupgrade" -> stream.put("network", "httpupgrade").put("httpupgradeSettings", JSONObject()
                 .put("path", q["path"] ?: "/")
-                .put("host", q["host"] ?: c.sniHost))
+                .put("host", hostHdr))
             "grpc" -> stream.put("network", "grpc").put("grpcSettings", JSONObject()
                 .put("serviceName", q["serviceName"] ?: q["path"] ?: "")
                 .put("multiMode", q["mode"] == "multi")
@@ -261,9 +353,12 @@ class XrayCore(
             // ECH — روش همراه‌اول ۱ (پروفایل) یا ech خود لینک
             val ech = variant?.echConfigList ?: q["ech"]
             if (!ech.isNullOrBlank()) tls.put("echConfigList", ech)
-            // cipherSuites — روش ایرانسل (semi-python) یا cs/pcs خود لینک (PattNG)
-            val cs = variant?.cipherSuites ?: q["cs"] ?: q["pcs"]
+            // cipherSuites — پروفایل (semi-python / Netra) یا cs خود لینک. لینک Netra cs خودش را دارد و اولویت با آن است.
+            // نکته: pcs در هسته‌ی جدید «pinnedPeerCertSha256» است، نه سوئیت رمز (قبلاً اشتباه اینجا می‌رفت)
+            val cs = if (variant?.id == NETRA_VARIANT) q["cs"] ?: variant.cipherSuites else variant?.cipherSuites ?: q["cs"]
             if (!cs.isNullOrBlank()) tls.put("cipherSuites", cs)
+            pinFor(c, quic = false)?.let { tls.put("pinnedPeerCertSha256", it) }
+            q["vcn"]?.let { tls.put("verifyPeerCertByName", it) }
             stream.put("security", "tls").put("tlsSettings", tls)
         }
         val reality = q["security"] == "reality"
@@ -287,9 +382,11 @@ class XrayCore(
             else -> "vless"
         }
 
-        // finalmask — تکه‌بندی داخل هسته (فورک patterniha/Xray-core) — روش F&F
-        // پروفایل فعال اولویت دارد؛ وگرنه fm خود لینک (فرمت PattNG: JSON)
-        (activeVariant?.finalMask ?: q["fm"]?.let { runCatching { JSONObject(it) }.getOrNull() })?.let { stream.put("finalmask", it) }
+        // finalmask — تکه‌بندی داخل هسته (فورک patterniha/Xray-core) — روش F&F / Netra
+        // پروفایل فعال اولویت دارد (به‌جز Netra که fm خود لینک را ترجیح می‌دهد)؛ وگرنه fm خود لینک (JSON)
+        val linkFm = q["fm"]?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val fm = if (activeVariant?.id == NETRA_VARIANT) linkFm ?: activeVariant?.finalMask else activeVariant?.finalMask ?: linkFm
+        fm?.let { stream.put("finalmask", it) }
 
         val out = JSONObject().put("protocol", protocol).put("settings", settings).put("streamSettings", stream)
 
@@ -302,10 +399,6 @@ class XrayCore(
         }
         return out
     }
-
-    private fun bypassIran(): Boolean = try {
-        appContext?.let { AppSettings.of(it).bypassIran } ?: true
-    } catch (_: Exception) { true }
 
     /** ALPN: پروفایل ایران > لینک > پیش‌فرض (ws/httpupgrade فقط http/1.1). */
     private fun alpnFor(net: String, variantAlpn: String?, linkAlpn: String?): List<String> {
@@ -344,18 +437,55 @@ class XrayCore(
         @Volatile var warpNoise: Boolean = true
         const val NOISE_TAG = "warp-noise"
 
+        /** شِمای داخلی حالت «بدون سرور». */
+        const val SERVERLESS = "serverless"
+        const val NETRA_VARIANT = "netra-ff"
+
+        /** کانفیگ «بدون سرور» (یک ورودی ثابت؛ چیزی برای اشتراک ندارد). */
+        fun serverlessConfig(): ProxyConfig = ProxyConfig(SERVERLESS, "serverless.local", 443, "direct",
+            tag = "بدون سرور (Serverless)", raw = "$SERVERLESS://direct@serverless.local:443")
+
+        /** گواهی‌های پین‌شده‌ی کانفیگ‌های insecure (host:port/sni/quic → sha256 hex). */
+        private val pinCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+        internal fun isInsecure(q: Map<String, String>) = listOf("allowInsecure", "insecure").any { q[it] == "1" || q[it] == "true" }
+
+        /** فقط هش ۳۲ بایتی hex (با یا بدون «:») — بقیه نادیده (وگرنه هسته کل کانفیگ را رد می‌کند). */
+        internal fun validPin(v: String?): String? = v?.split(",")?.map { it.trim().replace(":", "") }
+            ?.filter { it.length == 64 && it.all { ch -> ch.isDigit() || ch.lowercaseChar() in 'a'..'f' } }
+            ?.takeIf { it.isNotEmpty() }?.joinToString(",")
+
+        /**
+         * لیست قوانین کاربر (هر خط یا با کاما) → (IP ها، دامنه‌ها) برای routing هسته.
+         * «example.com» → domain:example.com ؛ geosite:/full:/regexp:/keyword:/domain: همان‌طور ؛
+         * IP یا CIDR یا geoip: → لیست ip.
+         */
+        internal fun splitRules(text: String): Pair<List<String>, List<String>> {
+            val items = text.lines().map { it.substringBefore('#') }.flatMap { it.split(',', ';', ' ', '\t') }
+                .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            val ipRe = Regex("^[0-9a-fA-F:.]+(/\\d{1,3})?$")
+            val ips = items.filter { it.startsWith("geoip:") || (ipRe.matches(it) && (it.contains('.') || it.count { c -> c == ':' } >= 2)) }
+            val doms = (items - ips.toSet()).map { d ->
+                if (listOf("geosite:", "full:", "regexp:", "keyword:", "domain:", "ext:").any { d.startsWith(it) }) d
+                else "domain:" + d.removePrefix("*.").removePrefix(".").lowercase()
+            }
+            return ips to doms
+        }
+
         fun isSupported(c: ProxyConfig): Boolean {
+            if (c.scheme == SERVERLESS) return true
             if (c.scheme == "wireguard") return c.uuidOrUser.isNotBlank() && !c.query.toMap()["publickey"].isNullOrBlank()
+            // Hysteria2: فقط پورت تکی (پورت‌هاپینگ «443,20000-30000» پشتیبانی نمی‌شود)
+            if (c.scheme == "hysteria2" || c.scheme == "hy2") return c.uuidOrUser.isNotBlank() && c.port in 1..65535 &&
+                (c.query.toMap()["obfs"].isNullOrBlank() || c.query.toMap()["obfs"] == "salamander")
             if (c.scheme !in setOf("vless", "vmess", "trojan", "ss")) return false
             if (c.uuidOrUser.isBlank()) return false
             val q = c.query.toMap()
-            val net = q["type"] ?: q["network"] ?: "tcp"
+            val net = q["type"]?.ifBlank { null } ?: q["network"]?.ifBlank { null } ?: "tcp"
             if (c.scheme != "ss" && net !in SUPPORTED_NETS) return false
             val sec = q["security"] ?: ""
             if (sec == "reality" && (q["pbk"].isNullOrBlank())) return false
-            // هسته‌ی جدید allowInsecure را حذف کرده (core_fail) — این کانفیگ‌ها بی‌فایده‌اند
-            val insecure = listOf("allowInsecure", "insecure").any { q[it] == "1" || q[it] == "true" }
-            if (insecure) return false
+            // allowInsecure: هسته‌ی جدید حذفش کرده؛ به‌جایش گواهی سرور هنگام ساخت کانفیگ پین می‌شود ([pinFor])
             if (c.scheme == "ss" && (q["method"] ?: "") !in SS_METHODS) return false
             return true
         }

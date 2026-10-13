@@ -80,7 +80,13 @@ object VpnController {
         val serverSource: String = "auto",
         /** WARP: حساب ثبت شده؟ نویز روشن؟ */
         val warpRegistered: Boolean = false,
-        val warpNoise: Boolean = true
+        val warpNoise: Boolean = true,
+        /** سبک اتصال: normal | fast | gaming | secure */
+        val connStyle: String = "normal",
+        val dnsServer: String = "1.1.1.1",
+        val directRules: String = "",
+        val blockRules: String = "",
+        val proxyRules: String = "",
     ) {
         val testing: Boolean get() = task != Task.NONE
         val busyConnecting: Boolean get() = task == Task.CONNECT
@@ -130,7 +136,9 @@ object VpnController {
         _state.update { st -> st.copy(subServers = st.mySubs.associate { it.id to subStore.loadServers(it.id) }) }
         DiagLogger.sessionHeader(app)
         XrayCore.warpNoise = settings.warpNoise
-        _state.update { it.copy(warpRegistered = WarpManager.account(app) != null, warpNoise = settings.warpNoise) }
+        _state.update { it.copy(warpRegistered = WarpManager.account(app) != null, warpNoise = settings.warpNoise,
+            connStyle = settings.connStyle, dnsServer = settings.dnsServer, directRules = settings.directRules,
+            blockRules = settings.blockRules, proxyRules = settings.proxyRules) }
         scope.launch {
             PsiphonRunner.state.collect { ps ->
                 _state.update { it.copy(psiphon = ps) }
@@ -566,6 +574,54 @@ object VpnController {
         ensureWarp()?.let { toast("حساب WARP تازه ساخته شد") }
     }
 
+    // ════════════════════════════ بدون سرور (Serverless) ════════════════════════════
+
+    val onServerless: Boolean get() = _state.value.connected && _state.value.current?.config?.scheme == XrayCore.SERVERLESS
+
+    /**
+     * اتصال «بدون سرور»: ترافیک مستقیم از گوشی با ClientHello تکه‌تکه و DNS رمزنگاری‌شده (DoH).
+     * اول با هسته تست می‌شود (gstatic از همین مسیر)، بعد سرویس بالا می‌آید.
+     */
+    fun connectServerless() = runTask(Task.CONNECT) {
+        _state.update { it.copy(needsPermission = false) }
+        DiagLogger.section("SERVERLESS connect net=${DiagLogger.networkSummary(app)}")
+        setState(Phase.CONNECTING, "بدون سرور…")
+        setTask(Task.CONNECT, "تست مسیر بدون سرور (فرگمنت + DoH)…")
+        val base = ServerEntry(XrayCore.serverlessConfig(), source = "serverless")
+        val r = kotlinx.coroutines.withContext(Dispatchers.IO) { engine.delayTestR(base) }
+        DiagLogger.log("SERVERLESS test -> ${when (r) { is DelayResult.Ok -> "OK ${r.ms}ms"; is DelayResult.Fail -> "fail ${r.log}" }}")
+        val e = base.copy(latencyMs = (r as? DelayResult.Ok)?.ms ?: 0, testedAt = System.currentTimeMillis())
+        setTask(Task.CONNECT, "اتصال بدون سرور…")
+        if (activate(e)) { toast("متصل بدون سرور — سایت‌هایی که آدرسشان بسته است (مثل تلگرام) باز نمی‌شوند"); return@runTask }
+        setState(Phase.FAILED, "بدون سرور روی این شبکه کار نکرد · از سرورها یا WARP استفاده کنید")
+    }
+
+    // ════════════════════════════ سبک اتصال / DNS / مسیریابی ════════════════════════════
+
+    fun setConnStyle(v: String) {
+        settings.connStyle = v; _state.update { it.copy(connStyle = v) }
+        DiagLogger.log("SETTINGS connStyle=$v")
+    }
+
+    fun setDnsServer(v: String) {
+        val d = v.trim().ifEmpty { "1.1.1.1" }
+        settings.dnsServer = d; _state.update { it.copy(dnsServer = d) }
+        DiagLogger.log("SETTINGS dns=$d (با اتصال بعدی اعمال می‌شود)")
+    }
+
+    /** ذخیره‌ی قوانین مسیریابی؛ اگر وصلیم، سرور فعلی با قوانین تازه دوباره بالا می‌آید. */
+    fun setRoutingRules(direct: String, block: String, proxy: String) {
+        settings.directRules = direct; settings.blockRules = block; settings.proxyRules = proxy
+        _state.update { it.copy(directRules = direct, blockRules = block, proxyRules = proxy) }
+        val (di, dd) = XrayCore.splitRules(direct); val (bi, bd) = XrayCore.splitRules(block); val (pi, pd) = XrayCore.splitRules(proxy)
+        DiagLogger.log("SETTINGS routing direct=${di.size + dd.size} block=${bi.size + bd.size} proxy=${pi.size + pd.size}")
+        val cur = _state.value.current
+        if (_state.value.connected && cur != null) runTask(Task.CONNECT) {
+            setTask(Task.CONNECT, "اعمال قوانین مسیریابی…")
+            if (activate(cur)) toast("قوانین مسیریابی اعمال شد")
+        } else toast("قوانین ذخیره شد · با اتصال بعدی اعمال می‌شود")
+    }
+
     // ════════════════════════════ نصب پنل کلادفلر ════════════════════════════
 
     fun clearDeploy() { if (_state.value.task != Task.DEPLOY) _state.update { it.copy(deploySteps = emptyList(), deployResult = null, deployError = "") } }
@@ -775,6 +831,17 @@ object VpnController {
             if (_state.value.servers.isEmpty()) { setState(Phase.FAILED, "سرور سالمی پیدا نشد. دوباره تلاش کنید."); return }
             doInject()
         }
+        // سبک «سریع»: بدون تست همه — به ترتیب آخرین تاخیر، اولین سروری که واقعاً ترافیک رد کند
+        if (settings.connStyle == "fast") {
+            for (e in _state.value.servers.filter { it.latencyMs > 0 }.sortedBy { it.latencyMs }.take(6)) {
+                if (!currentCoroutineContext().isActive) return
+                setTask(Task.CONNECT, "اتصال سریع به ${label(e)}…")
+                setState(Phase.CONNECTING, "اتصال به ${label(e)}…")
+                if (activate(e)) return
+                if (_state.value.needsPermission) return
+            }
+            DiagLogger.log("CONNECT fast: none of the cached servers answered — full test")
+        }
         // ۲) همه هم‌زمان تست، سریع‌ترین اول
         setTask(Task.CONNECT, "یافتن سریع‌ترین سرور…")
         setState(Phase.TESTING, "یافتن سریع‌ترین سرور…")
@@ -788,7 +855,10 @@ object VpnController {
             alive = _state.value.servers
         } else publish(alive)
         // ۳) اتصال به ترتیب سرعت
-        for (e in alive.sortedBy { it.latencyMs }) {
+        // گیمینگ: سرورهای پشت CDN آخر
+        val ordered = if (settings.connStyle == "gaming") alive.sortedWith(compareBy({ it.cf }, { it.latencyMs }))
+                      else alive.sortedBy { it.latencyMs }
+        for (e in ordered) {
             if (!currentCoroutineContext().isActive) return
             setTask(Task.CONNECT, "اتصال به ${label(e)} (${e.latencyMs}ms)…")
             setState(Phase.CONNECTING, "اتصال به ${label(e)}…")
@@ -889,7 +959,9 @@ object VpnController {
                 val lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 6_000)
                 if (lat > 0) { fails = 0; _state.update { it.copy(latencyMs = lat) }; continue }
                 if (psiphonOnlyUp) continue // سایفون خودش دوباره وصل می‌شود
-                if (++fails >= 2 && settings.autoFailover) { fails = 0; failover() }
+                // گیمینگ: وسط بازی برای یک قطعی کوتاه سرور عوض نشود (۴ شکست پیاپی = ۴۰ ثانیه)
+                val limit = if (settings.connStyle == "gaming") 4 else 2
+                if (++fails >= limit && settings.autoFailover) { fails = 0; failover() }
             }
         }
     }

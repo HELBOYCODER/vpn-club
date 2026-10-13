@@ -80,7 +80,8 @@ data class ServerEntry(
     companion object {
         fun fromJson(o: JSONObject?): ServerEntry? {
             if (o == null) return null
-            val cfg = LinkParser.parse(o.optString("raw")) ?: return null
+            val raw = o.optString("raw")
+            val cfg = (if (raw.startsWith("${XrayCore.SERVERLESS}://")) XrayCore.serverlessConfig() else LinkParser.parse(raw)) ?: return null
             val dh = o.optString("dialHost")
             val dp = o.optInt("dialPort", cfg.port)
             val c = if (dh.isNotEmpty() && (dh != cfg.host || dp != cfg.port)) cfg.withDial(dh, dp) else cfg

@@ -62,7 +62,24 @@ class HellboyEngine(private val context: Context) {
         "https://raw.githubusercontent.com/hiztin/VLESS-PO-GRIBI/main/deploy/subscriptions/10.txt",
         "https://raw.githubusercontent.com/prominbro/sub/refs/heads/main/212.txt",
         "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt",
-        "https://cdn.jsdelivr.net/gh/zeghostwriter/ZeroNet@crowd-data/verified.txt"
+    )
+
+    /**
+     * لیست‌های «تست‌شده» (لایه‌ی ۰ و ۱ ZeroNet): کانفیگ‌هایی که قبل از انتشار از داخل ایران/سرور تست
+     * شده‌اند. مثل «ساب‌های من» همیشه در نمونه‌ی غربال جلوتر می‌آیند تا کمتر وقت روی لیست‌های بزرگ برود.
+     * jsDelivr اول، چون وقتی raw.githubusercontent بسته است اغلب باز است.
+     */
+    val prioritySubscriptions = listOf(
+        "https://cdn.jsdelivr.net/gh/zeghostwriter/ZeroNet@crowd-data/verified.txt",
+        "https://raw.githubusercontent.com/sinavm/SVM/main/lite/subscriptions/xray/base64/mix",
+        "https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/main/configs/proxy_configs_tested.txt",
+        "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt",
+        "https://raw.githubusercontent.com/yebekhe/vpn-fail/main/sub-link",
+        "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt",
+        "https://raw.githubusercontent.com/MrAbolfazlNorouzi/iran-configs/main/configs/working-configs.txt",
+        "https://raw.githubusercontent.com/morteza-v2/free-v2ray-irancell-config/main/Sub1.txt",
+        "https://raw.githubusercontent.com/SoliSpirit/SolVPN/main/all_configs.txt",
+        "https://raw.githubusercontent.com/miladtahanian/Config-Collector/main/mixed_iran.txt",
     )
 
     /** یک سرور آماده‌ی تست. */
@@ -102,18 +119,21 @@ class HellboyEngine(private val context: Context) {
             // حالت «فقط ساب‌های من»: ساب‌های عمومی اصلاً دریافت نمی‌شوند
             val onlyMine = settings.serverSource == "mine" && mine.isNotEmpty()
             val subs = async { if (onlyMine) emptyList() else fetcher.fetchAll(defaultSubscriptions) }
+            val tested = async { if (onlyMine) emptyList() else fetcher.fetchAll(prioritySubscriptions) }
             val my = async { if (mine.isEmpty()) emptyList() else fetcher.fetchAll(mine) }
             val ips = async { findCleanIps(onState) }
-            (subs.await() to my.await()) to ips.await()
+            (subs.await() to (my.await() to tested.await())) to ips.await()
         }
-        val (publicRaws, myRaws) = pair
-        // سرورهای «ساب‌های من» اول و همیشه در نمونه (نه قربانی انتخاب تصادفی)
-        val myParsed = myRaws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }.filter { XrayCore.isSupported(it) }
-        DiagLogger.log("DISCOVER mySubs=${mine.size} myConfigs=${myParsed.size} public=${publicRaws.size}")
-        val raws = myRaws + publicRaws
+        val (publicRaws, mineAndTested) = pair
+        val (myRaws, testedRaws) = mineAndTested
+        val style = settings.connStyle
+        // سرورهای «ساب‌های من» اول و همیشه در نمونه (نه قربانی انتخاب تصادفی)؛ بعد لیست‌های تست‌شده
+        val myParsed = (myRaws + testedRaws).mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }.filter { XrayCore.isSupported(it) }
+        DiagLogger.log("DISCOVER mySubs=${mine.size} mine+tested=${myParsed.size} (tested raw=${testedRaws.size}) public=${publicRaws.size} style=$style")
+        val raws = myRaws + testedRaws + publicRaws
 
         val parsed = raws.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
-            .filter { XrayCore.isSupported(it) }
+            .filter { XrayCore.isSupported(it) && styleAllows(style, it) }
             .distinctBy { ServerEntry(it).serverKey }
         if (parsed.isEmpty()) {
             onState(Progress(Phase.FAILED, "هیچ کانفیگ قابل‌استفاده‌ای از ساب‌ها گرفته نشد. اینترنت را بررسی کنید."))
@@ -128,8 +148,8 @@ class HellboyEngine(private val context: Context) {
         val sample = if (parsed.size > MAX_PREFILTER)
             myPart.take(MAX_PREFILTER / 2) + publicPart.shuffled(SecureRandom()).take(MAX_PREFILTER - minOf(myPart.size, MAX_PREFILTER / 2))
         else parsed
-        val alive = prefilter(sample)
-        if (alive.isEmpty()) {
+        val alive0 = prefilter(sample)
+        if (alive0.isEmpty()) {
             onState(Progress(Phase.FAILED, "هیچ سروری به TCP پاسخ نداد (اینترنت قطع است؟)",
                 configCount = parsed.size, cleanIpCount = cleanIps.size))
             return@withContext null
@@ -142,6 +162,8 @@ class HellboyEngine(private val context: Context) {
         val rng = SecureRandom()
         // نیمی از کاندیدها از سرورهای «قابل تزریق IP تمیز» (پشت کلادفلر + ws/grpc/xhttp) تا
         // دکمه‌ی اینجکت روی لیست ۱۰تایی واقعاً اثر داشته باشد
+        // گیمینگ: بدون سرورهای پشت CDN (پینگ بالا، UDP ضعیف)
+        val alive = if (style == "gaming") alive0.filter { !it.behindCf }.ifEmpty { alive0 } else alive0
         val (inj, rest) = alive.partition { it.behindCf && injectable(it.config) }
         val (st, weak) = rest.partition { strong(it) }
         val others = st.shuffled(rng) + weak.shuffled(rng)
@@ -182,6 +204,8 @@ class HellboyEngine(private val context: Context) {
             ecs.submit(Callable {
                 val (ip, cf) = dnsCache.getOrPut(c.host) { resolveHost(c.host) }
                 if (ip == null) return@Callable null
+                // Hysteria2 روی UDP/QUIC است و پروب TCP ندارد — فقط DNS؛ تست واقعی با هسته
+                if (c.scheme == "hysteria2" || c.scheme == "hy2") return@Callable Candidate(c, false, 1_000)
                 val ms = HealthTester.protocolProbe(c, ip, c.port, timeoutMs = 2_200)
                 if (ms > 0) Candidate(c, cf, ms) else null
             })
@@ -484,10 +508,16 @@ class HellboyEngine(private val context: Context) {
                         val c = base.config
                         val port = if (c.port in CloudflareScanner.CF_ALL_PORTS) c.port else 443
                         val dials = listOfNotNull(preferredIp?.let { c.withDial(it, port) }, c)
+                        // ZeroNet 0.3.2: لینک‌های کلادفلر روی پورت‌های TLS دیگر (2053 / 8443) هم امتحان شوند —
+                        // گاهی فقط 443 فیلتر است
+                        val altPorts = CF_ALT_TLS_PORTS.filter { it != c.port }
                         val combos = buildList {
                             preferredIp?.let { add(IranVariants.PLAIN to c.withDial(it, port)) }
                             for (v in variants.filter { !it.needsCf || base.cf }.take(2)) for (d in dials.reversed()) add(v to d)
-                        }.take(5)
+                            if (base.cf) variants.firstOrNull()?.let { v ->
+                                for (p in altPorts) add(v to c.withDial(preferredIp ?: c.dialHost, p))
+                            }
+                        }.take(7)
                         for ((v, d) in combos) {
                             val e = base.copy(config = d, variantId = v.id, useFrag = v.useFrag)
                             val r = delayTestR(e)
@@ -645,6 +675,19 @@ class HellboyEngine(private val context: Context) {
 
     companion object {
         const val PARALLEL_TESTS = 8
+        /** پورت‌های TLS دیگر کلادفلر که ورکرها هم رویشان جواب می‌دهند. */
+        val CF_ALT_TLS_PORTS = listOf(2053, 8443)
+
+        /** فیلتر سبک اتصال روی کانفیگ‌ها (قبل از غربال). */
+        fun styleAllows(style: String, c: ProxyConfig): Boolean {
+            if (style != "secure" && style != "normal") return true
+            val q = c.query.toMap()
+            val encrypted = q["security"] in listOf("tls", "reality") || q["tls"] == "tls" ||
+                c.scheme == "trojan" || c.scheme == "hysteria2" || c.scheme == "hy2" ||
+                (c.scheme == "vless" && q["encryption"]?.startsWith("mlkem") == true)
+            // secure: فقط رمزگذاری‌شده‌ها ؛ normal: همه (رمزگذاری‌شده‌ها در ترتیب جلوترند)
+            return style == "normal" || encrypted
+        }
         /**
          * آدرس تست تاخیر: گوگل، نه کلادفلر. ورکرهای کلادفلر (BPB / Zeus / edgetunnel و همه‌ی سرورهای
          * workers.dev) نمی‌توانند مستقیم به IPهای خود کلادفلر وصل شوند؛ تست با cp.cloudflare.com

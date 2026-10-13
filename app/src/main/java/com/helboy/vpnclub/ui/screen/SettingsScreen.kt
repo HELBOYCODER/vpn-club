@@ -67,8 +67,6 @@ fun SettingsScreen(settings: AppSettings) {
     var theme by remember { mutableStateOf(settings.themeMode) }
     var style by remember { mutableStateOf(settings.buttonStyle) }
     var fx by remember { mutableStateOf(settings.skinEffects) }
-    var showPsi by remember { mutableStateOf(false) }
-    var psiHas by remember { mutableStateOf(com.helboy.vpnclub.corex.VpnController.state.value.psiphonHasConfig) }
     var bypassIran by remember { mutableStateOf(settings.bypassIran) }
     var failover by remember { mutableStateOf(settings.autoFailover) }
     var autoLaunch by remember { mutableStateOf(settings.autoConnectOnLaunch) }
@@ -127,6 +125,9 @@ fun SettingsScreen(settings: AppSettings) {
             }
         }
 
+        // سبک اتصال / DNS / قوانین مسیریابی (ZeroNet)
+        ConnectionCard(VpnController.state.collectAsState().value)
+
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SwitchRow("ترافیک داخل ایران مستقیم", "خاموش = تونل کامل، همه‌ی ترافیک و همه‌ی اپ‌ها از VPN (پیش‌فرض)",
@@ -135,20 +136,6 @@ fun SettingsScreen(settings: AppSettings) {
                     failover) { failover = it; settings.autoFailover = it }
                 SwitchRow("اتصال خودکار هنگام باز شدن", "به‌محض ورود به برنامه وصل می‌شود",
                     autoLaunch) { autoLaunch = it; settings.autoConnectOnLaunch = it }
-            }
-        }
-
-        ClubCard(Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("سایفون", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text(if (psiHas) "کانفیگ رسمی وارد شده است." else "برای استفاده از سایفون، کانفیگ رسمی (از Psiphon Inc.) را وارد کنید.",
-                    color = TextSecondary, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showPsi = true }) { Text(if (psiHas) "تغییر کانفیگ" else "وارد کردن کانفیگ") }
-                    if (psiHas) TextButton(onClick = { com.helboy.vpnclub.corex.VpnController.clearPsiphonConfig(); psiHas = false }) {
-                        Text("حذف", color = StatusRed)
-                    }
-                }
             }
         }
 
@@ -205,9 +192,6 @@ fun SettingsScreen(settings: AppSettings) {
 
     if (showApps) AppPickerDialog(ctx, settings, onClose = { showApps = false; bypassCount = settings.bypassApps.size })
     if (showLog) LogDialog(onClose = { showLog = false })
-    if (showPsi) PsiphonConfigDialog(onClose = {
-        showPsi = false; psiHas = com.helboy.vpnclub.corex.VpnController.state.value.psiphonHasConfig
-    })
 }
 
 @Composable

@@ -101,6 +101,7 @@ fun ServersScreen(
         }
 
         item(key = "warp") { WarpCard(ui) }
+        item(key = "serverless") { ServerlessCard(ui) }
 
         // ── ساب‌های من (پنل‌های BPB / Zeus نصب‌شده + دستی) ──
         item(key = "subs-h") {

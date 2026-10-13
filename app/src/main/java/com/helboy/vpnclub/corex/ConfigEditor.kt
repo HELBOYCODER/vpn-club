@@ -29,7 +29,7 @@ object ConfigEditor {
     }
 
     /** آیا این پروتکل فیلدهای SNI/Host/Path دارد؟ (ss و socks ندارند) */
-    fun hasTransportFields(c: ProxyConfig) = c.scheme !in setOf("ss", "socks", "socks5")
+    fun hasTransportFields(c: ProxyConfig) = c.scheme !in setOf("ss", "socks", "socks5", "hysteria2", "hy2", "wireguard", "wg", XrayCore.SERVERLESS)
 
     fun apply(c: ProxyConfig, f: Fields): Result {
         val address = f.address.trim().trim('[', ']')
@@ -68,6 +68,11 @@ object ConfigEditor {
         "vless" -> listOf(Spec("flow", "Flow", FLOWS), Spec("encryption", "Encryption", listOf("none"), "none یا mlkem768x25519plus…"))
         "vmess" -> listOf(Spec("alterId", "AlterId", listOf("0")), Spec("encryption", "Security (رمزنگاری)", VMESS_SECURITY))
         "ss" -> listOf(Spec("method", "Method (روش رمزنگاری)", SS_METHODS))
+        "hysteria2", "hy2" -> listOf(Spec("sni", "SNI"), Spec("obfs", "Obfs", listOf("", "salamander")),
+            Spec("obfs-password", "Obfs password (salamander)"), Spec("alpn", "ALPN", listOf("", "h3")),
+            Spec("insecure", "Insecure (پین خودکار گواهی)", listOf("", "1")), Spec("pinSHA256", "Pinned cert SHA256", hint = "hex ۶۴ کاراکتری"))
+        "wireguard", "wg" -> listOf(Spec("publickey", "Peer public key"), Spec("address", "Address", hint = "172.16.0.2/32,2606:…/128"),
+            Spec("reserved", "Reserved", hint = "1,2,3"), Spec("mtu", "MTU", listOf("1280", "1420")), Spec("presharedkey", "Pre-shared key"))
         else -> emptyList()
     }
 
@@ -84,7 +89,9 @@ object ConfigEditor {
     /** فیلدهای امنیت (TLS / Reality) + فرگمنت داخلی PattNG. */
     fun securitySpecs(sec: String): List<Spec> = when (sec) {
         "tls" -> listOf(Spec("sni", "SNI"), Spec("fp", "Fingerprint (uTLS)", FINGERPRINTS), Spec("alpn", "ALPN", ALPNS),
-            Spec("ech", "ECH config list", hint = "AEX+DQBB…"), Spec("pcs", "Cipher suites", hint = "TLS_AES_128_GCM_SHA256:…"))
+            Spec("ech", "ECH config list", hint = "AEX+DQBB…"), Spec("cs", "Cipher suites", hint = "TLS_AES_128_GCM_SHA256:…"),
+            Spec("pcs", "Pinned cert SHA256 (pcs)", hint = "hex ۶۴ کاراکتری"), Spec("vcn", "Verify cert by name (vcn)"),
+            Spec("allowInsecure", "Allow insecure (پین خودکار گواهی)", listOf("", "1")))
         "reality" -> listOf(Spec("sni", "SNI"), Spec("fp", "Fingerprint (uTLS)", FINGERPRINTS), Spec("pbk", "PublicKey"),
             Spec("sid", "ShortId"), Spec("spx", "SpiderX"), Spec("pqv", "mldsa65Verify"))
         else -> emptyList()
@@ -125,7 +132,7 @@ object ConfigEditor {
             }
         }
         // ترتیب پارامترهای قبلی حفظ می‌شود؛ پارامترهای ناشناخته‌ی لینک (مثل eh/ed) دست نمی‌خورند
-        val managed = (protocolSpecs("vless") + protocolSpecs("vmess") + protocolSpecs("ss") +
+        val managed = (protocolSpecs("vless") + protocolSpecs("vmess") + protocolSpecs("ss") + protocolSpecs("hysteria2") + protocolSpecs("wireguard") +
             NETWORKS.flatMap { transportSpecs(it) } + SECURITIES.flatMap { securitySpecs(it) } + FINALMASK).map { it.key }.toSet() +
             setOf("type", "network", "security", "tls")
         var q = c.query.filterNot { it.first in managed }

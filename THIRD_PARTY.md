@@ -16,3 +16,5 @@
 - Zeus Panel (proprietary, personal non-commercial use) is downloaded at install time from its official repository https://github.com/panel-zeus/Z-E-U-S onto the user's own Cloudflare account; it is not bundled or modified by this app.
 - Psiphon engine built from the Shir-o-Khorshid fork (CluvexStudio/psiphon-tunnel-core, branch shirokhorshid, GPL-3.0) as pinned by Aether/PattNG; free mode uses Psiphon's public, signature-verified server list (assets/psiphon_servers.dat) and public channel, following patterniha/Aether (AGPL-3.0).
 - Cloudflare WARP: device registration via the public WARP API; keys generated on-device (X25519, RFC 7748).
+- ZeroNet by zeghostwriter (MIT): https://github.com/zeghostwriter/ZeroNet — features re-implemented on the Xray engine (serverless profile, connection styles, routing profiles, DNS choice, tested feed list incl. its crowd-data verified list, Cloudflare alt ports, empty-host fix). No ZeroNet code is bundled.
+- Netra Panel by netrair (MIT): https://github.com/netrair/netra-panel — default cipher-suite list and two-stage finalmask fragment values reused for the "Netra" profile.
