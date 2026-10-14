@@ -108,6 +108,14 @@ class SmartConnectionLoopTest {
         assertEquals(listOf("weak", "fresh"), fake.connects)
         assertEquals(setOf("weak"), fake.scans[1])
     }
+    @Test fun alternatingDeadAndWeakSamplesStillRecoverAfterThreeUnhealthyChecks() {
+        val fake = Fake(); var samples = 0
+        fake.health = { samples++; if (samples % 2 == 0) ConnectionQuality(-1, 0.0) else ConnectionQuality(3_000, 20_000.0) }
+        fake.onStatus = { status, candidate -> if (status == SmartConnectionLoop.Status.CONNECTED && candidate == "b") throw End() }
+        run(fake)
+        assertEquals(3, samples)
+        assertEquals(listOf("a", "b"), fake.connects)
+    }
     @Test fun qualityRequiresTrafficAndLatencyWithinLimits() {
         assertFalse(ConnectionQuality(100, 0.0).healthy)
         assertFalse(ConnectionQuality(3_000, 1_000_000.0).healthy)

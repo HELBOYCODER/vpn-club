@@ -55,7 +55,7 @@ class SmartConnectionLoop<T>(
                 for (candidate in candidates) {
                     currentCoroutineContext().ensureActive()
                     if (!driver.networkAvailable()) break
-                    if ((rejectedUntil[driver.key(candidate)] ?: 0) > now()) continue
+                    if (rejectedUntil[driver.key(candidate)]?.let { it > now() } == true) continue
                     driver.status(Status.CONNECTING, candidate)
                     if (!transient(false) { driver.connect(candidate) }) {
                         rejectedUntil[driver.key(candidate)] = now() + REJECT_MS
@@ -73,8 +73,8 @@ class SmartConnectionLoop<T>(
                         if (!driver.networkAvailable()) break
                         val quality = transient(ConnectionQuality(-1, 0.0)) { driver.quality() }
                         if (quality.healthy) { deadSamples = 0; weakSamples = 0; continue }
-                        if (quality.dead) { deadSamples++; weakSamples = 0 }
-                        else { weakSamples++; deadSamples = 0 }
+                        weakSamples++
+                        deadSamples = if (quality.dead) deadSamples + 1 else 0
                         if (deadSamples >= 2 || weakSamples >= 3) {
                             rejectedUntil[driver.key(candidate)] = now() + REJECT_MS
                             driver.status(Status.RECOVERING, candidate)

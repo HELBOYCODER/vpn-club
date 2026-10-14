@@ -71,7 +71,7 @@ class HellboyEngine(private val context: Context) {
 
     suspend fun scan(excluded: Set<String>, onState: (Progress) -> Unit): List<ServerEntry> = withContext(Dispatchers.IO) {
         onState(Progress(Phase.FETCHING, "دریافت تازهٔ سرورها…"))
-        val raw = fetcher.fetchAll(prioritySubscriptions + defaultSubscriptions)
+        val raw = runInterruptible { fetcher.fetchAll(prioritySubscriptions + defaultSubscriptions) }
         currentCoroutineContext().ensureActive()
         val configs = raw.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
             .filter { supported(it) && ServerEntry(it).serverKey !in excluded }
@@ -125,6 +125,10 @@ class HellboyEngine(private val context: Context) {
         } catch (_: java.util.concurrent.TimeoutException) {
             future?.cancel(true)
             DelayResult.Timeout
+        } catch (_: InterruptedException) {
+            future?.cancel(true)
+            Thread.currentThread().interrupt()
+            DelayResult.Timeout
         } catch (ex: Exception) {
             val result = DelayResult.fromCoreMessage(ex.cause?.message ?: ex.message.orEmpty())
             if (result is DelayResult.ConfigError) brokenConfigs += e.id
@@ -134,14 +138,14 @@ class HellboyEngine(private val context: Context) {
 
     suspend fun testConfig(cfg: ProxyConfig, variantId: String? = null, useFrag: Boolean = false): Pair<ServerEntry, DelayResult> = withContext(Dispatchers.IO) {
         var entry = ServerEntry(cfg, variantId, useFrag)
-        var result = delayTestR(entry)
+        var result = runInterruptible { delayTestR(entry) }
         currentCoroutineContext().ensureActive()
         // Keep the existing carrier fragmentation profiles, without WARP or clean-IP scanning.
         if (result !is DelayResult.Ok && result !is DelayResult.ConfigError && ServerEntry.injectableTransport(cfg)) {
             for (v in IranVariants.order(settings.carrierMode, learnedVariant).filter { it.id != "plain" && !it.ipv6 }.take(2)) {
                 currentCoroutineContext().ensureActive()
                 entry = ServerEntry(cfg, v.id, v.useFrag)
-                result = delayTestR(entry)
+                result = runInterruptible { delayTestR(entry) }
                 if (result is DelayResult.Ok) { learnedVariant = v.id; break }
                 if (result is DelayResult.ConfigError) break
             }
