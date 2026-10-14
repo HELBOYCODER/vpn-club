@@ -100,13 +100,13 @@ object VpnController {
                     override fun key(candidate: ServerEntry) = candidate.serverKey
                     override fun networkAvailable() = underlyingNetworkAvailable()
                     override suspend fun discover(excluded: Set<String>): List<ServerEntry> {
-                        val list = engine.scan(excluded) { p -> if (id == sessionId) _state.update {
+                        val list = engine.scan(excluded) { p -> if (id == sessionId) updateSession(id) {
                             it.copy(phase = p.phase, taskMsg = p.message, configCount = p.configCount)
                         } }
                         currentCoroutineContext().ensureActive()
                         if (id == sessionId) {
                             engine.saveServers(list)
-                            _state.update { it.copy(servers = list) }
+                            updateSession(id) { it.copy(servers = list) }
                         }
                         return list
                     }
@@ -115,14 +115,14 @@ object VpnController {
                         if (HellboyVpnService.status.value.state != SvcState.UP) return ConnectionQuality(-1, 0.0)
                         val quality = HealthTester.connectionQuality(HellboyVpnService.SOCKS_PORT)
                         currentCoroutineContext().ensureActive()
-                        if (id == sessionId) _state.update { it.copy(latencyMs = quality.latencyMs, testedDownloadBps = quality.downloadBps) }
+                        if (id == sessionId) updateSession(id) { it.copy(latencyMs = quality.latencyMs, testedDownloadBps = quality.downloadBps) }
                         return quality
                     }
                     override suspend fun dropTunnel() {
                         if (id != sessionId) return
                         statsJob?.cancel()
                         HellboyVpnService.search(app, id)
-                        _state.update { it.copy(connected = false, current = null, connectedSince = 0, upBps = 0, downBps = 0) }
+                        updateSession(id) { it.copy(connected = false, current = null, connectedSince = 0, upBps = 0, downBps = 0) }
                     }
                     override fun status(status: SmartConnectionLoop.Status, candidate: ServerEntry?, retrySeconds: Long) {
                         if (id != sessionId) return
@@ -139,7 +139,7 @@ object VpnController {
                             SmartConnectionLoop.Status.CONNECTING -> Phase.CONNECTING
                             else -> Phase.FETCHING
                         }
-                        _state.update { it.copy(phase = phase, message = message,
+                        updateSession(id) { it.copy(phase = phase, message = message,
                             task = if (status == SmartConnectionLoop.Status.CONNECTED) Task.NONE else Task.CONNECT,
                             taskMsg = message) }
                         DiagLogger.log("SMART_SESSION $status")
@@ -149,10 +149,7 @@ object VpnController {
             } catch (cancel: CancellationException) { throw cancel }
             catch (error: Exception) {
                 DiagLogger.log("SMART_SESSION_ERROR ${error.javaClass.simpleName}: ${error.message}")
-                if (id == sessionId) {
-                    disconnect()
-                    _state.update { it.copy(phase = Phase.FAILED, message = "اتصال متوقف شد؛ دوباره تلاش کنید") }
-                }
+                failSession(id)
             }
         }
     }
@@ -174,7 +171,7 @@ object VpnController {
             return false
         }
         val verified = entry.copy(latencyMs = quality.latencyMs, downBps = quality.downloadBps, testedAt = System.currentTimeMillis())
-        _state.update { it.copy(connected = true, current = verified, connectedSince = System.currentTimeMillis(),
+        updateSession(id) { it.copy(connected = true, current = verified, connectedSince = System.currentTimeMillis(),
             latencyMs = quality.latencyMs, testedDownloadBps = quality.downloadBps, upTotal = 0, downTotal = 0,
             servers = it.servers.map { e -> if (e.serverKey == entry.serverKey) verified else e }) }
         startStats(id)
@@ -189,12 +186,23 @@ object VpnController {
             while (isActive && id == sessionId) {
                 delay(1_000)
                 val bytes = Tun2Socks.bytes() ?: continue
-                _state.update { it.copy(upBps = (bytes.first - last.first).coerceAtLeast(0),
+                updateSession(id) { it.copy(upBps = (bytes.first - last.first).coerceAtLeast(0),
                     downBps = (bytes.second - last.second).coerceAtLeast(0),
                     upTotal = (bytes.first - base.first).coerceAtLeast(0), downTotal = (bytes.second - base.second).coerceAtLeast(0)) }
                 last = bytes
             }
         }
+    }
+
+    /** The lease check is inside StateFlow's CAS retry, so a late result cannot overwrite Stop/new-session state. */
+    private fun updateSession(id: Long, change: (UiState) -> UiState) {
+        _state.update { current -> if (id == sessionId && current.sessionActive) change(current) else current }
+    }
+
+    @Synchronized private fun failSession(id: Long) {
+        if (id != sessionId) return
+        disconnect()
+        _state.update { it.copy(phase = Phase.FAILED, message = "اتصال متوقف شد؛ دوباره تلاش کنید") }
     }
 
     private fun underlyingNetworkAvailable(): Boolean = runCatching {
