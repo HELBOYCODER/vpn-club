@@ -25,6 +25,8 @@ import com.helboy.vpnclub.ui.theme.HellboyTheme
  */
 class MainActivity : ComponentActivity() {
 
+    companion object { const val ACTION_TOGGLE = "com.helboy.vpnclub.TOGGLE" }
+
     /** کاری که بعد از گرفتن مجوز VPN باید انجام شود. */
     private var pending: (() -> Unit)? = null
 
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) pending?.invoke()
+        if (result.resultCode != Activity.RESULT_OK) VpnController.notify("مجوز VPN داده نشد؛ اتصال آغاز نشد")
         pending = null
     }
 
@@ -59,7 +62,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // اتصال خودکار هنگام باز شدن (فقط اگر مجوز VPN از قبل داده شده)
-        if (savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
+        if (intent.action != ACTION_TOGGLE && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
             !VpnController.state.value.connected && VpnService.prepare(this) == null) {
             VpnController.connectFastest()
         }
@@ -75,6 +78,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        handleShortcut(intent)
+
         setContent {
             HellboyTheme {
                 AppRoot(
@@ -88,4 +93,27 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcut(intent)
+    }
+
+    private fun handleShortcut(intent: Intent) {
+        if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.take(1_048_576).orEmpty().trim()
+            intent.action = null
+            if (text.startsWith("https://") && !text.contains("\n")) {
+                val error = VpnController.addSub("اشتراک‌گذاری", text)
+                if (error != null) VpnController.notify(error)
+            } else if (text.isNotBlank()) VpnController.importConfigs(text)
+            return
+        }
+        if (intent.action != ACTION_TOGGLE) return
+        intent.action = null // rotation / recreation must not toggle a second time
+        val st = VpnController.state.value
+        if (st.connected || st.busyConnecting) VpnController.toggle()
+        else withVpnPermission { VpnController.toggle() }
+    }
+
 }

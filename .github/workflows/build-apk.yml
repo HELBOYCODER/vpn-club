@@ -1,102 +1,114 @@
-name: Build Hellboy VPN APK
+name: Build and verify Hellboy VPN
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+    branches: [main, hellboy-v4.2]
+    tags: ['v*']
   workflow_dispatch:
+
+concurrency:
+  group: hellboy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-
-      - name: Set up Go (Psiphon engine)
-        uses: actions/setup-go@v5
+      - uses: android-actions/setup-android@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.26.8'
           cache: false
-
-      - name: Build Psiphon engine (libpsiphon.so)
+      - name: Build pinned Psiphon engine
         run: bash tools/build_psiphon.sh
-
-      - name: Refresh bundled Psiphon server list (signature-checked)
-        run: bash tools/fetch_psiphon_servers.sh
-
-      - name: Read version from Gradle
-        id: ver
-        run: |
-          V=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Building version $V"
-
-      - name: Restore release signing key
+      - name: Restore signing key or select separate preview app
         env:
-          HELLBOY_KEYSTORE_B64: ${{ secrets.HELLBOY_KEYSTORE_B64 }}
+          KEY_B64: ${{ secrets.HELLBOY_KEYSTORE_B64 || secrets.HB_KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD || secrets.HB_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$HELLBOY_KEYSTORE_B64" ]; then
-            echo "$HELLBOY_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hellboyvpn-release.jks"
-            echo "HELLBOY_KEYSTORE=$RUNNER_TEMP/hellboyvpn-release.jks" >> "$GITHUB_ENV"
-            echo "Release key restored"
+          if [ -n "$KEY_B64" ] && [ -n "$KEY_PASSWORD" ]; then
+            printf '%s' "$KEY_B64" | base64 -d > "$RUNNER_TEMP/hellboy-release.jks"
+            echo "HELLBOY_KEYSTORE=$RUNNER_TEMP/hellboy-release.jks" >> "$GITHUB_ENV"
+            echo "BUILD_FLAGS=" >> "$GITHUB_ENV"
+            echo "APP_ID=com.helboy.vpnclub" >> "$GITHUB_ENV"
+            echo "PREVIEW=false" >> "$GITHUB_ENV"
           else
-            echo "::warning::HELLBOY_KEYSTORE_B64 secret missing — APK will be debug-signed and won't install over previous versions"
+            echo "BUILD_FLAGS=-PhellboyPreview=true" >> "$GITHUB_ENV"
+            echo "APP_ID=com.helboy.vpnclub.preview" >> "$GITHUB_ENV"
+            echo "PREVIEW=true" >> "$GITHUB_ENV"
+            echo "No fixed release key: building a separate preview app."
           fi
-
-      - name: Build Android Release APK
+      - name: Unit tests, lint, release and debug builds
         env:
-          HELLBOY_KEYSTORE_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD }}
-        run: gradle assembleRelease --no-daemon --stacktrace
-
-      - name: Print signing certificate
-        run: |
-          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/*.apk | grep -E "SHA-256|DN" || true
-
-      - name: Copy and rename APK
-        run: |
-          mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk "dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk"
-          ls -la dist/
-
-      - name: Upload APK Artifact
+          HELLBOY_KEYSTORE_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD || secrets.HB_KEYSTORE_PASSWORD }}
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug $BUILD_FLAGS --no-daemon --stacktrace
+      - name: Test and lint reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: HellboyVPN-${{ steps.ver.outputs.version }}-APK
-          path: dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk
-          retention-days: 90
-
-      # بدون کلید دائمی، ریلیز منتشر نمی‌شود (فایل با کلید موقت روی نسخه‌ی کاربران نصب نمی‌شود)
-      - name: Create or Update GitHub Release
-        if: env.HELLBOY_KEYSTORE != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: verification-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+      - name: Enable KVM for Android smoke test
         run: |
-          TAG_NAME="v${{ steps.ver.outputs.version }}"
-          APK="dist/HellboyVPN-${{ steps.ver.outputs.version }}.apk"
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Release $TAG_NAME already exists, uploading asset..."
-            gh release upload "$TAG_NAME" "$APK" --clobber
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch app and capture real screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash tools/ui_smoke.sh
+      - name: UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-evidence
+          path: ui-evidence/
+      - name: Package and verify APK
+        id: package
+        run: |
+          V=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          TAG="v$V"
+          if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.1"; fi
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk "dist/HellboyVPN-$TAG.apk"
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$SIGNER" verify --print-certs "dist/HellboyVPN-$TAG.apk" > dist/signing-certificate.txt
+          sha256sum "dist/HellboyVPN-$TAG.apk" > dist/SHA256SUMS
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HellboyVPN-${{ steps.package.outputs.tag }}
+          path: dist/
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.package.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; preserving its APK and certificate."
+            exit 0
+          fi
+          if [ "$PREVIEW" = "true" ]; then
+            gh release create "$TAG" dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
+              --title "Hellboy VPN 4.2.0 Preview" --prerelease --notes-file RELEASE_NOTES.md
           else
-            echo "Creating new release $TAG_NAME..."
-            gh release create "$TAG_NAME" "$APK" \
-              --target "$GITHUB_SHA" \
-              --title "Hellboy VPN $TAG_NAME" \
-              --notes-file RELEASE_NOTES.md
+            gh release create "$TAG" dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
+              --title "Hellboy VPN 4.2.0" --notes-file RELEASE_NOTES.md
           fi

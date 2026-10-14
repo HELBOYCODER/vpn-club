@@ -13,7 +13,7 @@ data class MySub(
     val id: String,
     val name: String,
     val url: String,
-    /** bpb | zeus | manual */
+    /** netra | bpb (legacy) | zeus | manual */
     val kind: String = "manual",
     val panelUrl: String = "",
     val lastFetchAt: Long = 0,
@@ -31,7 +31,7 @@ data class MySub(
             o.optString("kind", "manual"), o.optString("panel"), o.optLong("at"), o.optInt("n"),
             o.optInt("alive"), o.optLong("best", -1), o.optString("err"))
 
-        fun newId() = "sub-" + java.lang.Long.toString(System.currentTimeMillis(), 36)
+        fun newId() = "sub-" + java.util.UUID.randomUUID().toString()
     }
 }
 

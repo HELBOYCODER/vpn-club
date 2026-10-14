@@ -34,7 +34,6 @@ import com.helboy.vpnclub.ui.theme.CardBg
 import com.helboy.vpnclub.ui.theme.DarkBg
 import com.helboy.vpnclub.ui.theme.NeonCyan
 import com.helboy.vpnclub.ui.theme.TextTertiary
-import com.helboy.vpnclub.ui.theme.Palette
 
 /** ریشهٔ UI: چهار تب جدا — خانه، سرورها، اسکنر IP، تنظیمات. راست‌چین. */
 @Composable
@@ -51,7 +50,7 @@ fun AppRoot(
             bottomBar = {
                 NavigationBar(containerColor = CardBg) {
                     val colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = DarkBg, selectedTextColor = NeonCyan,
+                        selectedIconColor = Palette.onAccent, selectedTextColor = NeonCyan,
                         indicatorColor = NeonCyan, unselectedIconColor = TextTertiary,
                         unselectedTextColor = TextTertiary,
                     )

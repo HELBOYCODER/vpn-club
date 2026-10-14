@@ -71,7 +71,7 @@ class Tun2Socks(private val context: Context) {
             .setBlocking(true)
         // DNS انتخابی کاربر (تنظیمات) + یک پشتیبان متفاوت
         val dns = runCatching { AppSettings.of(context).dnsServer }.getOrDefault("1.1.1.1").trim()
-        for (d in listOf(dns, if (dns == "8.8.8.8") "1.1.1.1" else "8.8.8.8").distinct())
+        for (d in listOf(if (DnsEndpoint.isIp(dns)) dns else "1.1.1.1"))
             runCatching { builder.addDnsServer(d) }.onFailure { DiagLogger.log("TUN dns $d rejected: ${it.message}") }
         if (ipv6) {
             builder.addAddress(VPN_IP6, 126)

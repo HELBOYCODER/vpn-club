@@ -84,8 +84,8 @@ fun PanelInstallCard() {
             Text("با توکن کلادفلر خودتان، پنل روی حساب خودتان نصب می‌شود و لینک ساب آن خودکار به «ساب‌های من» در تب سرورها اضافه می‌شود.",
                 color = TextSecondary, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { panel = CloudflareDeployer.Panel.BPB }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.Cloud, null, tint = NeonCyan); Text("  نصب BPB", color = NeonCyan)
+                OutlinedButton(onClick = { panel = CloudflareDeployer.Panel.NETRA }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Rounded.Cloud, null, tint = NeonCyan); Text("  نصب Netra", color = NeonCyan)
                 }
                 OutlinedButton(onClick = { panel = CloudflareDeployer.Panel.ZEUS }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Rounded.Cloud, null, tint = StatusAmber); Text("  نصب Zeus", color = StatusAmber)
@@ -102,7 +102,7 @@ fun PanelDeployDialog(panel: CloudflareDeployer.Panel, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var token by remember { mutableStateOf("") }
     var showToken by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf(CloudflareDeployer.randomName(if (panel == CloudflareDeployer.Panel.BPB) "bpb" else "zeus")) }
+    var name by remember { mutableStateOf(CloudflareDeployer.randomName(if (panel == CloudflareDeployer.Panel.NETRA) "netra" else "zeus")) }
     var started by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { VpnController.clearDeploy() }
     val running = ui.task == Task.DEPLOY
@@ -117,7 +117,7 @@ fun PanelDeployDialog(panel: CloudflareDeployer.Panel, onClose: () -> Unit) {
                 if (result == null) {
                     Text("۱) توکن بسازید: صفحه‌ی کلادفلر باز می‌شود؛ پایین صفحه «Continue to summary» و بعد «Create Token» را بزنید و توکن را کپی کنید.",
                         color = TextSecondary, fontSize = 12.sp)
-                    OutlinedButton(onClick = { openUrl(ctx, CloudflareDeployer.tokenUrl()) }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { openUrl(ctx, CloudflareDeployer.tokenUrl(panel)) }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.OpenInBrowser, null, tint = NeonCyan); Text("  ساخت توکن در کلادفلر", color = NeonCyan)
                     }
                     Text("۲) توکن را اینجا بچسبانید (ذخیره نمی‌شود):", color = TextSecondary, fontSize = 12.sp)
@@ -203,7 +203,7 @@ fun MySubCard(sub: MySub, ui: VpnController.UiState) {
                 Column(Modifier.weight(1f)) {
                     Text(sub.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Chip(when (sub.kind) { "bpb" -> "BPB"; "zeus" -> "Zeus"; else -> "ساب" }, NeonIndigo)
+                        Chip(when (sub.kind) { "bpb" -> "BPB"; "netra" -> "Netra"; "zeus" -> "Zeus"; else -> "ساب" }, NeonIndigo)
                         if (sub.lastFetchAt > 0) Chip("${sub.aliveCount.fa()}/${sub.configCount.fa()} سالم", if (sub.aliveCount > 0) StatusGreen else StatusAmber)
                         if (sub.bestMs > 0) Chip("${sub.bestMs.fa()}ms", StatusGreen)
                     }

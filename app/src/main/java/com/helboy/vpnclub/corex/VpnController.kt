@@ -605,6 +605,7 @@ object VpnController {
 
     fun setDnsServer(v: String) {
         val d = v.trim().ifEmpty { "1.1.1.1" }
+        if (!DnsEndpoint.isValid(d)) { toast("DNS معتبر نیست: IP یا https://1.1.1.1/dns-query وارد کنید"); return }
         settings.dnsServer = d; _state.update { it.copy(dnsServer = d) }
         DiagLogger.log("SETTINGS dns=$d (با اتصال بعدی اعمال می‌شود)")
     }
@@ -626,7 +627,7 @@ object VpnController {
 
     fun clearDeploy() { if (_state.value.task != Task.DEPLOY) _state.update { it.copy(deploySteps = emptyList(), deployResult = null, deployError = "") } }
 
-    /** نصب پنل BPB / Zeus با توکن کلادفلر؛ لینک ساب خودکار به «ساب‌های من» اضافه و رفرش می‌شود. */
+    /** نصب پنل Netra / Zeus با توکن کلادفلر؛ لینک ساب خودکار به «ساب‌های من» اضافه و رفرش می‌شود. */
     fun deployPanel(panel: CloudflareDeployer.Panel, token: String, workerName: String) = runTask(Task.DEPLOY) {
         _state.update { it.copy(deploySteps = emptyList(), deployResult = null, deployError = "") }
         try {
@@ -640,7 +641,7 @@ object VpnController {
             DiagLogger.log("CF_DEPLOY done ${r.panel} host=${r.host} sub=${if (r.subUrl.isNotEmpty()) "yes" else "no"}")
             if (r.subUrl.isNotEmpty()) {
                 val sub = MySub(MySub.newId(), "${r.panel.label} · ${r.workerName}", r.subUrl,
-                    if (r.panel == CloudflareDeployer.Panel.BPB) "bpb" else "zeus", r.panelUrl)
+                    if (r.panel == CloudflareDeployer.Panel.NETRA) "netra" else "zeus", r.panelUrl)
                 saveSubs(_state.value.mySubs + sub)
                 _state.update { it.copy(deploySteps = it.deploySteps + "لینک ساب به «ساب‌های من» اضافه شد") }
                 // ورکر تازه چند ثانیه طول می‌کشد تا در همه‌ی لبه‌ها فعال شود؛ رفرش بعد از پایان همین کار
@@ -961,7 +962,7 @@ object VpnController {
                 if (psiphonOnlyUp) continue // سایفون خودش دوباره وصل می‌شود
                 // گیمینگ: وسط بازی برای یک قطعی کوتاه سرور عوض نشود (۴ شکست پیاپی = ۴۰ ثانیه)
                 val limit = if (settings.connStyle == "gaming") 4 else 2
-                if (++fails >= limit && settings.autoFailover) { fails = 0; failover() }
+                if (++fails >= limit && settings.autoFailover && settings.connStyle != "gaming") { fails = 0; failover() }
             }
         }
     }

@@ -33,12 +33,14 @@ class CorexLiveTest {
 
     @Test
     fun tcpPingWorksAgainstKnownHost() {
+        org.junit.Assume.assumeTrue("Set HELLBOY_LIVE_TESTS=1 for external network probes", System.getenv("HELLBOY_LIVE_TESTS") == "1")
         val ms = HealthTester.tcpPing("1.1.1.1", 443, timeoutMs = 4000)
         assertTrue("1.1.1.1:443 باید پاسخ دهد (شد: $ms)", ms > 0)
     }
 
     @Test
     fun cloudflareScanFindsCleanIps() {
+        org.junit.Assume.assumeTrue("Set HELLBOY_LIVE_TESTS=1 for external network probes", System.getenv("HELLBOY_LIVE_TESTS") == "1")
         val found = CloudflareScanner.scan(
             perRange = 8, ports = listOf(443), maxConcurrency = 24, timeoutMs = 1500
         )
@@ -49,6 +51,7 @@ class CorexLiveTest {
 
     @Test
     fun subscriptionSourcesYieldParsableConfigs() {
+        org.junit.Assume.assumeTrue("Set HELLBOY_LIVE_TESTS=1 for external network probes", System.getenv("HELLBOY_LIVE_TESTS") == "1")
         val fetcher = SubscriptionFetcher()
         val raws = fetcher.fetchAll(SubscriptionFetcherTestSources.VERIFIED)
         println("fetched ${raws.size} raw config lines")

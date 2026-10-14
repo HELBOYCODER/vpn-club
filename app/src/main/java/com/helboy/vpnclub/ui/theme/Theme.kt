@@ -33,6 +33,14 @@ fun HellboyTheme(content: @Composable () -> Unit) {
         onSurface = p.textPrimary, onBackground = p.textPrimary, outline = p.border,
     )
     CompositionLocalProvider(LocalPalette provides p) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        val font = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(com.helboy.vpnclub.R.font.vazirmatn))
+        val base = androidx.compose.material3.Typography()
+        val typography = base.copy(
+            bodyLarge = base.bodyLarge.copy(fontFamily = font), bodyMedium = base.bodyMedium.copy(fontFamily = font),
+            bodySmall = base.bodySmall.copy(fontFamily = font), titleLarge = base.titleLarge.copy(fontFamily = font),
+            titleMedium = base.titleMedium.copy(fontFamily = font), titleSmall = base.titleSmall.copy(fontFamily = font),
+            labelLarge = base.labelLarge.copy(fontFamily = font), labelMedium = base.labelMedium.copy(fontFamily = font),
+            labelSmall = base.labelSmall.copy(fontFamily = font), headlineSmall = base.headlineSmall.copy(fontFamily = font))
+        MaterialTheme(colorScheme = scheme, typography = typography, content = content)
     }
 }

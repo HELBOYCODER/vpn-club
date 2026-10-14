@@ -97,7 +97,10 @@ fun HellboyFace(
     val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND } }
 
     Box(
-        modifier = modifier.size(size)
+        modifier = modifier.semantics {
+            contentDescription = if (connected) "قطع اتصال" else if (busy) "لغو اتصال" else "اتصال هوشمند"
+            stateDescription = if (connected) "متصل" else if (busy) "در حال اتصال" else "قطع"
+        }.size(size)
             .semantics { contentDescription = if (connected) "قطع اتصال" else "اتصال" }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,

@@ -9,10 +9,22 @@ class PanelDeployTest {
 
     @Test fun tokenUrlRequestsNeededPermissions() {
         val u = java.net.URLDecoder.decode(CloudflareDeployer.tokenUrl(), "UTF-8")
-        for (k in listOf("workers_scripts", "workers_kv_storage", "d1", "user_details", "account_settings"))
+        for (k in listOf("workers_scripts", "workers_kv_storage", "account_settings"))
             assertTrue("missing $k", u.contains("\"key\":\"$k\""))
+        assertFalse(u.contains("\"key\":\"d1\""))
+        assertTrue(java.net.URLDecoder.decode(CloudflareDeployer.tokenUrl(CloudflareDeployer.Panel.ZEUS), "UTF-8").contains("\"key\":\"d1\""))
         assertTrue(u.startsWith("https://dash.cloudflare.com/profile/api-tokens?"))
         assertTrue(u.contains("accountId=*") && u.contains("zoneId=all"))
+    }
+
+    @Test fun netraBindingsAndPrivatePathMatchPinnedWorker() {
+        val bindings = CloudflareDeployer.netraBindings("namespace", "unique-uuid", "unique-password", "private-path")
+        val names = (0 until bindings.length()).map { bindings.getJSONObject(it).getString("name") }.toSet()
+        assertEquals(setOf("kv", "UUID", "TR_PASS", "SUB_PATH"), names)
+        assertFalse(bindings.toString().contains("CF_API_TOKEN"))
+        val (panel, sub) = CloudflareDeployer.netraUrls("hb.example.workers.dev", "private-path")
+        assertEquals("https://hb.example.workers.dev/private-path/panel", panel)
+        assertEquals("https://hb.example.workers.dev/private-path/sub/raw?app=xray&raw=1", sub)
     }
 
     @Test fun workerNameRules() {

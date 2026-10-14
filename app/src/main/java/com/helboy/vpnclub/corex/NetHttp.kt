@@ -39,10 +39,10 @@ object NetHttp {
      */
     fun execute(req: Request, tag: String): Response {
         var last: Exception? = null
-        for ((route, client) in routes()) {
+        for ((route, client) in if (req.method == "GET" || req.method == "HEAD") routes() else routes().take(1)) {
             try {
                 val r = client.newCall(req).execute()
-                DiagLogger.log("HTTP $tag ${req.method} ${req.url.host}${req.url.encodedPath.take(60)} via=$route -> ${r.code}")
+                DiagLogger.log("HTTP $tag ${req.method} ${req.url.host} via=$route -> ${r.code}")
                 return r
             } catch (e: Exception) {
                 last = e
@@ -53,7 +53,7 @@ object NetHttp {
     }
 
     /** GET متن ساده؛ خطای HTTP → استثنا. */
-    fun getText(url: String, tag: String, ua: String = "HellboyVPN/3 (Android)"): String {
+    fun getText(url: String, tag: String, ua: String = "HellboyVPN/4 (Android)"): String {
         val req = Request.Builder().url(url).header("User-Agent", ua).build()
         execute(req, tag).use { r ->
             if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")

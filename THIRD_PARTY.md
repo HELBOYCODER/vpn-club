@@ -18,3 +18,8 @@
 - Cloudflare WARP: device registration via the public WARP API; keys generated on-device (X25519, RFC 7748).
 - ZeroNet by zeghostwriter (MIT): https://github.com/zeghostwriter/ZeroNet — features re-implemented on the Xray engine (serverless profile, connection styles, routing profiles, DNS choice, tested feed list incl. its crowd-data verified list, Cloudflare alt ports, empty-host fix). No ZeroNet code is bundled.
 - Netra Panel by netrair (MIT): https://github.com/netrair/netra-panel — default cipher-suite list and two-stage finalmask fragment values reused for the "Netra" profile.
+
+## Netra / Vazirmatn
+
+- Netra Panel: https://github.com/netrair/netra-panel, MIT, pinned `9f2c7824fee248005bb0bb60b3da63914fd21b8c`. Worker is downloaded during user-authorized installation, not bundled or modified.
+- Vazirmatn: SIL Open Font License 1.1. Font and notice sourced from ZeroNet at `e7f22ed7f40f267a91fd592677d237fdab066931`. Notice bundled in `app/src/main/assets/licenses/Vazirmatn-OFL.txt`.

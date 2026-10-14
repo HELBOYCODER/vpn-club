@@ -20,6 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -109,7 +112,10 @@ fun ParticleOrb(
     }
 
     Box(
-        modifier = modifier.size(size).clickable(
+        modifier = modifier.semantics {
+            contentDescription = if (connected) "قطع اتصال" else if (busy) "لغو اتصال" else "اتصال هوشمند"
+            stateDescription = if (connected) "متصل" else if (busy) "در حال اتصال" else "قطع"
+        }.size(size).clickable(
             interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

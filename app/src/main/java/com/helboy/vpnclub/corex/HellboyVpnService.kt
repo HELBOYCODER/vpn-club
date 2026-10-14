@@ -85,13 +85,7 @@ class HellboyVpnService : VpnService() {
             return
         }
         launched?.stop(); launched = null
-        var l = TunnelLauncher.launch(xray!!, entry)
-        if (l == null) {
-            // احتمال خطای geodata در قوانین مسیریابی؛ یک بار بدون قوانین امتحان کن
-            DiagLogger.log("SERVICE retry without routing: ${xray?.lastError.orEmpty().take(120)}")
-            xray = XrayCore(SOCKS_PORT, useRouting = false).also { it.setAppContext(this) }
-            l = TunnelLauncher.launch(xray!!, entry)
-        }
+        val l = TunnelLauncher.launch(xray!!, entry)
         if (l == null) {
             val err = xray?.lastError.orEmpty().take(200)
             DiagLogger.log("SERVICE core_fail ${entry.config.host}:${entry.config.port} $err")

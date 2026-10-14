@@ -17,18 +17,18 @@ import java.util.TimeZone
 import java.util.UUID
 
 /**
- * نصب پنل شخصی روی حساب کلادفلر خود کاربر با توکن API — همان کاری که BPB-Wizard می‌کند،
+ * نصب پنل شخصی روی حساب کلادفلر خود کاربر با توکن API،
  * داخل اپ و بدون ترمینال:
  *   توکن ← حساب ← زیردامنه‌ی workers.dev ← KV یا D1 ← آپلود ورکر ← فعال‌سازی ← لینک ساب
  *
  * کد پنل در لحظه‌ی نصب از مخزن رسمی خودش دانلود می‌شود (داخل اپ کپی/تغییر داده نمی‌شود):
- *  - BPB:  github.com/bia-pain-bache/BPB-Worker-Panel (GPL-3)  — ساب: /<securePath>/sub/raw?app=xray
+ *  - Netra: github.com/netrair/netra-panel (MIT), pinned worker revision
  *  - Zeus: github.com/panel-zeus/Z-E-U-S (استفاده‌ی شخصی)     — ساب: /sub/<username>
  * توکن کاربر در اپ ذخیره نمی‌شود و در لاگ نمی‌آید.
  */
 object CloudflareDeployer {
 
-    enum class Panel(val label: String) { BPB("BPB Panel"), ZEUS("Zeus Panel") }
+    enum class Panel(val label: String) { NETRA("Netra Panel"), ZEUS("Zeus Panel") }
 
     data class Result(
         val panel: Panel,
@@ -45,19 +45,14 @@ object CloudflareDeployer {
     class DeployException(msg: String) : Exception(msg)
 
     private const val API = "https://api.cloudflare.com/client/v4"
-    private const val BPB_WORKER_URL = "https://github.com/bia-pain-bache/BPB-Worker-Panel/releases/latest/download/worker.js"
+    private const val NETRA_WORKER_URL = "https://raw.githubusercontent.com/netrair/netra-panel/9f2c7824fee248005bb0bb60b3da63914fd21b8c/worker.js"
     private const val ZEUS_WORKER_URL = "https://raw.githubusercontent.com/panel-zeus/Z-E-U-S/main/Source.js"
 
     /** لینک ساخت توکن با دسترسی‌های لازم از پیش انتخاب‌شده (مثل BPB-Wizard + D1 برای Zeus). */
-    fun tokenUrl(): String {
-        val perms = JSONArray(listOf(
-            JSONObject().put("key", "workers_scripts").put("type", "edit"),
-            JSONObject().put("key", "workers_kv_storage").put("type", "edit"),
-            JSONObject().put("key", "d1").put("type", "edit"),
-            JSONObject().put("key", "page").put("type", "edit"),
-            JSONObject().put("key", "user_details").put("type", "read"),
-            JSONObject().put("key", "account_settings").put("type", "read"),
-        ))
+    fun tokenUrl(panel: Panel = Panel.NETRA): String {
+        val keys = mutableListOf("workers_scripts", "workers_kv_storage", "account_settings")
+        if (panel == Panel.ZEUS) keys += "d1"
+        val perms = JSONArray(keys.map { key -> JSONObject().put("key", key).put("type", if (key == "account_settings") "read" else "edit") })
         fun e(v: String) = URLEncoder.encode(v, "UTF-8")
         return "https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=${e(perms.toString())}" +
             "&accountId=*&zoneId=all&name=${e("Hellboy-VPN")}"
@@ -92,7 +87,7 @@ object CloudflareDeployer {
         val email = runCatching { call(t, "GET", "/user").optJSONObject("result")?.optString("email").orEmpty() }.getOrDefault("")
         step("حساب: ${acc.optString("name").ifEmpty { accId.take(8) }}")
 
-        if (runCatching { call(t, "GET", "/accounts/$accId/workers/scripts/$workerName/settings") }.isSuccess)
+        if (workerExists(t, accId, workerName))
             throw DeployException("ورکری با نام «$workerName» از قبل وجود دارد؛ نام دیگری انتخاب کنید")
 
         step("زیردامنه‌ی workers.dev…")
@@ -100,12 +95,14 @@ object CloudflareDeployer {
         val host = "$workerName.$sub.workers.dev"
 
         step("دانلود کد ${panel.label} از مخزن رسمی…")
-        val code = NetHttp.getText(if (panel == Panel.BPB) BPB_WORKER_URL else ZEUS_WORKER_URL, "CF_CODE")
+        val code = NetHttp.getText(if (panel == Panel.NETRA) NETRA_WORKER_URL else ZEUS_WORKER_URL, "CF_CODE")
         if (code.length < 10_000 || !looksLikeWorkerModule(code)) throw DeployException("کد پنل دانلود نشد یا ناقص است (${code.length} بایت)")
+        if (panel == Panel.NETRA && sha256Hex(code) != "050a80a4344e1862f60d2b2fea7e4c7f9217fca16a02fc59fc5b92d3f0b76e93")
+            throw DeployException("کد Netra با نسخه‌ی بررسی‌شده مطابقت ندارد؛ نصب متوقف شد")
         step("کد دریافت شد (${code.length / 1024} KB)")
 
         return when (panel) {
-            Panel.BPB -> deployBpb(t, accId, email, workerName, host, code, ::step)
+            Panel.NETRA -> deployNetra(t, accId, email, workerName, host, code, ::step)
             Panel.ZEUS -> deployZeus(t, accId, workerName, host, code, ::step)
         }
     }
@@ -116,33 +113,55 @@ object CloudflareDeployer {
 
     // ─────────────────────────────── BPB ───────────────────────────────
 
-    private fun deployBpb(t: String, accId: String, email: String, name: String, host: String, code: String, step: (String) -> Unit): Result {
-        step("ساخت KV…")
+    private fun deployNetra(t: String, accId: String, email: String, name: String, host: String, code: String, step: (String) -> Unit): Result {
+        // Netra's defaults are public. Set unique credentials through supported bindings,
+        // not through a copy of BPB's settings, and never persist the account API token.
+        val securePath = randomString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 24, 24)
+        val password = randomString("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", 20, 20)
+        step("ساخت KV و رمز اختصاصی Netra…")
         val kvId = call(t, "POST", "/accounts/$accId/storage/kv/namespaces",
-            JSONObject().put("title", "$name-workers-${isoNow()}")).getJSONObject("result").getString("id")
+            JSONObject().put("title", "$name-netra-${isoNow()}")).getJSONObject("result").getString("id")
+        var uploaded = false
+        try {
+            putKv(t, accId, kvId, "pwd", password)
+            putKv(t, accId, kvId, "authDisabled", "false")
+            val bindings = netraBindings(kvId, UUID.randomUUID().toString(),
+                randomString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 24, 24), securePath)
+            step("آپلود Netra و فعال‌سازی…")
+            uploadWorker(t, accId, name, code, bindings)
+            uploaded = true
+            enableSubdomain(t, accId, name, step)
+        } catch (e: Exception) {
+            // Only resources created by this attempt may be rolled back.
+            if (uploaded) runCatching { call(t, "DELETE", "/accounts/$accId/workers/scripts/$name") }
+            runCatching { call(t, "DELETE", "/accounts/$accId/storage/kv/namespaces/$kvId") }
+            throw e
+        }
+        val (panelUrl, subUrl) = netraUrls(host, securePath)
+        // A newly deployed worker needs time to propagate. Don't manufacture a health result.
+        step("✓ Netra نصب شد: $host")
+        return Result(Panel.NETRA, name, host, panelUrl, subUrl, password,
+            note = "رمز پنل را یادداشت کنید. ساب خام Xray اضافه شد؛ دریافت و تست سرورها جداگانه انجام می‌شود. توکن کلادفلر در ورکر ذخیره نشده؛ تغییرات پنل و KV فعال است، عملیات حساب کلادفلر را از داشبورد انجام دهید.")
+    }
 
-        // تنظیمات اولیه‌ی پنل، همان قالب BPB-Wizard (EMBEDED_SETTINGS)
-        val securePath = randomString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", 20, 32)
-        val settings = JSONObject()
-            .put("accID", accId).put("accEmail", email).put("apiToken", t)
-            .put("vlUUID", UUID.randomUUID().toString())
-            .put("trPass", randomString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 20, 32))
-            .put("securePath", securePath)
-            .put("proxyIpMode", "proxyip").put("proxyIPs", JSONArray()).put("prefixes", JSONArray())
-            .put("fallback", "").put("dohUrl", "").put("mainDomain", host)
-        val script = "// @ts-nocheck\nconst EMBEDED_SETTINGS = $settings;\n$code"
-
-        step("آپلود ورکر…")
-        uploadWorker(t, accId, name, script, JSONArray().put(
-            JSONObject().put("type", "kv_namespace").put("name", "kv").put("namespace_id", kvId)))
-        enableSubdomain(t, accId, name, step)
-
+    internal fun netraUrls(host: String, securePath: String): Pair<String, String> {
         val p = URLEncoder.encode(securePath, "UTF-8")
-        val panelUrl = "https://$host/$p/panel"
-        val subUrl = "https://$host/$p/sub/raw?app=xray"
-        step("✓ نصب شد: $host")
-        return Result(Panel.BPB, name, host, panelUrl, subUrl,
-            note = "رمز پنل را در اولین ورود به پنل خودتان تعیین می‌کنید.")
+        return "https://$host/$p/panel" to "https://$host/$p/sub/raw?app=xray&raw=1"
+    }
+
+    internal fun netraBindings(kvId: String, uuid: String, trojanPassword: String, securePath: String): JSONArray =
+        JSONArray().put(JSONObject().put("type", "kv_namespace").put("name", "kv").put("namespace_id", kvId))
+            .put(JSONObject().put("type", "secret_text").put("name", "UUID").put("text", uuid))
+            .put(JSONObject().put("type", "secret_text").put("name", "TR_PASS").put("text", trojanPassword))
+            .put(JSONObject().put("type", "secret_text").put("name", "SUB_PATH").put("text", securePath))
+
+    private fun putKv(t: String, accId: String, kvId: String, key: String, value: String) {
+        val req = Request.Builder().url("$API/accounts/$accId/storage/kv/namespaces/$kvId/values/$key")
+            .header("Authorization", "Bearer $t")
+            .put(value.toRequestBody("text/plain".toMediaType())).build()
+        NetHttp.execute(req, "CF_KV").use { r ->
+            if (!r.isSuccessful) throw DeployException("تنظیم KV انجام نشد (HTTP ${r.code})")
+        }
     }
 
     // ─────────────────────────────── Zeus ───────────────────────────────
@@ -203,6 +222,16 @@ object CloudflareDeployer {
 
     // ─────────────────────────────── API ───────────────────────────────
 
+    private fun workerExists(t: String, account: String, name: String): Boolean {
+        val req = Request.Builder().url("$API/accounts/$account/workers/scripts/$name/settings")
+            .header("Authorization", "Bearer $t").build()
+        NetHttp.execute(req, "CF_EXISTS").use { r ->
+            if (r.code == 404) return false
+            if (r.isSuccessful) return true
+            throw DeployException("بررسی نام ورکر انجام نشد (HTTP ${r.code})؛ هیچ ورکری جایگزین نشد")
+        }
+    }
+
     private fun workersSubdomain(t: String, accId: String): String {
         runCatching { call(t, "GET", "/accounts/$accId/workers/subdomain").optJSONObject("result")?.optString("subdomain") }
             .getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -242,7 +271,7 @@ object CloudflareDeployer {
         NetHttp.execute(req, "CF_API").use { r ->
             val text = r.body?.string().orEmpty()
             val o = runCatching { JSONObject(text) }.getOrElse { throw DeployException("پاسخ نامعتبر از کلادفلر (HTTP ${r.code})") }
-            if (!o.optBoolean("success", r.isSuccessful)) {
+            if (!r.isSuccessful || !o.optBoolean("success", false)) {
                 val errs = o.optJSONArray("errors")
                 val msg = (0 until (errs?.length() ?: 0)).joinToString(" | ") { i ->
                     errs!!.getJSONObject(i).let { e -> "${e.optInt("code")}: ${e.optString("message")}" }

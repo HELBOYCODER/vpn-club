@@ -129,6 +129,9 @@ class XrayCore(
         val outbound = outboundFor(c).put("tag", "proxy")
         val serverless = c.scheme == SERVERLESS
         val rp = routingPrefs()
+        val prefs = if (useRouting) appContext?.let { AppSettings.of(it) } else null
+        val resolver = prefs?.dnsServer?.takeIf { DnsEndpoint.isValid(it) } ?: "1.1.1.1"
+        val coreDns = serverless || prefs != null
         val socksIn = JSONObject()
             .put("tag", "socks-in")
             .put("listen", "127.0.0.1")
@@ -143,7 +146,10 @@ class XrayCore(
             .put("destOverride", JSONArray(listOf("http", "tls", "quic"))).put("routeOnly", true))
         val root = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
-            .put("inbounds", JSONArray().put(socksIn))
+             .put("inbounds", JSONArray().put(socksIn).also { ins ->
+                if (prefs?.lanShare == true && prefs.lanPassword.length >= 12)
+                    lanInbounds(prefs.lanPassword).forEach { ins.put(it) }
+            })
             .put("outbounds", JSONArray().put(outbound).put(
                 JSONObject().put("tag", "direct").put("protocol", "freedom")
             ).put(
@@ -155,7 +161,7 @@ class XrayCore(
                         .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5"))
                         .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5")))))
                 // بدون سرور: DNS گوشی (پورت ۵۳) به DNS داخلی هسته می‌رود که با DoH از روی فرگمنت می‌پرسد
-                if (serverless) arr.put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
+                if (coreDns) arr.put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
             })
             .put("routing", JSONObject()
                 .put("domainStrategy", "AsIs")
@@ -164,8 +170,10 @@ class XrayCore(
                         if (values.isNotEmpty()) rules.put(JSONObject().put("type", "field")
                             .put(key, JSONArray(values)).put("outboundTag", out))
                     }
+                    if (coreDns) {
+                        rules.put(JSONObject().put("type", "field").put("network", "tcp,udp").put("port", "53").put("outboundTag", "dns-out"))
+                    }
                     if (serverless) {
-                        rules.put(JSONObject().put("type", "field").put("network", "udp").put("port", "53").put("outboundTag", "dns-out"))
                         // QUIC (UDP 443) را ببند تا مرورگر/اپ‌ها روی TCP بیایند که فرگمنت رویش کار می‌کند
                         rules.put(JSONObject().put("type", "field").put("network", "udp").put("port", "443").put("outboundTag", "block"))
                     }
@@ -184,11 +192,24 @@ class XrayCore(
                         rule("domain", pDom, "proxy"); rule("ip", pIp, "proxy")
                     }
                 }))
-        if (serverless) root.put("dns", JSONObject()
-            // DoH اول (با فرگمنت، بدون مسمومیت DNS ایران)؛ اگر DoH بسته بود DNS سیستم (localhost) به‌عنوان آخرین چاره
-            .put("servers", JSONArray(listOf("https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query", "localhost")))
+        if (coreDns) root.put("dns", JSONObject()
+            // از DNS انتخاب‌شده استفاده کن؛ شکست DoH نباید به DNS سیستم عقب‌نشینی کند.
+            .put("servers", JSONArray(if (serverless) listOf("https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query") else listOf(resolver)))
             .put("queryStrategy", "UseIPv4"))
         return root.toString()
+    }
+
+    internal fun lanInbounds(password: String): List<JSONObject> {
+        require(password.length >= 12)
+        fun inbound(protocol: String, port: Int): JSONObject = JSONObject()
+            .put("tag", "lan-$protocol").put("listen", "0.0.0.0").put("port", port).put("protocol", protocol)
+            .put("settings", JSONObject().put("accounts", JSONArray().put(
+                JSONObject().put("user", "hellboy").put("pass", password))).also {
+                    if (protocol == "socks") it.put("auth", "password").put("udp", false)
+                })
+            .put("sniffing", JSONObject().put("enabled", true).put("routeOnly", true)
+                .put("destOverride", JSONArray(listOf("http", "tls"))))
+        return listOf(inbound("socks", 10818), inbound("http", 10819))
     }
 
     /** تنظیمات مسیریابی کاربر (فقط هسته‌ی سرویس). */

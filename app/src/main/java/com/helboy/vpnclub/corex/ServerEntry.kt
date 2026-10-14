@@ -30,6 +30,9 @@ data class ServerEntry(
     /** کلید یکتا فقط بر پایه‌ی سرور (بدون IP تزریقی/پروفایل) — برای جلوگیری از تکرار یک سرور. */
     val serverKey: String get() = "${config.scheme}|${config.host}|${config.port}|${config.uuidOrUser}"
 
+    val favoriteKey: String get() = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(serverKey.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
     val country: String get() = countryOf(config.tag)
 
     val injected: Boolean get() = config.isInjected

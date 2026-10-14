@@ -19,7 +19,7 @@ class SubscriptionFetcher(
         val futures: List<Future<List<String>>> = urls.map { u -> pool.submit<List<String>> { fetchOne(u) } }
         val out = mutableListOf<String>()
         futures.forEach { f ->
-            try { out += f.get(timeoutMs + 4_000L, TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+            try { out += f.get(timeoutMs + 4_000L, TimeUnit.MILLISECONDS) } catch (_: Exception) { f.cancel(true) }
         }
         return out.distinct()
     }
@@ -30,7 +30,7 @@ class SubscriptionFetcher(
         val text = if (isLikelyBase64(body)) decodeBase64(body) ?: body else body
         return text.lineSequence()
             .map { it.trim() }
-            .filter { it.isNotEmpty() && it.length < 2_048 && looksLikeConfig(it) }
+            .filter { it.isNotEmpty() && it.length <= 16_384 && looksLikeConfig(it) }
             .take(maxPerSource)
             .toList()
     }
@@ -39,7 +39,8 @@ class SubscriptionFetcher(
         line.startsWith("vless://") || line.startsWith("vmess://") ||
         line.startsWith("trojan://") || line.startsWith("ss://") ||
         line.startsWith("hysteria2://") || line.startsWith("hy2://") ||
-        line.startsWith("socks://") || line.startsWith("socks5://")
+        line.startsWith("socks://") || line.startsWith("socks5://") ||
+        line.startsWith("wireguard://") || line.startsWith("wg://")
 
     /** اگر متن، دنباله‌ای از کاراکترهای base64 بدون فاصله باشد (لینک اشتراک کدشده). */
     private fun isLikelyBase64(s: String): Boolean {
@@ -48,7 +49,7 @@ class SubscriptionFetcher(
     }
 
     private fun decodeBase64(s: String): String? = try {
-        val normalized = s.trim().replace('-', '+').replace('_', '/')
+        val normalized = s.replace("\\s".toRegex(), "").replace('-', '+').replace('_', '/')
         val padded = normalized + "=".repeat((4 - normalized.length % 4) % 4)
         String(Base64.getDecoder().decode(padded))
     } catch (_: Exception) { null }

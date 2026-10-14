@@ -27,6 +27,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -62,10 +76,40 @@ fun ServersScreen(
     onRescan: () -> Unit,
     onInject: () -> Unit,
 ) {
+    var search by rememberSaveable { mutableStateOf("") }
+    var favoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var protocol by rememberSaveable { mutableStateOf("") }
+    var favorites by remember { mutableStateOf(VpnController.settings().favoriteServers) }
+    val filtered = ui.servers.filter { s ->
+        (!favoritesOnly || s.favoriteKey in favorites) && (protocol.isEmpty() || s.config.scheme == protocol) &&
+        (search.isBlank() || listOf(s.config.tag, s.config.host, s.country, s.config.scheme)
+            .any { it.contains(search.trim(), ignoreCase = true) })
+    }.sortedByDescending { it.favoriteKey in favorites }
     var actionsFor by remember { mutableStateOf<ServerEntry?>(null) }
     var showImport by remember { mutableStateOf(false) }
     var showAddSub by remember { mutableStateOf(false) }
     if (showAddSub) AddSubDialog(onClose = { showAddSub = false })
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val out = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val n = input.read(buffer); if (n < 0) break
+                            require(out.size() + n <= 1_048_576) { "فایل باید کوچک‌تر از یک مگابایت باشد" }
+                            out.write(buffer, 0, n)
+                        }
+                        out.toString("UTF-8")
+                    } ?: error("فایل باز نشد")
+                }
+                VpnController.importConfigs(text)
+            } catch (e: Exception) { VpnController.notify(e.message ?: "خواندن فایل ناموفق بود") }
+        }
+    }
     val clipboard = LocalClipboardManager.current
     actionsFor?.let { s -> ServerActionsDialog(s, onClose = { actionsFor = null }) }
     if (showImport) ImportConfigDialog(onClose = { showImport = false })
@@ -97,6 +141,18 @@ fun ServersScreen(
                         VpnController.notify("لینک ${minOf(10, ui.servers.size)} سرور برتر کپی شد (با IP تمیز)")
                     }, modifier = Modifier.weight(1f))
             }
+            androidx.compose.material3.TextButton(onClick = { filePicker.launch(arrayOf("text/*", "application/octet-stream")) }, enabled = !ui.testing) {
+                Text("وارد کردن فایل کانفیگ / ساب Base64")
+            }
+            OutlinedTextField(search, { search = it }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                label = { Text("جست‌وجو: نام، کشور، آدرس یا پروتکل") }, singleLine = true)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(favoritesOnly, { favoritesOnly = !favoritesOnly }, label = { Text("علاقه‌مندی‌ها") })
+                FilterChip(protocol.isEmpty(), { protocol = "" }, label = { Text("همه") })
+                ui.servers.map { it.config.scheme }.distinct().sorted().forEach { id ->
+                    FilterChip(protocol == id, { protocol = id }, label = { Text(id.uppercase()) })
+                }
+            }
             TaskLine(ui)
         }
 
@@ -111,7 +167,7 @@ fun ServersScreen(
                 androidx.compose.material3.TextButton(onClick = { showAddSub = true }) { Text("+ افزودن ساب", color = NeonCyan) }
             }
             ServerSourceSelector(ui)
-            if (ui.mySubs.isEmpty()) Text("از «تنظیمات ← پنل شخصی روی کلادفلر» پنل BPB یا Zeus نصب کنید؛ لینک ساب خودکار اینجا می‌آید.",
+            if (ui.mySubs.isEmpty()) Text("از «تنظیمات ← پنل شخصی روی کلادفلر» پنل Netra یا Zeus نصب کنید؛ لینک ساب خودکار اینجا می‌آید.",
                 color = TextTertiary, fontSize = 12.sp)
         }
         for (sub in ui.mySubs) item(key = "sub-" + sub.id) { MySubCard(sub, ui) }
@@ -125,9 +181,12 @@ fun ServersScreen(
             }
         }
 
+        if (filtered.isEmpty() && ui.servers.isNotEmpty()) item {
+            Text("سروری با این فیلتر پیدا نشد؛ جست‌وجو یا فیلتر را تغییر دهید.", color = TextSecondary)
+        }
         // دسته‌بندی: قابل اینجکت (کلادفلر) ← CDN ← Reality ← مستقیم
         val order = listOf("کلادفلر · قابل اینجکت", "CDN (احتمالاً قابل اینجکت)", "Reality", "مستقیم")
-        val groups = ui.servers.groupBy { it.category }.toList().sortedBy { order.indexOf(it.first).let { i -> if (i < 0) 99 else i } }
+        val groups = filtered.groupBy { it.category }.toList().sortedBy { order.indexOf(it.first).let { i -> if (i < 0) 99 else i } }
         var rank = 0
         for ((cat, list) in groups) {
             item(key = "h-$cat") {
@@ -144,7 +203,11 @@ fun ServersScreen(
                         busy = ui.testing,
                         onClick = { if (!ui.busyConnecting) onConnect(s) },
                         onInject = { VpnController.injectInto(s) },
-                        onMore = { actionsFor = s })
+                        onMore = { actionsFor = s }, favorite = s.favoriteKey in favorites,
+                        onFavorite = {
+                            favorites = if (s.favoriteKey in favorites) favorites - s.favoriteKey else favorites + s.favoriteKey
+                            VpnController.settings().favoriteServers = favorites
+                        })
                 }
             }
         }
@@ -165,7 +228,7 @@ fun TaskLine(ui: VpnController.UiState) {
 @Composable
 private fun ServerRow(
     rank: Int, s: ServerEntry, active: Boolean, selectedIp: String, busy: Boolean,
-    onClick: () -> Unit, onInject: () -> Unit, onMore: () -> Unit,
+    onClick: () -> Unit, onInject: () -> Unit, onMore: () -> Unit, favorite: Boolean, onFavorite: () -> Unit,
 ) {
     ClubCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -196,7 +259,11 @@ private fun ServerRow(
                 Text(if (s.latencyMs > 0) "${s.latencyMs.fa()} ms" else "بدون پاسخ",
                     color = if (s.latencyMs > 0) StatusGreen else StatusAmber, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 if (active) Text("متصل", color = StatusGreen, fontSize = 11.sp)
-                IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onFavorite, modifier = Modifier.size(48.dp)) {
+                    Icon(if (favorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                        if (favorite) "حذف از علاقه‌مندی‌ها" else "افزودن به علاقه‌مندی‌ها", tint = if (favorite) StatusAmber else TextTertiary)
+                }
+                IconButton(onClick = onMore, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Rounded.MoreVert, "کپی · QR · ویرایش", tint = TextSecondary)
                 }
                 // اینجکت دستی IP منتخب روی همین سرور

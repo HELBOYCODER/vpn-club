@@ -47,7 +47,7 @@ private fun styleHint(id: String) = when (id) {
     else -> "بهترین سرور تست‌شده، با پشتیبان آماده (پیشنهادی)"
 }
 
-private val DNS = listOf("1.1.1.1" to "کلادفلر", "8.8.8.8" to "گوگل", "9.9.9.9" to "Quad9", "94.140.14.14" to "ضد تبلیغ")
+private val DNS = listOf("1.1.1.1" to "کلادفلر", "8.8.8.8" to "گوگل", "9.9.9.9" to "Quad9", "94.140.14.14" to "ضد تبلیغ", "https://1.1.1.1/dns-query" to "DoH رمزدار")
 
 /** سبک اتصال + DNS + قوانین مسیریابی (مثل ZeroNet). */
 @Composable
@@ -73,10 +73,10 @@ fun ConnectionCard(ui: VpnController.UiState) {
                 }
             }
             OutlinedTextField(value = customDns, onValueChange = { customDns = it.trim() }, singleLine = true,
-                label = { Text("DNS دلخواه (IP)", fontSize = 11.sp) }, modifier = Modifier.fillMaxWidth(),
+                label = { Text("DNS دلخواه (IP یا DoH با IP)", fontSize = 11.sp) }, modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     TextButton(onClick = { if (customDns.isNotEmpty()) VpnController.setDnsServer(customDns) },
-                        enabled = customDns.matches(Regex("^[0-9a-fA-F:.]{3,45}$"))) { Text("ثبت", color = NeonCyan) }
+                        enabled = com.helboy.vpnclub.corex.DnsEndpoint.isValid(customDns)) { Text("ثبت", color = NeonCyan) }
                 })
             Text("با اتصال بعدی اعمال می‌شود", color = TextSecondary, fontSize = 11.sp)
 

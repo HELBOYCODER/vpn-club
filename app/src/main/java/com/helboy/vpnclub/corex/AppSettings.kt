@@ -127,6 +127,17 @@ class AppSettings(context: Context) {
         get() = sp.getStringSet("bypass_apps", emptySet()) ?: emptySet()
         set(v) { sp.edit().putStringSet("bypass_apps", v.toSet()).apply() }
 
+    var lanShare: Boolean
+        get() = sp.getBoolean("lan_share", false)
+        set(v) { sp.edit().putBoolean("lan_share", v).apply() }
+    var lanPassword: String
+        get() = sp.getString("lan_password", "").orEmpty()
+        set(v) { sp.edit().putString("lan_password", v).apply() }
+
+    var favoriteServers: Set<String>
+        get() = sp.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()
+        set(v) { sp.edit().putStringSet("favorites", v.toSet()).apply() }
+
     companion object {
         fun of(ctx: Context) = AppSettings(ctx)
     }

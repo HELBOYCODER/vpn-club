@@ -57,7 +57,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /** نام جدید ریپو؛ اگر هنوز تغییر نکرده، نام قدیم امتحان می‌شود. */
-private val REPOS = listOf("helboycoder/hellboy-vpn", "helboycoder/vpn-club")
+private val REPOS = listOf("HELBOYCODER/vpn-club")
 
 /** تنظیمات: پروفایل شبکه، تونل تفکیکی، تعویض خودکار، لاگ تشخیصی، به‌روزرسانی. */
 @Composable
@@ -148,6 +148,8 @@ fun SettingsScreen(settings: AppSettings) {
                 Text(bypassCount.fa(), color = NeonCyan, fontWeight = FontWeight.Bold)
             }
         }
+
+        LanSharingCard(settings)
 
         PanelInstallCard()
 
@@ -301,18 +303,15 @@ private fun versionName(ctx: Context): String = try {
 private suspend fun checkUpdate(current: String): Pair<String, String?> = withContext(Dispatchers.IO) {
     for (repo in REPOS) {
         try {
-            val conn = java.net.URL("https://api.github.com/repos/$repo/releases/latest")
-                .openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 8_000; conn.readTimeout = 8_000
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            conn.setRequestProperty("User-Agent", "HellboyVPN")
-            if (conn.responseCode != 200) continue
-            val o = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val body = com.helboy.vpnclub.corex.NetHttp.getText(
+                "https://api.github.com/repos/$repo/releases/latest", "UPDATE")
+            val o = JSONObject(body)
+            if (o.optBoolean("draft") || o.optBoolean("prerelease")) continue
             val tag = o.optString("tag_name").removePrefix("v")
             val url = o.optString("html_url")
             return@withContext if (tag.isEmpty()) "نسخه‌ای یافت نشد" to null
-                else if (tag == current) "نسخهٔ شما به‌روز است ($current)" to null
-                else "نسخهٔ جدید $tag موجود است" to url
+                else if (com.helboy.vpnclub.corex.ReleaseVersion.isNewer(tag, current)) "نسخهٔ جدید $tag موجود است" to url
+                else "نسخهٔ شما به‌روز است ($current)" to null
         } catch (_: Exception) {}
     }
     "بررسی ناموفق بود — اینترنت را چک کنید" to null

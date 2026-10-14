@@ -92,7 +92,7 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         Text(title, color = tColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(
             (if (busy) ui.taskMsg.ifEmpty { ui.message } else ui.message).ifEmpty {
-                if (ui.connected) "اینترنت شما امن است" else "برای اتصال هوشمند، دکمه را بزنید"
+                if (ui.connected) "تونل فعال است" else "برای اتصال هوشمند، دکمه را بزنید"
             },
             color = TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 12.dp),
@@ -118,8 +118,9 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             )
         }
 
-        if (ui.connected && ui.current != null) {
-            ServerCard(ui.current, ui.latencyMs, formatDuration(now - ui.connectedSince))
+        if (ui.connected) {
+            ui.current?.let { ServerCard(it, ui.latencyMs, formatDuration(now - ui.connectedSince)) }
+                ?: Text("سایفون مستقیم · ${formatDuration(now - ui.connectedSince)}", color = StatusGreen)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 StatTile("دانلود", formatSpeed(ui.downBps), "کل: ${formatBytes(ui.downTotal)}",
                     StatusGreen, Modifier.weight(1f))

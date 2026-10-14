@@ -23,7 +23,7 @@
         android:name=".HellboyVpnApp"
         android:extractNativeLibs="true"
         android:hardwareAccelerated="true"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -33,14 +33,29 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
+        <service android:name=".shortcuts.QuickTileService" android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:icon="@mipmap/ic_launcher" android:label="Hellboy VPN">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
+        <receiver android:name=".shortcuts.HellboyWidget" android:exported="false" android:label="Hellboy VPN">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hellboy_widget" />
+        </receiver>
         <!-- VpnClub Xray TUN service -->
         <service
             android:name="com.helboy.vpnclub.corex.HellboyVpnService"
