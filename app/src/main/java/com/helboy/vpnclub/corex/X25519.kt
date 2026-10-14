@@ -9,7 +9,7 @@ import java.security.SecureRandom
  * درستی با بردار آزمون RFC 7748 §5.2 و §6.1 تست شده (X25519Test).
  */
 object X25519 {
-    private val P = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19))
+    private val P = BigInteger.valueOf(2).pow(255).subtract(BigInteger.valueOf(19))
     private val A24 = BigInteger.valueOf(121665)
 
     /** کلید خصوصی ۳۲ بایتی تصادفی (clamp شده). */
@@ -54,6 +54,6 @@ object X25519 {
             z2 = e.multiply(aa.add(A24.multiply(e))).mod(P)
         }
         if (swap == 1) { val tx = x2; x2 = x3; x3 = tx; val tz = z2; z2 = z3; z3 = tz }
-        return encodeLE(x2.multiply(z2.modPow(P.subtract(BigInteger.TWO), P)).mod(P))
+        return encodeLE(x2.multiply(z2.modPow(P.subtract(BigInteger.valueOf(2)), P)).mod(P))
     }
 }

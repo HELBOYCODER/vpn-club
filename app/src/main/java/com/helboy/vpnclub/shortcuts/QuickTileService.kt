@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.shortcuts
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
@@ -29,6 +30,8 @@ class QuickTileService : TileService() {
     }
     override fun onStopListening() { listening?.cancel(); super.onStopListening() }
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    // The Intent overload is required below API 34; the new overload is guarded below.
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
         unlockAndRun {
