@@ -98,9 +98,11 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         )
 
         ClubCard(Modifier.fillMaxWidth()) {
-            Text("اتصال هوشمند خودکار", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text("هر بار: جست‌وجوی تازه، تست چند سرور و اتصال به بهترین گزینه. قطعی یا افت کیفیت، انتخاب سرور تازه را آغاز می‌کند.",
-                color = TextSecondary, fontSize = 12.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("اتصال هوشمند خودکار", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("هر بار: جست‌وجوی تازه، تست چند سرور و اتصال به بهترین گزینه. قطعی یا افت کیفیت، انتخاب سرور تازه را آغاز می‌کند.",
+                    color = TextSecondary, fontSize = 12.sp)
+            }
         }
 
         if (busy || ui.testing) {

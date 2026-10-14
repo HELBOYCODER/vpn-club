@@ -81,7 +81,7 @@ jobs:
         run: |
           V=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
           TAG="v$V"
-          if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.1"; fi
+          if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.2"; fi
           mkdir -p release-dist
           cp app/build/outputs/apk/release/*.apk "release-dist/HellboyVPN-$TAG.apk"
           if unzip -l "release-dist/HellboyVPN-$TAG.apk" | grep -Ei 'libpsiphon|psiphon_servers'; then
