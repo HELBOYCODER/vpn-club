@@ -88,16 +88,16 @@ jobs:
           V=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
           TAG="v$V"
           if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.1"; fi
-          mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk "dist/HellboyVPN-$TAG.apk"
+          mkdir -p release-dist
+          cp app/build/outputs/apk/release/*.apk "release-dist/HellboyVPN-$TAG.apk"
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
-          "$SIGNER" verify --print-certs "dist/HellboyVPN-$TAG.apk" > dist/signing-certificate.txt
-          sha256sum "dist/HellboyVPN-$TAG.apk" > dist/SHA256SUMS
+          "$SIGNER" verify --print-certs "release-dist/HellboyVPN-$TAG.apk" > release-dist/signing-certificate.txt
+          (cd release-dist && sha256sum "HellboyVPN-$TAG.apk" > SHA256SUMS)
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: HellboyVPN-${{ steps.package.outputs.tag }}
-          path: dist/
+          path: release-dist/
       - name: Publish verified release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,9 +108,9 @@ jobs:
             exit 0
           fi
           if [ "$PREVIEW" = "true" ]; then
-            gh release create "$TAG" dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
+            gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
               --title "Hellboy VPN 4.2.0 Preview" --prerelease --notes-file RELEASE_NOTES.md
           else
-            gh release create "$TAG" dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
+            gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
               --title "Hellboy VPN 4.2.0" --notes-file RELEASE_NOTES.md
           fi
