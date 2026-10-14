@@ -1,0 +1,30 @@
+name: Correct preview release assets
+on:
+  push:
+    branches: [hellboy-release-assets]
+    paths: ['.github/workflows/release-assets.yml']
+jobs:
+  correct-assets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify current APK, write portable checksum, remove historical extra asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: HELBOYCODER/vpn-club
+        run: |
+          set -euo pipefail
+          TAG=v4.2.0-preview.1
+          APK=HellboyVPN-v4.2.0-preview.1.apk
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          cd "$RUNNER_TEMP/release-assets"
+          gh release download "$TAG" --pattern "$APK" --pattern SHA256SUMS
+          EXPECTED=$(awk '{print $1}' SHA256SUMS)
+          printf '%s  %s\n' "$EXPECTED" "$APK" | sha256sum --check
+          sha256sum "$APK" > SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
+          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq 'HellboyVPN-4.1.0-arm64.apk'; then
+            gh release delete-asset "$TAG" HellboyVPN-4.1.0-arm64.apk --yes
+          fi
+          gh release view "$TAG" --json assets --jq '.assets[].name'
