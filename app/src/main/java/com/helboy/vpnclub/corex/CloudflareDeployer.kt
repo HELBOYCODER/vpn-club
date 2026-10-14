@@ -21,7 +21,7 @@ import java.util.UUID
  * داخل اپ و بدون ترمینال:
  *   توکن ← حساب ← زیردامنه‌ی workers.dev ← KV یا D1 ← آپلود ورکر ← فعال‌سازی ← لینک ساب
  *
- * کد پنل در لحظه‌ی نصب از مخزن رسمی خودش دانلود می‌شود (داخل اپ کپی/تغییر داده نمی‌شود):
+ * کد پنل در لحظه‌ی نصب از مخزن رسمی خودش دانلود می‌شود (پس از بررسی نسخه دریافت می‌شود؛ مسیر دورزدن ورود Netra غیرفعال می‌شود):
  *  - Netra: github.com/netrair/netra-panel (MIT), pinned worker revision
  *  - Zeus: github.com/panel-zeus/Z-E-U-S (استفاده‌ی شخصی)     — ساب: /sub/<username>
  * توکن کاربر در اپ ذخیره نمی‌شود و در لاگ نمی‌آید.
@@ -102,7 +102,7 @@ object CloudflareDeployer {
         step("کد دریافت شد (${code.length / 1024} KB)")
 
         return when (panel) {
-            Panel.NETRA -> deployNetra(t, accId, email, workerName, host, code, ::step)
+            Panel.NETRA -> deployNetra(t, accId, workerName, host, hardenNetraWorker(code), ::step)
             Panel.ZEUS -> deployZeus(t, accId, workerName, host, code, ::step)
         }
     }
@@ -111,9 +111,18 @@ object CloudflareDeployer {
     internal fun looksLikeWorkerModule(code: String): Boolean =
         code.contains("export default") || Regex("export\\s*\\{[^}]*\\bas\\s+default\\b").containsMatchIn(code)
 
-    // ─────────────────────────────── BPB ───────────────────────────────
+    /** Applied only after the pinned upstream checksum has matched. Never install an unrecognized patch target. */
+    internal fun hardenNetraWorker(code: String): String {
+        val target = "async function skipAuth(e,t){"
+        val start = code.indexOf(target)
+        if (start < 0 || code.indexOf(target, start + target.length) >= 0)
+            throw DeployException("مسیر امنیتی Netra قابل بررسی نیست؛ نصب متوقف شد")
+        return code.replace(target, target + "return m(!1,403,\"Password authentication is required.\");")
+    }
 
-    private fun deployNetra(t: String, accId: String, email: String, name: String, host: String, code: String, step: (String) -> Unit): Result {
+    // ─────────────────────────────── Netra ───────────────────────────────
+
+    private fun deployNetra(t: String, accId: String, name: String, host: String, code: String, step: (String) -> Unit): Result {
         // Netra's defaults are public. Set unique credentials through supported bindings,
         // not through a copy of BPB's settings, and never persist the account API token.
         val securePath = randomString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 24, 24)

@@ -18,7 +18,7 @@ This is a source comparison, not a claim of complete parity or measured performa
 | Clean Cloudflare scanner and selected IP injection | Existing | CloudflareScanner / IranVariants |
 | Per-app exclusions and Iranian direct routing | Existing | Tun2Socks / routing rules |
 | Editable configurations, copy, QR display, share | Existing | ConfigDialogs / ShareLinkBuilder |
-| Quick personal panel | Added Netra replacing BPB install | Dedicated KV, random UUID/password/path, preset panel password; existing BPB subscriptions preserved |
+| Quick personal panel | Added Netra replacing BPB install | Dedicated KV, random UUID/password/path, preset panel password, upstream Skip Login bypass disabled; existing BPB subscriptions preserved |
 | Remote encrypted DNS | Added IP-addressed HTTPS DoH | Custom DNS validation; no system DNS fallback after DoH failure |
 | Authenticated LAN HTTP / SOCKS sharing | Added | Xray service only, 10819/10818; reconnect after changes; not Psiphon-only mode |
 | Quick Settings tile / home shortcut widget | Added | Activity obtains VPN consent; widget is a shortcut, not a live status display |

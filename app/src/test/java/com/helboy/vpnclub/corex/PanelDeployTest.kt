@@ -27,6 +27,22 @@ class PanelDeployTest {
         assertEquals("https://hb.example.workers.dev/private-path/sub/raw?app=xray&raw=1", sub)
     }
 
+    @Test fun netraSkipAuthIsDisabledBeforeAnyKvWrite() {
+        val upstream = "async function skipAuth(e,t){await t.kv.put(\"authDisabled\",\"true\");}"
+        val patched = CloudflareDeployer.hardenNetraWorker(upstream)
+        assertTrue(patched.startsWith("async function skipAuth(e,t){return m(!1,403,"))
+    }
+
+    @Test(expected = CloudflareDeployer.DeployException::class)
+    fun unrecognizedNetraSecurityPatchFailsClosed() {
+        CloudflareDeployer.hardenNetraWorker("different upstream source")
+    }
+
+    @Test(expected = CloudflareDeployer.DeployException::class)
+    fun ambiguousNetraSecurityPatchFailsClosed() {
+        CloudflareDeployer.hardenNetraWorker("async function skipAuth(e,t){}async function skipAuth(e,t){}")
+    }
+
     @Test fun workerNameRules() {
         assertTrue(CloudflareDeployer.isValidName("bpb-a1b2c3d4"))
         assertFalse(CloudflareDeployer.isValidName("-bad"))

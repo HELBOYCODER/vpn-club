@@ -4,6 +4,7 @@
 
 - طراحی اصلی حفظ شده: چهره هلبوی، گوی ذرات، دیوار بتنی، رنگ‌ها و جلوه‌های خون/آتش. فونت فارسی و خوانایی کنترل‌ها بهتر شده است.
 - نصب سریع **Netra** جایگزین نصب BPB شد. ساب‌های BPB قبلی حذف نمی‌شوند. KV و رمز پنل خودکار ساخته می‌شود؛ شناسه، رمز Trojan و مسیر ساب تصادفی‌اند. کد Netra از نسخه مشخص دریافت و SHA-256 آن بررسی می‌شود. توکن حساب در ورکر Netra ذخیره نمی‌شود.
+- مسیر Skip Login در Netra نصب‌شده غیرفعال است تا رمز پنل دور زده نشود.
 - جست‌وجوی سرورها، فیلتر پروتکل، علاقه‌مندی‌ها، ورود فایل متنی/Base64 و دریافت کانفیگ از Share اندروید.
 - کاشی تنظیمات سریع اندروید و ویجت میانبر اتصال/قطع.
 - اشتراک HTTP/SOCKS روی Wi-Fi یا هات‌اسپات با رمز تصادفی، در حالت‌های Xray/WARP/بدون سرور. پس از تغییر تنظیمات باید دوباره وصل شوید. در سایفون مستقیم فعال نیست.
@@ -18,7 +19,7 @@
 
 ## English
 
-Original Hellboy/orb/concrete/fire artwork and palette retained; Persian typography and controls refined. Netra replaces BPB installation with isolated KV, random credentials, password protection and a pinned, checksum-verified upstream worker. Existing subscriptions remain usable.
+Original Hellboy/orb/concrete/fire artwork and palette retained; Persian typography and controls refined. Netra replaces BPB installation with isolated KV, random credentials, password protection and a pinned, checksum-verified upstream worker. The upstream Skip Login handler is disabled after checksum verification to prevent bypassing the panel password. Existing subscriptions remain usable.
 
 Added selected-server search, protocol filters, favourites, text/Base64 file and Android Share import, Quick Settings tile, shortcut widget, authenticated LAN HTTP/SOCKS sharing and IP-addressed DoH.
 
