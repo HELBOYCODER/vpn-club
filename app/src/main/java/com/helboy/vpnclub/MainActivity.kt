@@ -15,7 +15,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
-import com.helboy.vpnclub.corex.ServerEntry
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.screen.AppRoot
 import com.helboy.vpnclub.ui.theme.HellboyTheme
@@ -62,8 +61,8 @@ class MainActivity : ComponentActivity() {
         }
 
         // اتصال خودکار هنگام باز شدن (فقط اگر مجوز VPN از قبل داده شده)
-        if (intent.action != ACTION_TOGGLE && intent.action != Intent.ACTION_SEND && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
-            !VpnController.state.value.connected && VpnService.prepare(this) == null) {
+        if (intent.action != ACTION_TOGGLE && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
+            !VpnController.state.value.sessionActive && VpnService.prepare(this) == null) {
             VpnController.connectFastest()
         }
 
@@ -85,10 +84,9 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     onToggle = {
                         val s = VpnController.state.value
-                        if (s.connected || s.busyConnecting) VpnController.toggle()
+                        if (s.sessionActive) VpnController.toggle()
                         else withVpnPermission { VpnController.toggle() }
                     },
-                    onConnect = { e: ServerEntry -> withVpnPermission { VpnController.connectTo(e) } },
                 )
             }
         }
@@ -100,19 +98,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleShortcut(intent: Intent) {
-        if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.take(1_048_576).orEmpty().trim()
-            intent.action = null
-            if (text.startsWith("https://") && !text.contains("\n")) {
-                val error = VpnController.addSub("اشتراک‌گذاری", text)
-                if (error != null) VpnController.notify(error)
-            } else if (text.isNotBlank()) VpnController.importConfigs(text)
-            return
-        }
         if (intent.action != ACTION_TOGGLE) return
         intent.action = null // rotation / recreation must not toggle a second time
         val st = VpnController.state.value
-        if (st.connected || st.busyConnecting) VpnController.toggle()
+        if (st.sessionActive) VpnController.toggle()
         else withVpnPermission { VpnController.toggle() }
     }
 

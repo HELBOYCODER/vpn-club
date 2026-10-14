@@ -56,7 +56,6 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
     // چرخش دکمه فقط وقتی واقعاً در حال اتصال هستیم (نه هنگام اسکن/ری‌اسکن جدا)
     val busy = ui.busyConnecting
     val shownPhase = if (!busy && !ui.connected && ui.phase != Phase.FAILED) Phase.IDLE else ui.phase
-    var fastest by remember { mutableStateOf(VpnController.settings().fastestMode) }
 
     // ساعت نشست
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -98,17 +97,10 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        // گزینه‌ی سریع‌ترین اتصال
         ClubCard(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("سریع‌ترین اتصال", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text(if (fastest) "همه‌ی سرورها هم‌زمان تست و کم‌تاخیرترین وصل می‌شود"
-                         else "به بهترین سرور لیست وصل می‌شود (یا از تب سرورها انتخاب کنید)",
-                        color = TextTertiary, fontSize = 11.sp)
-                }
-                Switch(checked = fastest, onCheckedChange = { fastest = it; VpnController.settings().fastestMode = it })
-            }
+            Text("اتصال هوشمند خودکار", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("هر بار: جست‌وجوی تازه، تست چند سرور و اتصال به بهترین گزینه. قطعی یا افت کیفیت، انتخاب سرور تازه را آغاز می‌کند.",
+                color = TextSecondary, fontSize = 12.sp)
         }
 
         if (busy || ui.testing) {
@@ -120,7 +112,6 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
 
         if (ui.connected) {
             ui.current?.let { ServerCard(it, ui.latencyMs, formatDuration(now - ui.connectedSince)) }
-                ?: Text("سایفون مستقیم · ${formatDuration(now - ui.connectedSince)}", color = StatusGreen)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 StatTile("دانلود", formatSpeed(ui.downBps), "کل: ${formatBytes(ui.downTotal)}",
                     StatusGreen, Modifier.weight(1f))
@@ -134,8 +125,7 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             ClubCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     Metric(ui.configCount.fa(), "کانفیگ ساب")
-                    Metric(ui.cleanIpCount.fa(), "IP تمیز CF")
-                    Metric("${ui.servers.size.fa()}/${10.fa()}", "سرور منتخب")
+                    Metric("${ui.servers.size.fa()}/${5.fa()}", "سرور منتخب")
                 }
             }
         }

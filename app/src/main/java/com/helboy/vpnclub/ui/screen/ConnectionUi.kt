@@ -36,17 +36,6 @@ import com.helboy.vpnclub.ui.theme.StatusGreen
 import com.helboy.vpnclub.ui.theme.TextPrimary
 import com.helboy.vpnclub.ui.theme.TextSecondary
 
-private val STYLES = listOf(
-    "normal" to "معمولی", "fast" to "سریع", "gaming" to "گیمینگ", "secure" to "فقط رمزدار",
-)
-
-private fun styleHint(id: String) = when (id) {
-    "fast" -> "اولین سروری که کار کند، بدون تست همه — سریع‌ترین راه وصل شدن"
-    "gaming" -> "کمترین پینگ، بدون سرورهای پشت CDN، سایت‌های ایرانی مستقیم، وسط بازی سرور عوض نمی‌شود"
-    "secure" -> "فقط سرورهای رمزگذاری‌شده (TLS / REALITY / Hysteria2) که مثل HTTPS معمولی دیده می‌شوند"
-    else -> "بهترین سرور تست‌شده، با پشتیبان آماده (پیشنهادی)"
-}
-
 private val DNS = listOf("1.1.1.1" to "کلادفلر", "8.8.8.8" to "گوگل", "9.9.9.9" to "Quad9", "94.140.14.14" to "ضد تبلیغ", "https://1.1.1.1/dns-query" to "DoH رمزدار")
 
 /** سبک اتصال + DNS + قوانین مسیریابی (مثل ZeroNet). */
@@ -56,15 +45,6 @@ fun ConnectionCard(ui: VpnController.UiState) {
     var customDns by remember { mutableStateOf(if (DNS.none { it.first == ui.dnsServer }) ui.dnsServer else "") }
     ClubCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("سبک اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                STYLES.forEach { (id, label) ->
-                    FilterChip(selected = ui.connStyle == id, onClick = { VpnController.setConnStyle(id) },
-                        label = { Text(label, fontSize = 12.sp) })
-                }
-            }
-            Text(styleHint(ui.connStyle), color = TextSecondary, fontSize = 11.sp)
-
             Text("DNS", color = TextPrimary, fontWeight = FontWeight.SemiBold)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DNS.forEach { (ip, label) ->
@@ -115,22 +95,4 @@ private fun RoutingRulesDialog(ui: VpnController.UiState, onClose: () -> Unit) {
             }
         },
     )
-}
-
-/** «بدون سرور» (ZeroNet SERVERLESS): بدون VPS و کانفیگ؛ اسم سایت با فرگمنت از فیلتر پنهان می‌شود. */
-@Composable
-fun ServerlessCard(ui: VpnController.UiState) {
-    val on = ui.connected && ui.current?.config?.scheme == XrayCore.SERVERLESS
-    ClubCard(Modifier.fillMaxWidth(), border = if (on) StatusGreen else NeonCyan.copy(alpha = 0.5f)) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("بدون سرور (Serverless)", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(if (on) "متصل بدون سرور · ترافیک مستقیم با ClientHello تکه‌تکه و DNS رمزنگاری‌شده"
-                 else "نه VPS لازم است نه کانفیگ: اسم سایت با فرگمنت از فیلتر پنهان و DNS با DoH پرسیده می‌شود. " +
-                      "یوتیوب/اینستاگرام/گیت‌هاب اغلب باز می‌شوند؛ سایت‌هایی که «آدرسشان» بسته است (تلگرام) نه.",
-                color = if (on) StatusGreen else TextSecondary, fontSize = 12.sp)
-            ActionButton("اتصال بدون سرور", Icons.Rounded.Public, running = ui.busyConnecting && !on,
-                enabled = !ui.testing, accent = StatusAmber, onClick = { VpnController.connectServerless() },
-                modifier = Modifier.fillMaxWidth())
-        }
-    }
 }

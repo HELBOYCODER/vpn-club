@@ -20,7 +20,7 @@ class QuickTileService : TileService() {
         listening = scope.launch {
             VpnController.state.collect { st ->
                 qsTile?.let { t ->
-                    t.state = if (st.connected) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+                    t.state = if (st.sessionActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
                     t.label = "Hellboy VPN"
                     t.subtitle = if (st.connected) "متصل" else if (st.busyConnecting) "در حال اتصال" else "قطع"
                     t.updateTile()

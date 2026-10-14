@@ -1,55 +1,31 @@
-<div align="center">
+# Hellboy VPN
 
-# 🔥 Hellboy VPN
+کلاینت اندروید با پوستهٔ اصلی هل‌بوی و اتصال هوشمند خودکار.
 
-کلاینت اندروید با طراحی اصلی هلبوی، اتصال هوشمند و نصب سریع پنل Netra.
+دکمهٔ اتصال را بزنید: برنامه منابع سرور را تازه دریافت می‌کند، چند سرور را با درخواست واقعی داخل تونل تست می‌کند و به گزینهٔ کم‌تاخیر و دارای سرعت قابل‌قبول وصل می‌شود. قطعی یا افت کیفیت چندباره باعث انتخاب پشتیبان می‌شود؛ اگر پشتیبان‌ها هم جواب ندهند، جست‌وجوی تازه شروع می‌شود. دکمهٔ قطع تمام تلاش‌ها را متوقف می‌کند.
 
-[Downloads / دانلود](https://github.com/HELBOYCODER/vpn-club/releases) · [Changes / تغییرات](RELEASE_NOTES.md) · [ZeroNet comparison / تطبیق امکانات](docs/ZERONET_PARITY.md)
+سه صفحه: خانه، سرورهای منتخب و تنظیمات. چهرهٔ هل‌بوی، گوی ذرات، بافت بتنی، رنگ‌ها و افکت‌های اصلی حفظ شده‌اند. WARP، Serverless، سایفون، اسکن IP و نصب پنل‌ها در نسخهٔ ۴.۳ حذف شده‌اند.
 
-</div>
+[انتشارها و فایل نصبی](https://github.com/HELBOYCODER/vpn-club/releases) · [توضیحات نسخه](RELEASE_NOTES.md)
 
-## فارسی
-
-نسخه ۴.۲ طراحی اصلی هلبوی و گوی ذرات، بافت بتنی، رنگ‌ها و جلوه‌های خون/آتش را حفظ می‌کند. بهبود ظاهر شامل فونت فارسی و کنترل‌های خواناتر است.
-
-امکانات: VLESS/REALITY، VMess، Trojan، Shadowsocks، Hysteria2، XHTTP، WARP، سایفون، حالت بدون سرور، اسکن IP کلادفلر، ویرایش کانفیگ، QR و اشتراک، تونل تفکیکی، DNS و مسیریابی. در نسخه جدید: نصب **Netra**، جست‌وجو و علاقه‌مندی‌ها، کاشی تنظیمات سریع، ویجت میانبر، ورود فایل و Share اندروید، DNS با DoH و اشتراک رمزدار روی شبکه محلی.
-
-### نصب Netra
-
-تنظیمات ← پنل شخصی روی کلادفلر ← نصب Netra. با توکن حساب خودتان نصب کنید؛ رمز پنل را یادداشت کنید. لینک ساب خودکار اضافه می‌شود. برای تغییرات حساب کلادفلر از داشبورد استفاده کنید؛ توکن در ورکر ذخیره نمی‌شود. نصب جدید BPB جایگزین شده ولی ساب‌های قبلی شما نگه داشته می‌شوند.
-
-### اشتراک روی Wi-Fi یا هات‌اسپات
-
-گزینه «اشتراک روی شبکه محلی» را روشن و VPN را دوباره وصل کنید. در دستگاه دوم از IP محلی گوشی، پورت HTTP `10819` یا SOCKS `10818`، نام کاربری `hellboy` و رمز نمایش‌داده‌شده استفاده کنید. مخصوص مسیر Xray/WARP/بدون سرور؛ سایفون مستقیم را پوشش نمی‌دهد.
-
-### دانلود و امضا
-
-فقط فایل APK در صفحه انتشار همان نسخه را دانلود کنید. اگر نام انتشار **Preview** است، یک نسخه آزمایشی کنار نسخه قبلی نصب می‌شود؛ دلیل آن نبودن کلید امضای ثابت نسخه قبلی در CI است. نسخه قبلی را برای نصب Preview حذف نکنید.
-
-امکانات پیشرفته ZeroNet از جمله MASQUE، هیبرید WARP و هسته Rust هنوز معادل تأییدشده ندارند؛ [جدول کامل](docs/ZERONET_PARITY.md) وضعیت را مشخص می‌کند.
+Preview 4.3 با شناسهٔ مستقل کنار نسخه‌های قبلی نصب می‌شود؛ کلید امضای اصلی در CI موجود نیست. منابع عمومی ممکن است در شبکهٔ کاربر مسدود یا موقتاً خالی باشند. برنامه تا زمان زدن دکمهٔ قطع، با فاصلهٔ زمانی دوباره تلاش می‌کند.
 
 ## English
 
-An Android client using the PattNG Xray core, Psiphon and hev TUN bridge. The original Hellboy, particle orb, concrete wall and fire/blood skin are preserved. Version 4.2 adds Netra deployment, selected-server search/favourites, file and Share import, Quick Settings and widget shortcuts, authenticated LAN proxies and DoH.
+Android VPN client with automatic fresh server discovery, actual tunnel validation and recovery. Every connect starts a fresh scan and keeps up to five measured candidates. Activation checks both latency and a bounded HTTPS download. Repeated failure or low quality selects a backup, then refreshes the feeds if the pool is exhausted. Stop cancels all retries.
 
-This is not a Zray port or a claim of complete ZeroNet parity. Read the [feature comparison](docs/ZERONET_PARITY.md) for native-core gaps and network validation limits.
+WARP, Serverless, Psiphon, clean-IP scanning and automatic panel installers have been removed. The original Hellboy face, particle orb, concrete textures, palette and fire/blood effects remain.
 
-A preview release has a separate application ID and installs alongside the existing app. Stable upgrades require the existing signing key. APK checksum and signing certificate accompany the download.
+The app uses PattNG Xray and the hev TUN bridge. Unit tests, lint, APK builds, emulator navigation and search/stop checks gate publication. CI cannot prove connectivity on an Iranian mobile network. Without the original release signing key, version 4.3 is a separate preview application.
 
-## Build and verify
+## Build
 
-JDK 17, Android SDK 35, Gradle 8.10.2. Psiphon also requires the Go toolchain specified by the workflow.
+Java 17, Android SDK 35 and Gradle 8.10.2:
 
 ```sh
-bash tools/build_psiphon.sh
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-# Separate preview APK; does not overwrite the original app:
-./gradlew :app:assembleRelease -PhellboyPreview=true
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease -PhellboyPreview=true
 ```
 
-Real external-network probes: `HELLBOY_LIVE_TESTS=1 ./gradlew :app:testDebugUnitTest`.
-The workflow captures emulator screenshots and publishes only after tests, lint, builds and launch checks succeed. Screenshots are attached to the release and CI UI evidence artifact.
+Signing environment: `HELLBOY_KEYSTORE`, `HELLBOY_KEYSTORE_PASSWORD`, optional `HELLBOY_KEY_ALIAS` (default `hellboyvpn`).
 
-Stable signing: `HELLBOY_KEYSTORE_B64`, `HELLBOY_KEYSTORE_PASSWORD` repository secrets (`HB_*` legacy names also supported). Do not commit signing keys or Cloudflare tokens.
-
-[Third-party notices](THIRD_PARTY.md). Netra is fetched at a pinned upstream revision. Vazirmatn font notice is bundled under `app/src/main/assets/licenses`.
+[Third-party notices](THIRD_PARTY.md) · [Recovery behavior](docs/SMART_CONNECTION.md)

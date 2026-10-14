@@ -39,7 +39,6 @@ import com.helboy.vpnclub.ui.theme.TextTertiary
 @Composable
 fun AppRoot(
     onToggle: () -> Unit,
-    onConnect: (ServerEntry) -> Unit,
 ) {
     val ui by VpnController.state.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -59,8 +58,6 @@ fun AppRoot(
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = colors,
                         icon = { Icon(Icons.Rounded.Dns, null) }, label = { Text("سرورها") })
                     NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors,
-                        icon = { Icon(Icons.Rounded.Radar, null) }, label = { Text("اسکنر IP") })
-                    NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = colors,
                         icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("تنظیمات") })
                 }
             },
@@ -73,11 +70,7 @@ fun AppRoot(
             Box(Modifier.fillMaxSize().padding(pad)) {
                 when (tab) {
                     0 -> HomeScreen(ui, onToggle)
-                    1 -> ServersScreen(ui, onConnect,
-                        onRescan = { VpnController.rescanServers() },
-                        onInject = { VpnController.injectIps() })
-                    2 -> ScannerScreen(ui, onScan = { VpnController.scanIps() },
-                        onInject = { VpnController.injectIps() })
+                    1 -> ServersScreen(ui)
                     else -> SettingsScreen(VpnController.settings())
                 }
             }

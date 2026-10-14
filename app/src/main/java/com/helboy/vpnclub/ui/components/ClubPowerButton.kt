@@ -55,7 +55,7 @@ fun ClubPowerButton(
     size: Dp = 240.dp,
     modifier: Modifier = Modifier,
 ) {
-    val busy = phase == Phase.FETCHING || phase == Phase.SCANNING_CF ||
+    val busy = phase == Phase.FETCHING ||
         phase == Phase.TESTING || phase == Phase.CONNECTING
 
     val accent = if (connected) Color(0xFF34D399) else Color(0xFF3B82F6)

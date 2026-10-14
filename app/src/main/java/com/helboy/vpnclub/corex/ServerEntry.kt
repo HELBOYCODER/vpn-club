@@ -84,7 +84,7 @@ data class ServerEntry(
         fun fromJson(o: JSONObject?): ServerEntry? {
             if (o == null) return null
             val raw = o.optString("raw")
-            val cfg = (if (raw.startsWith("${XrayCore.SERVERLESS}://")) XrayCore.serverlessConfig() else LinkParser.parse(raw)) ?: return null
+            val cfg = LinkParser.parse(raw) ?: return null
             val dh = o.optString("dialHost")
             val dp = o.optInt("dialPort", cfg.port)
             val c = if (dh.isNotEmpty() && (dh != cfg.host || dp != cfg.port)) cfg.withDial(dh, dp) else cfg
@@ -144,7 +144,6 @@ data class ServerEntry(
 class ServerStore(context: Context) {
 
     private val serversFile = File(context.filesDir, "top_servers.json")
-    private val ipsFile = File(context.filesDir, "clean_ips.json")
     private val lock = Any()
 
     fun loadServers(): List<ServerEntry> = synchronized(lock) {
@@ -161,23 +160,4 @@ class ServerStore(context: Context) {
         } catch (_: Exception) {}
     }
 
-    fun loadCleanIps(): List<CloudflareScanner.CleanIp> = synchronized(lock) {
-        try {
-            if (!ipsFile.exists()) return emptyList()
-            val arr = JSONArray(ipsFile.readText())
-            (0 until arr.length()).mapNotNull { i ->
-                arr.optJSONObject(i)?.let {
-                    CloudflareScanner.CleanIp(it.optString("ip"), it.optInt("port", 443), it.optLong("ms"), it.optString("colo"))
-                }
-            }.filter { it.ip.isNotEmpty() }
-        } catch (_: Exception) { emptyList() }
-    }
-
-    fun saveCleanIps(list: List<CloudflareScanner.CleanIp>) = synchronized(lock) {
-        try {
-            ipsFile.writeText(JSONArray().apply {
-                list.forEach { put(JSONObject().put("ip", it.ip).put("port", it.port).put("ms", it.tlsMs).put("colo", it.colo)) }
-            }.toString())
-        } catch (_: Exception) {}
-    }
 }

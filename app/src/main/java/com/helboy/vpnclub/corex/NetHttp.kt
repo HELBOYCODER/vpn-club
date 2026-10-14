@@ -52,6 +52,30 @@ object NetHttp {
         throw last ?: java.io.IOException("no route")
     }
 
+    /** Fresh discovery uses a bounded direct request; no cache or dead-tunnel dependency. */
+    fun getFeedText(url: String, timeoutMs: Int): String {
+        val client = base.newBuilder().proxy(Proxy.NO_PROXY)
+            .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS).build()
+        val request = Request.Builder().url(url).header("User-Agent", "HellboyVPN/4.3")
+            .header("Cache-Control", "no-cache").build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw java.io.IOException("HTTP ${response.code}")
+            val body = response.body ?: return ""
+            val maxBytes = 2 * 1024 * 1024
+            body.byteStream().use { stream ->
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                while (out.size() < maxBytes) {
+                    if (Thread.currentThread().isInterrupted) throw java.io.InterruptedIOException()
+                    val n = stream.read(buffer, 0, minOf(buffer.size, maxBytes - out.size()))
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                }
+                return out.toString("UTF-8")
+            }
+        }
+    }
+
     /** GET متن ساده؛ خطای HTTP → استثنا. */
     fun getText(url: String, tag: String, ua: String = "HellboyVPN/4 (Android)"): String {
         val req = Request.Builder().url(url).header("User-Agent", ua).build()

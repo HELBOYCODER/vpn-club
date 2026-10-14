@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.Executors
 
-enum class SvcState { STOPPED, STARTING, UP, FAILED }
+enum class SvcState { STOPPED, SEARCHING, STARTING, UP, FAILED }
 
 data class SvcStatus(
     val state: SvcState,
@@ -40,119 +40,90 @@ class HellboyVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var tunnelUp = false
     @Volatile private var tickerOn = false
-    /** تونل الان «سایفون تنها» است (بدون سرور). */
-    @Volatile private var psiphonOnly = false
+    private var ticker: Thread? = null
+    private val commandEpoch = java.util.concurrent.atomic.AtomicLong()
     private var lastServerName = ""
 
     override fun onCreate() {
         super.onCreate()
+        VpnController.init(applicationContext)
         xray = XrayCore(SOCKS_PORT, useRouting = true).also { it.setAppContext(this) }
         tun = Tun2Socks(this)
         DiagLogger.appContext = applicationContext
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return when (intent?.action ?: ACTION_START) {
+        val session = intent?.getLongExtra("session", -1) ?: -1
+        if (intent?.action in listOf(ACTION_SEARCH, ACTION_START) && !VpnController.isSessionCurrent(session)) {
+            if (!VpnController.state.value.sessionActive) stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_STOP && session >= 0 && VpnController.state.value.sessionActive && !VpnController.isSessionCurrent(session))
+            return START_NOT_STICKY
+        val token = commandEpoch.incrementAndGet()
+        when (intent?.action) {
+            ACTION_SEARCH -> {
+                startForeground(NOTIF_ID, buildNotification("جست‌وجوی خودکار سرور…"))
+                worker.execute {
+                    if (token == commandEpoch.get()) {
+                        stopAll()
+                        _status.value = SvcStatus(SvcState.SEARCHING)
+                        updateNotification("جست‌وجوی خودکار سرور…")
+                    }
+                }
+            }
             ACTION_START -> {
+                val entry = CurrentConfigHolder.load(this)
                 startForeground(NOTIF_ID, buildNotification("در حال اتصال…"))
                 _status.value = SvcStatus(SvcState.STARTING)
-                worker.execute { startTunnel() }
-                START_NOT_STICKY
-            }
-            ACTION_PSIPHON -> {
-                worker.execute { applyPsiphon() }
-                START_NOT_STICKY
-            }
-            ACTION_START_PSIPHON_ONLY -> {
-                startForeground(NOTIF_ID, buildNotification("در حال اتصال سایفون…"))
-                _status.value = SvcStatus(SvcState.STARTING)
-                worker.execute { startPsiphonOnly() }
-                START_NOT_STICKY
+                worker.execute { startTunnel(entry, token, session) }
             }
             ACTION_STOP -> {
+                VpnController.stopSession()
                 worker.execute { stopAll(); finish() }
-                START_NOT_STICKY
             }
-            else -> START_NOT_STICKY
+            else -> { worker.execute { stopAll(); finish() } }
         }
+        return START_NOT_STICKY
     }
 
-    private fun startTunnel() {
-        val entry = CurrentConfigHolder.load(this)
+    private fun startTunnel(entry: ServerEntry?, token: Long, session: Long) {
+        fun current() = token == commandEpoch.get() && VpnController.isSessionCurrent(session)
+        if (!current()) return
         if (entry == null) {
             _status.value = SvcStatus(SvcState.FAILED, SvcError.NoServer.userMessage, error = SvcError.NoServer)
-            if (!tunnelUp) finish()
             return
         }
         launched?.stop(); launched = null
-        val l = TunnelLauncher.launch(xray!!, entry)
-        if (l == null) {
-            val err = xray?.lastError.orEmpty().take(200)
-            DiagLogger.log("SERVICE core_fail ${entry.config.host}:${entry.config.port} $err")
-            val e = SvcError.Core(err)
-            _status.value = SvcStatus(SvcState.FAILED, e.userMessage, entry.id, e)
-            if (!tunnelUp) { stopAll(); finish() }
+        val result = TunnelLauncher.launch(xray!!, entry)
+        if (!current()) { result?.stop(); stopAll(); return }
+        if (result == null) {
+            val error = SvcError.Core(xray?.lastError.orEmpty().take(200))
+            _status.value = SvcStatus(SvcState.FAILED, error.userMessage, entry.id, error)
+            updateNotification("این سرور پاسخ نداد؛ انتخاب سرور بعدی…")
             return
         }
-        launched = l
-        if (psiphonOnly) { psiphonOnly = false; PsiphonRunner.stop(); tunnelUp = false }
+        launched = result
         if (!tunnelUp || tun?.isRunning != true) {
-            // سایفون (اگر کاربر روشن کرده): روی SOCKS هسته؛ تونل سیستم به SOCKS سایفون وصل می‌شود
-            val port = psiphonPortOrCore()
-            val ok = tun?.start(this, port, bypassApps = AppSettings.of(this).bypassApps) == true
-            if (!ok) {
-                DiagLogger.log("SERVICE tun_fail (VpnService.establish)")
+            if (tun?.start(this, SOCKS_PORT, bypassApps = AppSettings.of(this).bypassApps) != true) {
                 stopAll()
-                val e = SvcError.Tun(tun?.lastFailureKind ?: TunFailure.HEV_FAILED, tun?.lastFailure.orEmpty())
-                _status.value = SvcStatus(SvcState.FAILED, e.userMessage, error = e)
-                finish()
+                val error = SvcError.Tun(tun?.lastFailureKind ?: TunFailure.HEV_FAILED, tun?.lastFailure.orEmpty())
+                _status.value = SvcStatus(SvcState.FAILED, error.userMessage, entry.id, error)
                 return
             }
             tunnelUp = true
-            activeSocksPort = port
         }
+        if (!current()) { stopAll(); return }
         lastServerName = entry.config.tag.ifEmpty { entry.config.host }
-        DiagLogger.log("SERVICE up ${entry.config.host}:${entry.config.port} variant=${entry.variantId} dial=${entry.config.dialHost}")
         _status.value = SvcStatus(SvcState.UP, "", entry.id)
-        updateNotification(if (activeSocksPort == PsiphonRunner.LOCAL_SOCKS) "متصل + سایفون — $lastServerName" else "متصل — $lastServerName")
-        startTicker()
-    }
-
-    /**
-     * سایفون تنها (مثل حالت مستقیم MahsaNG): بدون سرور Xray؛ تونل سیستم ← SOCKS سایفون.
-     * سوکت‌های سایفون از تونل خارج‌اند چون پردازه‌اش با UID همین اپ اجرا می‌شود (disallowed).
-     */
-    private fun startPsiphonOnly() {
-        launched?.stop(); launched = null
-        try { xray?.stop() } catch (_: Exception) {}
-        if (!PsiphonRunner.start(this, upstreamSocks = null, timeoutMs = 120_000)) {
-            val e = SvcError.Core("سایفون: ${PsiphonRunner.lastError}")
-            _status.value = SvcStatus(SvcState.FAILED, e.userMessage, PSIPHON_ONLY_ID, e)
-            stopAll(); finish()
-            return
-        }
-        val ok = tun?.start(this, PsiphonRunner.LOCAL_SOCKS, bypassApps = AppSettings.of(this).bypassApps) == true
-        if (!ok) {
-            stopAll()
-            val e = SvcError.Tun(tun?.lastFailureKind ?: TunFailure.HEV_FAILED, tun?.lastFailure.orEmpty())
-            _status.value = SvcStatus(SvcState.FAILED, e.userMessage, error = e)
-            finish()
-            return
-        }
-        tunnelUp = true
-        psiphonOnly = true
-        activeSocksPort = PsiphonRunner.LOCAL_SOCKS
-        lastServerName = "Psiphon"
-        DiagLogger.log("SERVICE up psiphon-only")
-        _status.value = SvcStatus(SvcState.UP, "", PSIPHON_ONLY_ID)
-        updateNotification("متصل — سایفون مستقیم")
+        updateNotification("متصل — $lastServerName")
         startTicker()
     }
 
     private fun startTicker() {
         if (tickerOn) return
         tickerOn = true
-        Thread {
+        ticker = Thread {
             var last = Tun2Socks.bytes()
             while (tickerOn) {
                 try { Thread.sleep(3_000) } catch (_: InterruptedException) { break }
@@ -167,36 +138,9 @@ class HellboyVpnService : VpnService() {
         }.also { it.isDaemon = true }.start()
     }
 
-    /** اگر سایفون فعال و قابل اجراست آن را بالا می‌آورد؛ پورت SOCKS نهایی برای تونل سیستم. */
-    private fun psiphonPortOrCore(): Int {
-        val st = AppSettings.of(this)
-        if (!st.psiphonEnabled) { PsiphonRunner.stop(); return SOCKS_PORT }
-        updateNotification("در حال اتصال سایفون…")
-        val upstream = if (st.psiphonMode == "direct") null else SOCKS_PORT
-        return if (PsiphonRunner.start(this, upstream)) {
-            DiagLogger.log("PSIPHON on (${if (upstream == null) "direct" else "over server"})")
-            PsiphonRunner.LOCAL_SOCKS
-        } else {
-            DiagLogger.log("PSIPHON failed: ${PsiphonRunner.lastError} — continuing without it")
-            SOCKS_PORT
-        }
-    }
-
-    /** روشن/خاموش کردن سایفون بدون قطع سرور: فقط تونل سیستم به پورت جدید وصل می‌شود. */
-    private fun applyPsiphon() {
-        if (!tunnelUp || psiphonOnly) return
-        val port = psiphonPortOrCore()
-        if (port == activeSocksPort && tun?.isRunning == true) return
-        val ok = tun?.start(this, port, bypassApps = AppSettings.of(this).bypassApps) == true
-        if (ok) { activeSocksPort = port; updateNotification(if (port == PsiphonRunner.LOCAL_SOCKS) "متصل + سایفون — $lastServerName" else "متصل — $lastServerName") }
-        else DiagLogger.log("PSIPHON apply: tun restart failed")
-    }
-
     private fun stopAll() {
-        try { PsiphonRunner.stop() } catch (_: Exception) {}
-        activeSocksPort = SOCKS_PORT
-        psiphonOnly = false
         tickerOn = false
+        ticker?.interrupt(); ticker = null
         tunnelUp = false
         try { launched?.stop() } catch (_: Exception) {}
         launched = null
@@ -219,6 +163,8 @@ class HellboyVpnService : VpnService() {
 
     /** کاربر از تنظیمات سیستم VPN را قطع کرد / اپ دیگری VPN گرفت. */
     override fun onRevoke() {
+        commandEpoch.incrementAndGet()
+        VpnController.stopSession()
         stopAll()
         _status.value = SvcStatus(SvcState.STOPPED)
         stopSelf()
@@ -259,22 +205,12 @@ class HellboyVpnService : VpnService() {
         const val CHANNEL_ID = "vpnclub"
         const val NOTIF_ID = 1001
         const val SOCKS_PORT = 10808
-        const val ACTION_PSIPHON = "com.helboy.vpnclub.PSIPHON"
-        const val ACTION_START_PSIPHON_ONLY = "com.helboy.vpnclub.START_PSIPHON_ONLY"
-        const val PSIPHON_ONLY_ID = "psiphon-only"
+        const val ACTION_SEARCH = "com.helboy.vpnclub.SEARCH"
+        val activeSocksPort: Int get() = SOCKS_PORT
 
-        fun startPsiphonOnly(context: Context) {
-            _status.value = SvcStatus(SvcState.STARTING)
-            context.startForegroundService(
-                Intent(context, HellboyVpnService::class.java).setAction(ACTION_START_PSIPHON_ONLY))
-        }
-
-        /** پورت SOCKS که تونل سیستم الان به آن وصل است (هسته یا سایفون) — برای تست سلامت. */
-        @Volatile var activeSocksPort: Int = SOCKS_PORT
-            private set
-
-        fun applyPsiphon(context: Context) {
-            context.startService(Intent(context, HellboyVpnService::class.java).setAction(ACTION_PSIPHON))
+        fun search(context: Context, session: Long) {
+            context.startForegroundService(Intent(context, HellboyVpnService::class.java)
+                .setAction(ACTION_SEARCH).putExtra("session", session))
         }
 
         private val _status = MutableStateFlow(SvcStatus(SvcState.STOPPED))
@@ -286,15 +222,15 @@ class HellboyVpnService : VpnService() {
             else -> "${bps}B/s"
         }
 
-        fun start(context: Context) {
+        fun start(context: Context, session: Long) {
             // وضعیت قبلی (UP سرور قبلی) نباید به‌عنوان نتیجه‌ی این شروع خوانده شود
             _status.value = SvcStatus(SvcState.STARTING)
             context.startForegroundService(
-                Intent(context, HellboyVpnService::class.java).setAction(ACTION_START))
+                Intent(context, HellboyVpnService::class.java).setAction(ACTION_START).putExtra("session", session))
         }
-        fun stop(context: Context) {
+        fun stop(context: Context, session: Long) {
             context.startService(
-                Intent(context, HellboyVpnService::class.java).setAction(ACTION_STOP))
+                Intent(context, HellboyVpnService::class.java).setAction(ACTION_STOP).putExtra("session", session))
         }
     }
 }

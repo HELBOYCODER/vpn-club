@@ -127,11 +127,10 @@ class XrayCore(
      */
     fun buildConfig(c: ProxyConfig): String {
         val outbound = outboundFor(c).put("tag", "proxy")
-        val serverless = c.scheme == SERVERLESS
         val rp = routingPrefs()
         val prefs = if (useRouting) appContext?.let { AppSettings.of(it) } else null
         val resolver = prefs?.dnsServer?.takeIf { DnsEndpoint.isValid(it) } ?: "1.1.1.1"
-        val coreDns = serverless || prefs != null
+        val coreDns = prefs != null
         val socksIn = JSONObject()
             .put("tag", "socks-in")
             .put("listen", "127.0.0.1")
@@ -155,12 +154,6 @@ class XrayCore(
             ).put(
                 JSONObject().put("tag", "block").put("protocol", "blackhole")
             ).also { arr ->
-                // WARP + نویز: بسته‌های تصادفی UDP پیش از هندشیک WireGuard (عبور از تشخیص WireGuard در ایران)
-                if (c.scheme == "wireguard" && warpNoise) arr.put(JSONObject().put("tag", NOISE_TAG).put("protocol", "freedom")
-                    .put("settings", JSONObject().put("noises", JSONArray()
-                        .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5"))
-                        .put(JSONObject().put("type", "rand").put("packet", "50-100").put("delay", "1-5")))))
-                // بدون سرور: DNS گوشی (پورت ۵۳) به DNS داخلی هسته می‌رود که با DoH از روی فرگمنت می‌پرسد
                 if (coreDns) arr.put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
             })
             .put("routing", JSONObject()
@@ -172,10 +165,6 @@ class XrayCore(
                     }
                     if (coreDns) {
                         rules.put(JSONObject().put("type", "field").put("network", "tcp,udp").put("port", "53").put("outboundTag", "dns-out"))
-                    }
-                    if (serverless) {
-                        // QUIC (UDP 443) را ببند تا مرورگر/اپ‌ها روی TCP بیایند که فرگمنت رویش کار می‌کند
-                        rules.put(JSONObject().put("type", "field").put("network", "udp").put("port", "443").put("outboundTag", "block"))
                     }
                     if (useRouting) {
                         // قوانین کاربر: مسدود > مستقیم (مثل پروفایل‌های مسیریابی ZeroNet)
@@ -194,7 +183,7 @@ class XrayCore(
                 }))
         if (coreDns) root.put("dns", JSONObject()
             // از DNS انتخاب‌شده استفاده کن؛ شکست DoH نباید به DNS سیستم عقب‌نشینی کند.
-            .put("servers", JSONArray(if (serverless) listOf("https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query") else listOf(resolver)))
+            .put("servers", JSONArray(listOf(resolver)))
             .put("queryStrategy", "UseIPv4"))
         return root.toString()
     }
@@ -217,44 +206,9 @@ class XrayCore(
 
     private fun routingPrefs(): RoutingPrefs = try {
         appContext?.let { val s = AppSettings.of(it)
-            RoutingPrefs(s.bypassIran || s.connStyle == "gaming", s.directRules, s.blockRules, s.proxyRules) }
+            RoutingPrefs(s.bypassIran, s.directRules, s.blockRules, s.proxyRules) }
             ?: RoutingPrefs(true, "", "", "")
     } catch (_: Exception) { RoutingPrefs(true, "", "", "") }
-
-    /** WireGuard (WARP): فرمت تخت فورک patterniha مثل CoreOutboundBuilder پتنگ. */
-    private fun wireguardOutbound(c: ProxyConfig): JSONObject {
-        val q = c.query.toMap()
-        val host = dialOverride?.substringBefore(':') ?: c.dialHost
-        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
-        val endpoint = (if (host.contains(':')) "[$host]" else host) + ":" + port
-        val settings = JSONObject()
-            .put("secretKey", c.uuidOrUser)
-            .put("address", JSONArray((q["address"] ?: "172.16.0.2/32").split(",").map { it.trim() }.filter { it.isNotEmpty() }))
-            .put("peers", JSONArray().put(JSONObject().put("publicKey", q["publickey"] ?: q["publicKey"] ?: "")
-                .put("endpoint", endpoint).put("keepAlive", 10)
-                .also { p -> q["presharedkey"]?.ifBlank { null }?.let { p.put("preSharedKey", it) } }))
-            .put("mtu", q["mtu"]?.toIntOrNull() ?: 1280)
-            .put("remoteDNS", JSONArray(listOf("1.1.1.1", "1.0.0.1")))
-            // همیشه WireGuard فضای کاربر (gVisor) — بدون تلاش برای TUN کرنل
-            .put("noKernelTun", true)
-        q["reserved"]?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.takeIf { it.size == 3 }?.let { settings.put("reserved", JSONArray(it)) }
-        val out = JSONObject().put("protocol", "wireguard").put("settings", settings)
-        // بدون ترنسپورت؛ sockopt برای نویز (dialerProxy) و برای اینکه هسته اندپوینت را با سیستم بگیرد
-        val sockopt = JSONObject()
-        if (warpNoise) sockopt.put("dialerProxy", NOISE_TAG)
-        out.put("streamSettings", JSONObject().put("sockopt", sockopt))
-        return out
-    }
-
-    /**
-     * بدون سرور (SERVERLESS، مثل ZeroNet 0.3.2 و Serverless بی‌پی‌بی): اتصال مستقیم از خود گوشی،
-     * ClientHello تکه‌تکه تا فیلتر SNI اسم سایت را نخواند؛ DNS با DoH از روی همین مسیر.
-     * سایت‌هایی که «آدرس IP»شان بسته است (مثل تلگرام) با این روش باز نمی‌شوند.
-     */
-    private fun serverlessOutbound(): JSONObject = JSONObject().put("protocol", "freedom")
-        .put("settings", JSONObject()
-            .put("domainStrategy", "UseIPv4")
-            .put("fragment", JSONObject().put("packets", "tlshello").put("length", "100-200").put("interval", "1-2")))
 
     /**
      * Hysteria2 (hy2://) روی هسته‌ی patterniha: پروتکل hysteria نسخه‌ی ۲، ترنسپورت hysteria روی QUIC،
@@ -298,8 +252,6 @@ class XrayCore(
     }
 
     private fun outboundFor(c: ProxyConfig): JSONObject {
-        if (c.scheme == "wireguard") return wireguardOutbound(c)
-        if (c.scheme == SERVERLESS) return serverlessOutbound()
         if (c.scheme == "hysteria2" || c.scheme == "hy2") return hysteriaOutbound(c)
         val q0 = c.query.toMap()
         val addr = dialOverride?.substringBefore(':') ?: c.dialHost
@@ -454,19 +406,9 @@ class XrayCore(
         private val SUPPORTED_NETS = setOf("tcp", "ws", "grpc", "xhttp", "splithttp", "httpupgrade")
 
         /** آیا این کانفیگ را هسته‌ی ما می‌تواند اجرا کند؟ (hysteria2/kcp/quic/socks حذف) */
-        /** WARP: نویز UDP پیش از هندشیک (تنظیمات کاربر؛ پیش‌فرض روشن). */
-        @Volatile var warpNoise: Boolean = true
-        const val NOISE_TAG = "warp-noise"
-
-        /** شِمای داخلی حالت «بدون سرور». */
-        const val SERVERLESS = "serverless"
+        /** گواهی‌های پین‌شده‌ی کانفیگ‌های insecure (host:port/sni/quic → sha256 hex). */
         const val NETRA_VARIANT = "netra-ff"
 
-        /** کانفیگ «بدون سرور» (یک ورودی ثابت؛ چیزی برای اشتراک ندارد). */
-        fun serverlessConfig(): ProxyConfig = ProxyConfig(SERVERLESS, "serverless.local", 443, "direct",
-            tag = "بدون سرور (Serverless)", raw = "$SERVERLESS://direct@serverless.local:443")
-
-        /** گواهی‌های پین‌شده‌ی کانفیگ‌های insecure (host:port/sni/quic → sha256 hex). */
         private val pinCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
         internal fun isInsecure(q: Map<String, String>) = listOf("allowInsecure", "insecure").any { q[it] == "1" || q[it] == "true" }
@@ -494,8 +436,6 @@ class XrayCore(
         }
 
         fun isSupported(c: ProxyConfig): Boolean {
-            if (c.scheme == SERVERLESS) return true
-            if (c.scheme == "wireguard") return c.uuidOrUser.isNotBlank() && !c.query.toMap()["publickey"].isNullOrBlank()
             // Hysteria2: فقط پورت تکی (پورت‌هاپینگ «443,20000-30000» پشتیبانی نمی‌شود)
             if (c.scheme == "hysteria2" || c.scheme == "hy2") return c.uuidOrUser.isNotBlank() && c.port in 1..65535 &&
                 (c.query.toMap()["obfs"].isNullOrBlank() || c.query.toMap()["obfs"] == "salamander")

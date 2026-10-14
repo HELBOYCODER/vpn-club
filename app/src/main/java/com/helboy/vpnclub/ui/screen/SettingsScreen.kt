@@ -68,7 +68,6 @@ fun SettingsScreen(settings: AppSettings) {
     var style by remember { mutableStateOf(settings.buttonStyle) }
     var fx by remember { mutableStateOf(settings.skinEffects) }
     var bypassIran by remember { mutableStateOf(settings.bypassIran) }
-    var failover by remember { mutableStateOf(settings.autoFailover) }
     var autoLaunch by remember { mutableStateOf(settings.autoConnectOnLaunch) }
     var showApps by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
@@ -132,8 +131,6 @@ fun SettingsScreen(settings: AppSettings) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SwitchRow("ترافیک داخل ایران مستقیم", "خاموش = تونل کامل، همه‌ی ترافیک و همه‌ی اپ‌ها از VPN (پیش‌فرض)",
                     bypassIran) { bypassIran = it; settings.bypassIran = it }
-                SwitchRow("تعویض خودکار سرور", "با قطعی، فوراً به سرور بعدیِ ۱۰ منتخب می‌رود",
-                    failover) { failover = it; settings.autoFailover = it }
                 SwitchRow("اتصال خودکار هنگام باز شدن", "به‌محض ورود به برنامه وصل می‌شود",
                     autoLaunch) { autoLaunch = it; settings.autoConnectOnLaunch = it }
             }
@@ -151,15 +148,10 @@ fun SettingsScreen(settings: AppSettings) {
 
         LanSharingCard(settings)
 
-        PanelInstallCard()
-
-        // سایفون (از صفحه‌ی اول به اینجا منتقل شد) — کلید آتش/یخ + حالت/پروتکل/کشور
-        PsiphonCard(VpnController.state.collectAsState().value)
-
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("عیب‌یابی", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("لاگ دقیق هر مرحله (اسکن، IP منتخب، پینگ مستقیم، اینجکت هر سرور با دلیل، اتصال) روی همین گوشی ذخیره می‌شود — اگر مشکلی بود «ارسال فایل» را بزنید و بفرستید.",
+                Text("لاگ جست‌وجوی سرورها، تست کیفیت، اتصال و بازیابی روی همین گوشی ذخیره می‌شود — اگر مشکلی بود «ارسال فایل» را بزنید و بفرستید.",
                     color = TextSecondary, fontSize = 12.sp)
                 OutlinedButton(onClick = { showLog = true }) { Text("نمایش لاگ تشخیصی") }
             }

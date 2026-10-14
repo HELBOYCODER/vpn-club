@@ -99,25 +99,6 @@ class ZeroNetFeaturesTest {
         assertFalse(XrayCore.isSupported(LinkParser.parse("hy2://p@h.example.com:443?obfs=unknown#x")!!))
     }
 
-    @Test fun serverlessConfig() {
-        val c = XrayCore.serverlessConfig()
-        assertTrue(XrayCore.isSupported(c))
-        val json = JSONObject(XrayCore(10808, useRouting = true).buildConfig(c))
-        val out = json.getJSONArray("outbounds").getJSONObject(0)
-        assertEquals("freedom", out.getString("protocol"))
-        assertEquals("tlshello", out.getJSONObject("settings").getJSONObject("fragment").getString("packets"))
-        val outs = json.getJSONArray("outbounds")
-        assertTrue((0 until outs.length()).any { outs.getJSONObject(it).optString("protocol") == "dns" })
-        val rules = json.getJSONObject("routing").getJSONArray("rules")
-        assertEquals("dns-out", rules.getJSONObject(0).getString("outboundTag"))
-        assertEquals("block", rules.getJSONObject(1).getString("outboundTag")) // QUIC بسته
-        assertTrue(json.getJSONObject("dns").getJSONArray("servers").getString(0).startsWith("https://"))
-        // ذخیره/بازیابی برای سرویس
-        val back = ServerEntry.fromJson(ServerEntry(c, source = "serverless").toJson())!!
-        assertEquals(XrayCore.SERVERLESS, back.config.scheme)
-        dump("serverless", json)
-    }
-
     @Test fun routingRulesSplit() {
         val (ips, doms) = XrayCore.splitRules("digikala.com\n*.bank.ir, 10.0.0.0/8\ngeosite:category-ads-all\ngeoip:ir\n2001:db8::/32\n# comment")
         assertEquals(listOf("10.0.0.0/8", "geoip:ir", "2001:db8::/32"), ips)
@@ -127,15 +108,6 @@ class ZeroNetFeaturesTest {
         val json = JSONObject(XrayCore(10808, useRouting = true).buildConfig(c))
         assertTrue(json.getJSONArray("inbounds").getJSONObject(0).getJSONObject("sniffing").getBoolean("routeOnly"))
         dump("routing", json)
-    }
-
-    @Test fun connectionStyleFilter() {
-        val plain = LinkParser.parse("vless://$uuid@p.example.com:80?encryption=none&type=ws#p")!!
-        val tls = LinkParser.parse("vless://$uuid@t.example.com:443?encryption=none&type=ws&security=tls#t")!!
-        assertFalse(HellboyEngine.styleAllows("secure", plain))
-        assertTrue(HellboyEngine.styleAllows("secure", tls))
-        assertTrue(HellboyEngine.styleAllows("normal", plain))
-        assertTrue(HellboyEngine.styleAllows("gaming", plain))
     }
 
     @Test fun editorHasHy2AndCorrectTlsFields() {

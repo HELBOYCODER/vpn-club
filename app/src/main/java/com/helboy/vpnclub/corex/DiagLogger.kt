@@ -82,8 +82,8 @@ object DiagLogger {
         log("SESSION app=$ver device=${Build.MANUFACTURER} ${Build.MODEL} android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT} abi=${Build.SUPPORTED_ABIS.joinToString(",")}")
         log("NET ${networkSummary(ctx)}")
         val st = AppSettings.of(ctx)
-        log("SETTINGS carrier=${st.carrierMode} bypassIran=${st.bypassIran} failover=${st.autoFailover} fastest=${st.fastestMode} " +
-            "autoInject=${st.autoInjectAfterScan} selectedIp=${st.selectedIp.ifEmpty { "-" }} psiphon=${st.psiphonEnabled}/${st.psiphonMode}/${st.psiphonProtocol}/${st.psiphonRegion.ifEmpty { "auto" }} bypassApps=${st.bypassApps.size}")
+        log("SETTINGS carrier=${st.carrierMode} bypassIran=${st.bypassIran} smartSession=true " +
+            "bypassApps=${st.bypassApps.size}")
     }
 
     /** نوع شبکه‌ی زیرین (سیم‌کارت/وای‌فای) و اینکه VPN فعال است یا نه. */

@@ -29,7 +29,7 @@ object ConfigEditor {
     }
 
     /** آیا این پروتکل فیلدهای SNI/Host/Path دارد؟ (ss و socks ندارند) */
-    fun hasTransportFields(c: ProxyConfig) = c.scheme !in setOf("ss", "socks", "socks5", "hysteria2", "hy2", "wireguard", "wg", XrayCore.SERVERLESS)
+    fun hasTransportFields(c: ProxyConfig) = c.scheme !in setOf("ss", "socks", "socks5", "hysteria2", "hy2", "wireguard", "wg")
 
     fun apply(c: ProxyConfig, f: Fields): Result {
         val address = f.address.trim().trim('[', ']')
