@@ -21,7 +21,7 @@
 
 ## Netra / Vazirmatn
 
-- Netra Panel: https://github.com/netrair/netra-panel, MIT, pinned `9f2c7824fee248005bb0bb60b3da63914fd21b8c`. Worker is downloaded during user-authorized installation, not bundled or modified.
+- Netra Panel: https://github.com/netrair/netra-panel, MIT, pinned `9f2c7824fee248005bb0bb60b3da63914fd21b8c`. Worker is downloaded during user-authorized installation, not bundled; the Skip Login handler is disabled locally as described below.
 - Vazirmatn: SIL Open Font License 1.1. Font and notice sourced from ZeroNet at `e7f22ed7f40f267a91fd592677d237fdab066931`. Notice bundled in `app/src/main/assets/licenses/Vazirmatn-OFL.txt`.
 
 The pinned Netra worker is hardened at installation: its `skipAuth` handler returns HTTP 403 before writing `authDisabled`. The upstream license is retained.

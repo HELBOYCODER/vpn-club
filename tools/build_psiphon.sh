@@ -20,7 +20,7 @@ if [ ! -d "$WORK/.git" ]; then
 fi
 git -C "$WORK" checkout --quiet "$REV" 2>/dev/null || {
   git -C "$WORK" fetch --quiet --depth 50 origin "$BRANCH" && git -C "$WORK" checkout --quiet "$REV"
-} || echo "build_psiphon: pinned commit missing, using $BRANCH head" >&2
+} || { echo "build_psiphon: pinned commit unavailable; refusing an unverified branch head" >&2; exit 1; }
 cd "$WORK"
 export GOFLAGS=-mod=vendor CGO_ENABLED=0
 LD="-s -w"
