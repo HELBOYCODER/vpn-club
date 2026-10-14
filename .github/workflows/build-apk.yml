@@ -26,6 +26,8 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.8'

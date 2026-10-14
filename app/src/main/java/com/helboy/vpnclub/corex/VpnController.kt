@@ -1049,7 +1049,7 @@ object VpnController {
                 if (!_state.value.connected || switching) return@launch
                 var lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000)
                 if (lat <= 0) { delay(1_500); lat = HealthTester.tunnelLatency(HellboyVpnService.activeSocksPort, 5_000) }
-                if (lat <= 0 && settings.autoFailover && !psiphonOnlyUp) failover()
+                if (lat <= 0 && settings.autoFailover && !psiphonOnlyUp && settings.connStyle != "gaming") failover()
             } finally { kickBusy = false }
         }
     }
