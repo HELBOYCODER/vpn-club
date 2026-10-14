@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -101,7 +102,6 @@ fun HellboyFace(
             contentDescription = if (connected) "قطع اتصال" else if (busy) "لغو اتصال" else "اتصال هوشمند"
             stateDescription = if (connected) "متصل" else if (busy) "در حال اتصال" else "قطع"
         }.size(size)
-            .semantics { contentDescription = if (connected) "قطع اتصال" else "اتصال" }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

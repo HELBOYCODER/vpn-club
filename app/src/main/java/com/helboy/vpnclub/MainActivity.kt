@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // اتصال خودکار هنگام باز شدن (فقط اگر مجوز VPN از قبل داده شده)
-        if (intent.action != ACTION_TOGGLE && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
+        if (intent.action != ACTION_TOGGLE && intent.action != Intent.ACTION_SEND && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
             !VpnController.state.value.connected && VpnService.prepare(this) == null) {
             VpnController.connectFastest()
         }
