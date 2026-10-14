@@ -84,6 +84,8 @@ class HellboyEngine(private val context: Context) {
         val lock = Mutex()
         val tested = java.util.concurrent.atomic.AtomicInteger()
         val deadline = android.os.SystemClock.elapsedRealtime() + SCAN_BUDGET_MS
+        // Complete native environment initialization before parallel measurements start.
+        XrayCore.ensureEnv(context)
         coroutineScope {
             repeat(PARALLEL_TESTS) {
                 launch(Dispatchers.IO) {
