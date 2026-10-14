@@ -135,7 +135,7 @@ class HellboyVpnService : VpnService() {
                 }
                 last = now
             }
-        }.also { it.isDaemon = true }.start()
+        }.also { it.isDaemon = true; it.start() }
     }
 
     private fun stopAll() {
