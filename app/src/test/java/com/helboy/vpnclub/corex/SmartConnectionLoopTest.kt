@@ -13,7 +13,7 @@ class SmartConnectionLoopTest {
         val statuses = mutableListOf<SmartConnectionLoop.Status>()
         var drops = 0
         var scan: suspend (Int) -> List<String> = { listOf("a", "b") }
-        var connect: suspend (String) -> Boolean = { true }
+        var connectHandler: suspend (String) -> Boolean = { true }
         var health: () -> ConnectionQuality = { ConnectionQuality(100, 256_000.0) }
         var onStatus: (SmartConnectionLoop.Status, String?) -> Unit = { _, _ -> }
         override fun key(candidate: String) = candidate
@@ -22,7 +22,7 @@ class SmartConnectionLoopTest {
             scans += excluded
             return scan(scans.size)
         }
-        override suspend fun connect(candidate: String): Boolean { connects += candidate; return connect(candidate) }
+        override suspend fun connect(candidate: String): Boolean { connects += candidate; return connectHandler(candidate) }
         override suspend fun quality() = health()
         override suspend fun dropTunnel() { drops++ }
         override fun status(status: SmartConnectionLoop.Status, candidate: String?, retrySeconds: Long) {
@@ -36,7 +36,7 @@ class SmartConnectionLoopTest {
     @Test fun allFailedCandidatesStartFreshDiscoveryAndConnectNewServer() {
         val fake = Fake()
         fake.scan = { if (it == 1) listOf("a", "b") else listOf("fresh") }
-        fake.connect = { it == "fresh" }
+        fake.connectHandler = { it == "fresh" }
         fake.onStatus = { status, _ -> if (status == SmartConnectionLoop.Status.CONNECTED) throw End() }
         run(fake)
         assertEquals(listOf("a", "b", "fresh"), fake.connects)
