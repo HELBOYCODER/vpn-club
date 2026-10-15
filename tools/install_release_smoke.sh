@@ -5,7 +5,7 @@ mkdir -p ui-evidence
 curl --fail --location --retry 3 'https://github.com/HELBOYCODER/vpn-club/releases/download/v4.3.1-preview.1/HellboyVPN-v4.3.1-preview.1.apk' -o "$RUNNER_TEMP/previous-hellboy.apk"
 adb install -r "$RUNNER_TEMP/previous-hellboy.apk" | tee ui-evidence/previous-install.txt
 # Instrumentation installed a debug build. Exercise the exact release APK next.
-adb uninstall "$APP_ID"
+if adb shell pm path "$APP_ID" | grep -q "package:"; then adb uninstall "$APP_ID"; fi
 export APK_PATH="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
 test -n "$APK_PATH"
 bash tools/ui_smoke.sh
