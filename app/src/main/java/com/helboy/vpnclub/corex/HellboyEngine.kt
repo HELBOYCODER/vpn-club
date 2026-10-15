@@ -67,7 +67,10 @@ class HellboyEngine(private val context: Context) {
 
     data class Progress(val phase: Phase, val message: String, val configCount: Int = 0, val found: Int = 0)
     fun savedServers(): List<ServerEntry> = store.loadServers().filter { supported(it.config) }
-    fun saveServers(list: List<ServerEntry>) = store.saveServers(list)
+    fun saveServers(list: List<ServerEntry>) {
+        // An offline/empty scan must not erase the last useful bootstrap pool.
+        if (list.isNotEmpty()) store.saveServers(list)
+    }
 
     suspend fun scan(excluded: Set<String>, onState: (Progress) -> Unit): List<ServerEntry> = withContext(Dispatchers.IO) {
         onState(Progress(Phase.FETCHING, "دریافت تازهٔ سرورها…"))
