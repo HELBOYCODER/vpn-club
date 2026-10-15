@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p ui-evidence
-APP_ID="${APP_ID:-com.helboy.vpnclub.preview43}"
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+APP_ID="${APP_ID:-com.helboy.vpnclub.preview432}"
+adb install -r "${APK_PATH:-app/build/outputs/apk/debug/app-debug.apk}"
 adb shell pm grant "$APP_ID" android.permission.POST_NOTIFICATIONS
 adb shell appops set "$APP_ID" ACTIVATE_VPN allow
 adb logcat -c
