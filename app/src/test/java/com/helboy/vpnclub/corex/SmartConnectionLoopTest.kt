@@ -116,8 +116,11 @@ class SmartConnectionLoopTest {
         assertEquals(3, samples)
         assertEquals(listOf("a", "b"), fake.connects)
     }
-    @Test fun qualityRequiresTrafficAndLatencyWithinLimits() {
-        assertFalse(ConnectionQuality(100, 0.0).healthy)
+    @Test fun unavailableSpeedEndpointDoesNotInvalidateWorkingHttpsTunnel() {
+        assertTrue(ConnectionQuality(100, 0.0).healthy)
+        assertFalse(ConnectionQuality(100, 0.0).dead)
+        assertTrue(ConnectionQuality(3_000, 10_000.0).usable)
+        assertFalse(ConnectionQuality(-1, 0.0).usable)
         assertFalse(ConnectionQuality(3_000, 1_000_000.0).healthy)
         assertTrue(ConnectionQuality(100, 128_000.0).healthy)
     }

@@ -166,7 +166,7 @@ object VpnController {
         if (status?.state != SvcState.UP || id != sessionId) return false
         val quality = HealthTester.connectionQuality(HellboyVpnService.SOCKS_PORT)
         currentCoroutineContext().ensureActive()
-        if (id != sessionId || !quality.healthy) {
+        if (id != sessionId || !quality.usable) {
             DiagLogger.log("SMART_REJECT ${entry.config.host} latency=${quality.latencyMs} down=${quality.downloadBps}")
             return false
         }

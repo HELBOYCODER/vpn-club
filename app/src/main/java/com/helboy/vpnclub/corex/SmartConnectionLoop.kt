@@ -10,8 +10,9 @@ import kotlinx.coroutines.isActive
 
 /** Measurements come from a bounded request through the tunnel, never from idle user traffic. */
 data class ConnectionQuality(val latencyMs: Long, val downloadBps: Double) {
-    val healthy: Boolean get() = latencyMs in 1..MAX_LATENCY_MS && downloadBps >= MIN_DOWNLOAD_BPS
-    val dead: Boolean get() = latencyMs <= 0 || downloadBps <= 0
+    val usable: Boolean get() = latencyMs in 1..4_000L
+    val healthy: Boolean get() = latencyMs in 1..MAX_LATENCY_MS && (downloadBps <= 0 || downloadBps >= MIN_DOWNLOAD_BPS)
+    val dead: Boolean get() = latencyMs <= 0
     companion object {
         const val MAX_LATENCY_MS = 2_000L
         const val MIN_DOWNLOAD_BPS = 64.0 * 1024

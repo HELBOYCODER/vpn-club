@@ -71,14 +71,26 @@ class HellboyEngine(private val context: Context) {
 
     suspend fun scan(excluded: Set<String>, onState: (Progress) -> Unit): List<ServerEntry> = withContext(Dispatchers.IO) {
         onState(Progress(Phase.FETCHING, "دریافت تازهٔ سرورها…"))
-        val raw = runInterruptible { fetcher.fetchAll(prioritySubscriptions + defaultSubscriptions) }
+        val (priorityRaw, publicRaw) = coroutineScope {
+            val priority = async { runInterruptible { fetcher.fetchAll(prioritySubscriptions) } }
+            val public = async { runInterruptible { fetcher.fetchAll(defaultSubscriptions) } }
+            priority.await() to public.await()
+        }
         currentCoroutineContext().ensureActive()
-        val configs = raw.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
+        fun parse(raw: List<String>) = raw.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
             .filter { supported(it) && ServerEntry(it).serverKey !in excluded }
             .distinctBy { ServerEntry(it).serverKey }
-        // Fresh randomized samples prevent repeatedly testing the same failed feed entries.
-        val sample = configs.shuffled().take(MAX_CANDIDATES)
-        onState(Progress(Phase.TESTING, "تست واقعی ${sample.size} سرور…", configs.size))
+        val priority = parse(priorityRaw)
+        val public = parse(publicRaw)
+        val saved = savedServers().filter { it.serverKey !in excluded }
+        // Reserve space for verified feeds instead of losing them in a tiny random sample.
+        // Retest the complete saved entry: its successful dial address and carrier profile matter.
+        val candidates = DiscoverySelection.select(saved, priority.shuffled().map { ServerEntry(it) },
+            public.shuffled().map { ServerEntry(it) }, MAX_CANDIDATES) { it.serverKey }
+        onState(Progress(Phase.TESTING, "غربال دسترسی ${candidates.size} سرور…", priority.size + public.size))
+        val reachable = prefilter(candidates)
+        val sample = reachable.take(MAX_TUNNEL_TESTS)
+        onState(Progress(Phase.TESTING, "تست واقعی ${sample.size} سرور…", candidates.size))
         val queue = java.util.concurrent.ConcurrentLinkedQueue(sample)
         val found = mutableListOf<ServerEntry>()
         val lock = Mutex()
@@ -91,19 +103,65 @@ class HellboyEngine(private val context: Context) {
                 launch(Dispatchers.IO) {
                     while (isActive && android.os.SystemClock.elapsedRealtime() < deadline) {
                         if (lock.withLock { found.size >= TARGET_SERVERS }) break
-                        val cfg = queue.poll() ?: break
-                        val (entry, result) = testConfig(cfg)
+                        val candidate = queue.poll() ?: break
+                        val (entry, result) = if (candidate.variantId != null || candidate.config.isInjected)
+                            candidate.let {
+                                val measured = runInterruptible { delayTestR(it) }
+                                it.copy(latencyMs = (measured as? DelayResult.Ok)?.ms ?: -1,
+                                    testedAt = System.currentTimeMillis()) to measured
+                            }
+                        else testConfig(candidate.config, allowFallback = false)
                         val count = tested.incrementAndGet()
                         if (result is DelayResult.Ok) lock.withLock {
                             if (found.size < TARGET_SERVERS && found.none { it.serverKey == entry.serverKey }) found += entry
                         }
                         val size = lock.withLock { found.size }
-                        onState(Progress(Phase.TESTING, "تست $count/${sample.size} · سالم: $size", configs.size, size))
+                        onState(Progress(Phase.TESTING, "تست $count/${sample.size} · سالم: $size", candidates.size, size))
                     }
                 }
             }
         }
-        found.sortedBy { it.latencyMs }.also { DiagLogger.log("SCAN parsed=${configs.size} tested=${tested.get()} healthy=${it.size}") }
+        // Exhaust cheap plain tests first; one dead endpoint must not consume three full timeouts.
+        // If the plain pass found nothing, restore the carrier fallbacks removed by the refactor.
+        if (found.isEmpty()) {
+            val fallbackQueue = java.util.concurrent.ConcurrentLinkedQueue(sample.take(40))
+            coroutineScope {
+                repeat(PARALLEL_TESTS) {
+                    launch(Dispatchers.IO) {
+                        while (isActive && lock.withLock { found.size < TARGET_SERVERS }) {
+                            val candidate = fallbackQueue.poll() ?: break
+                            if (!ServerEntry.injectableTransport(candidate.config)) continue
+                            val (entry, result) = testConfig(candidate.config, skipPlain = true)
+                            if (result is DelayResult.Ok) lock.withLock {
+                                if (found.size < TARGET_SERVERS && found.none { it.serverKey == entry.serverKey }) found += entry
+                            }
+                            onState(Progress(Phase.TESTING, "تست روش‌های جایگزین · سالم: ${lock.withLock { found.size }}", candidates.size))
+                        }
+                    }
+                }
+            }
+        }
+        found.sortedBy { it.latencyMs }.also { DiagLogger.log("SCAN candidates=${candidates.size} reachable=${reachable.size} tested=${tested.get()} healthy=${it.size}") }
+    }
+
+    private suspend fun prefilter(candidates: List<ServerEntry>): List<ServerEntry> = coroutineScope {
+        val queue = java.util.concurrent.ConcurrentLinkedQueue(candidates.withIndex().toList())
+        val alive = java.util.concurrent.ConcurrentLinkedQueue<IndexedValue<ServerEntry>>()
+        val deadline = android.os.SystemClock.elapsedRealtime() + 20_000
+        repeat(64) {
+            launch(Dispatchers.IO) {
+                while (isActive && android.os.SystemClock.elapsedRealtime() < deadline) {
+                    val item = queue.poll() ?: break
+                    val cfg = item.value.config
+                    // UDP protocols have no TCP listener; a TCP probe must never discard them.
+                    if (cfg.scheme in listOf("hysteria2", "hy2") ||
+                        runInterruptible { HealthTester.tcpPing(cfg.dialHost, cfg.dialPort, 1_500) } > 0) alive += item
+                }
+            }
+        }
+        // await children before taking the snapshot
+        coroutineContext[Job]!!.children.toList().joinAll()
+        alive.sortedBy { it.index }.map { it.value }
     }
 
     private fun supported(c: ProxyConfig) = XrayCore.isSupported(c) && c.scheme != "wireguard"
@@ -138,13 +196,13 @@ class HellboyEngine(private val context: Context) {
         } finally { frag?.stop() }
     }
 
-    suspend fun testConfig(cfg: ProxyConfig, variantId: String? = null, useFrag: Boolean = false): Pair<ServerEntry, DelayResult> = withContext(Dispatchers.IO) {
+    suspend fun testConfig(cfg: ProxyConfig, variantId: String? = null, useFrag: Boolean = false, allowFallback: Boolean = true, skipPlain: Boolean = false): Pair<ServerEntry, DelayResult> = withContext(Dispatchers.IO) {
         var entry = ServerEntry(cfg, variantId, useFrag)
-        var result = runInterruptible { delayTestR(entry) }
+        var result: DelayResult = if (skipPlain) DelayResult.Timeout else runInterruptible { delayTestR(entry) }
         currentCoroutineContext().ensureActive()
         // Keep the existing carrier fragmentation profiles, without WARP or clean-IP scanning.
-        if (result !is DelayResult.Ok && result !is DelayResult.ConfigError && ServerEntry.injectableTransport(cfg)) {
-            for (v in IranVariants.order(settings.carrierMode, learnedVariant).filter { it.id != "plain" && !it.ipv6 }.take(2)) {
+        if (allowFallback && result !is DelayResult.Ok && result !is DelayResult.ConfigError && ServerEntry.injectableTransport(cfg)) {
+            for (v in IranVariants.order(settings.carrierMode, learnedVariant).filter { it.id != "plain" && !it.ipv6 }) {
                 currentCoroutineContext().ensureActive()
                 entry = ServerEntry(cfg, v.id, v.useFrag)
                 result = runInterruptible { delayTestR(entry) }
@@ -157,11 +215,12 @@ class HellboyEngine(private val context: Context) {
 
     companion object {
         const val TARGET_SERVERS = 5
-        const val PARALLEL_TESTS = 4
-        const val MAX_CANDIDATES = 120
+        const val PARALLEL_TESTS = 8
+        const val MAX_CANDIDATES = 2_500
+        const val MAX_TUNNEL_TESTS = 400
         const val SCAN_BUDGET_MS = 90_000L
         const val TEST_URL = "https://www.gstatic.com/generate_204"
-        const val DELAY_TIMEOUT_MS = 6_000L
-        const val MAX_DELAY_MS = ConnectionQuality.MAX_LATENCY_MS
+        const val DELAY_TIMEOUT_MS = 8_000L
+        const val MAX_DELAY_MS = 4_000L
     }
 }

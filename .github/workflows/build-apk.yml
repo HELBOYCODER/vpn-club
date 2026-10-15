@@ -48,7 +48,7 @@ jobs:
       - name: Unit tests, lint, release and debug builds
         env:
           HELLBOY_KEYSTORE_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD || secrets.HB_KEYSTORE_PASSWORD }}
-        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug $BUILD_FLAGS --no-daemon --stacktrace
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest $BUILD_FLAGS --no-daemon --stacktrace
       - name: Test and lint reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,7 +69,9 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash tools/ui_smoke.sh
+          script: |
+            gradle :app:connectedDebugAndroidTest $BUILD_FLAGS --no-daemon --stacktrace
+            bash tools/ui_smoke.sh
       - name: UI evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -81,7 +83,7 @@ jobs:
         run: |
           V=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
           TAG="v$V"
-          if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.3"; fi
+          if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.1"; fi
           mkdir -p release-dist
           cp app/build/outputs/apk/release/*.apk "release-dist/HellboyVPN-$TAG.apk"
           if unzip -l "release-dist/HellboyVPN-$TAG.apk" | grep -Ei 'libpsiphon|psiphon_servers'; then
@@ -106,8 +108,8 @@ jobs:
           fi
           if [ "$PREVIEW" = "true" ]; then
             gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
-              --title "Hellboy VPN 4.3.0 Preview" --prerelease --notes-file RELEASE_NOTES.md
+              --title "Hellboy VPN 4.3.1 Preview" --prerelease --notes-file RELEASE_NOTES.md
           else
             gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
-              --title "Hellboy VPN 4.3.0" --notes-file RELEASE_NOTES.md
+              --title "Hellboy VPN 4.3.1" --notes-file RELEASE_NOTES.md
           fi
