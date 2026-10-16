@@ -1,7 +1,20 @@
-# Hellboy VPN 4.3.2 — Install fix
+# Hellboy VPN 4.3.3 — Protocol selector
 
-رفع تداخل نصب نسخه‌های Preview با امضای متفاوت. این نسخه با شناسهٔ مستقل `com.helboy.vpnclub.preview432` کنار نسخهٔ قبلی نصب می‌شود و نیازی به پاک کردن آن ندارد.
+در این نسخه، **انتخاب واقعی نوع اتصال** در صفحهٔ تنظیمات اضافه شده است: خودکار، VLESS، VMess، Trojan، Shadowsocks و Hysteria2.
 
-فایل Release نهایی در شبیه‌ساز اندروید، در حالی که APK عمومی ۴.۳.۱ نصب است، نصب و اجرا می‌شود؛ نصب دوبارهٔ همان فایل نیز بررسی می‌شود. اصلاحات اتصال ۴.۳.۱ و پوستهٔ قبلی حفظ شده‌اند.
+- انتخاب کاربر ذخیره می‌شود و در اتصال بعدی اعمال می‌شود.
+- موتور کشف سرور، سرورهای ذخیره‌شده و تست تونل فقط روی پروتکل انتخاب‌شده انجام می‌شوند.
+- گزینهٔ «خودکار» تمام پروتکل‌های پشتیبانی‌شدهٔ موتور فعلی Xray را در نظر می‌گیرد.
+- گزینه‌های MSN-GUARD شامل MASQUE، WireGuard/WARP، Psiphon و Tor هنوز پیاده‌سازی نشده‌اند و غیرفعال مشخص شده‌اند، نه اینکه دکمه‌های نمایشی اتصال باشند.
+- پوسته و منوی اصلی Hellboy VPN حفظ شده است.
+- نسخهٔ Preview با شناسهٔ مستقل `com.helboy.vpnclub.preview433` منتشر می‌شود تا با کلید امضای Previewهای قبلی تداخل نکند.
 
-Fixes the package/signature collision between separately signed previews. Version 4.3.2 installs alongside 4.3.1 using a separate package ID. CI installs the previous public APK, installs and launches the exact new release APK, and verifies reinstalling that release. The existing connection fixes and visual design are preserved.
+این نسخه **ادغام کامل MSN-GUARD نیست** و اجرای پروتکل‌های جدید بدون موتور مربوطه را ادعا نمی‌کند.
+
+## English
+
+Version 4.3.3 adds a working protocol filter to Settings. Select Automatic, VLESS, VMess, Trojan, Shadowsocks or Hysteria2. The choice is persisted and applied to future scans, including cached candidates and native outbound delay measurements.
+
+Unavailable MSN-GUARD transports (MASQUE, WireGuard/WARP, Psiphon and Tor) are clearly identified as not yet implemented. No fake transport buttons.
+
+Preview uses the separate package ID `com.helboy.vpnclub.preview433` because existing preview APKs may have incompatible release signing certificates. No full MSN-GUARD integration is claimed.
