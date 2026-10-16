@@ -96,10 +96,7 @@ class VpnClubEngine(private val context: Context) {
             onState(EngineState(Phase.SCANNING_CF, "اسکن IPهای تمیز کلادفلر…", configCount = configs.size))
             val cleanIps = CloudflareScanner.scan(perRange = 12, ports = listOf(443))
                 .take(15)
-            if (cleanIps.isEmpty()) {
-                onState(EngineState(Phase.FAILED, "هیچ IP تمیز کلادفلر پیدا نشد", configCount = configs.size))
-                return@withContext null
-            }
+            // Cloudflare IP discovery is optional: direct profiles must remain usable.
 
             // ── فاز ۳: غربال TCP سریع → استخر کاندیدهای «پینگ‌دار» ─────────────
             onState(EngineState(Phase.TESTING, "غربال سریع پینگ…",
@@ -138,7 +135,7 @@ class VpnClubEngine(private val context: Context) {
 
             // تزریق IP تمیز فقط روی کانفیگ‌های TLS پشت کلادفلر
             val injected = configs.filter { tlsOf(it) }.mapIndexed { i, c ->
-                if (isBehindCf(c)) {
+                if (cleanIps.isNotEmpty() && isBehindCf(c)) {
                     val ip = cleanIps[i % cleanIps.size]
                     val port = if (c.port in CloudflareScanner.CF_PORTS) c.port else ip.port
                     c.withDial(ip.ip, port)
