@@ -124,6 +124,29 @@ fun SettingsScreen(settings: AppSettings) {
             }
         }
 
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("روش‌های اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("موتور فعال: Xray و OpenVPN. سایر پروتکل‌ها پس از ادغام و آزمایش هسته مربوطه فعال می‌شوند.",
+                    color = TextSecondary, fontSize = 12.sp)
+                listOf(
+                    "خودکار (انتخاب سرور سالم)" to true,
+                    "Xray / VLESS / Trojan" to true,
+                    "OpenVPN" to true,
+                    "MASQUE / HTTP3" to false,
+                    "WireGuard / WARP" to false,
+                    "Psiphon" to false,
+                    "Tor / Tor over WARP" to false
+                ).forEach { (name, supported) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, modifier = Modifier.weight(1f), color = TextPrimary, fontSize = 13.sp)
+                        Text(if (supported) "موجود" else "هنوز غیرفعال",
+                            color = if (supported) NeonCyan else TextTertiary, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
         // سبک اتصال / DNS / قوانین مسیریابی (ZeroNet)
         ConnectionCard(VpnController.state.collectAsState().value)
 
