@@ -41,7 +41,7 @@ jobs:
             echo "PREVIEW=false" >> "$GITHUB_ENV"
           else
             echo "BUILD_FLAGS=-PhellboyPreview=true" >> "$GITHUB_ENV"
-            echo "APP_ID=com.helboy.vpnclub.preview432" >> "$GITHUB_ENV"
+            echo "APP_ID=com.helboy.vpnclub.preview433" >> "$GITHUB_ENV"
             echo "PREVIEW=true" >> "$GITHUB_ENV"
             echo "No fixed release key: building a separate preview app."
           fi
@@ -108,8 +108,8 @@ jobs:
           fi
           if [ "$PREVIEW" = "true" ]; then
             gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
-              --title "Hellboy VPN 4.3.2 Preview" --prerelease --notes-file RELEASE_NOTES.md
+              --title "Hellboy VPN $TAG Preview" --prerelease --notes-file RELEASE_NOTES.md
           else
             gh release create "$TAG" release-dist/* ui-evidence/*.png --target "$GITHUB_SHA" \
-              --title "Hellboy VPN 4.3.2" --notes-file RELEASE_NOTES.md
+              --title "Hellboy VPN $TAG" --notes-file RELEASE_NOTES.md
           fi
