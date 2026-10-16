@@ -63,5 +63,5 @@ jobs:
             gh release upload "$TAG_NAME" dist/VPNClub-${{ steps.version.outputs.name }}.apk --clobber
           else
             echo "Creating new release $TAG_NAME..."
-            gh release create "$TAG_NAME" dist/VPNClub-${{ steps.version.outputs.name }}.apk --title "VPN CLUB v${{ steps.version.outputs.name }} — پرووایدر جدید Riseup + اولویت سرورهای SSTP/995" --notes "$NOTES"
+            gh release create "$TAG_NAME" dist/VPNClub-${{ steps.version.outputs.name }}.apk --title "VPN Club $TAG_NAME" --notes "$NOTES"
           fi
