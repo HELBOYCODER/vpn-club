@@ -12,8 +12,8 @@ android {
         applicationId = "com.helboy.vpnclub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 51
-        versionName = "4.3.2"
+        versionCode = 52
+        versionName = "4.3.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,7 +34,7 @@ android {
 
     buildTypes {
         release {
-            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview432"
+            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview433"
             isMinifyEnabled = false
             signingConfig = if (hbKeystore != null) signingConfigs.getByName("hellboy")
                             else signingConfigs.getByName("debug")

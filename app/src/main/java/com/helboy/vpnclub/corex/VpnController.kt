@@ -29,6 +29,7 @@ object VpnController {
         val latencyMs: Long = -1,
         val testedDownloadBps: Double = 0.0,
         val needsPermission: Boolean = false,
+        val connectionMode: ConnectionMode = ConnectionMode.AUTO,
         val dnsServer: String = "1.1.1.1",
         val directRules: String = "",
         val blockRules: String = "",
@@ -56,7 +57,7 @@ object VpnController {
             engine = HellboyEngine(app)
             prefs = AppSettings.of(app)
             prefs.clearRetiredSettings()
-            _state.value = UiState(dnsServer = prefs.dnsServer, directRules = prefs.directRules,
+            _state.value = UiState(connectionMode = prefs.connectionMode, dnsServer = prefs.dnsServer, directRules = prefs.directRules,
                 blockRules = prefs.blockRules, proxyRules = prefs.proxyRules)
             initialized = true
             DiagLogger.sessionHeader(app)
@@ -65,6 +66,11 @@ object VpnController {
     fun settings(): AppSettings = prefs
     fun notify(message: String) { _state.update { it.copy(message = message) } }
     fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
+
+    fun setConnectionMode(mode: ConnectionMode) {
+        prefs.connectionMode = mode
+        _state.update { it.copy(connectionMode = mode, message = "روش ${mode.displayName} با اتصال بعدی اعمال می‌شود") }
+    }
 
     fun setDnsServer(value: String) {
         if (!DnsEndpoint.isValid(value)) { notify("DNS معتبر نیست"); return }
@@ -89,8 +95,9 @@ object VpnController {
         }
         sessionJob?.cancel()
         statsJob?.cancel()
+        val mode = prefs.connectionMode
         val id = ++sessionId
-        _state.update { it.copy(sessionActive = true, connected = false, current = null, servers = emptyList(),
+        _state.update { it.copy(connectionMode = mode, sessionActive = true, connected = false, current = null, servers = emptyList(),
             task = Task.CONNECT, phase = Phase.FETCHING, message = "", taskMsg = "یافتن سرورهای تازه…",
             connectedSince = 0, latencyMs = -1, testedDownloadBps = 0.0) }
         HellboyVpnService.search(app, id)
@@ -100,7 +107,7 @@ object VpnController {
                     override fun key(candidate: ServerEntry) = candidate.serverKey
                     override fun networkAvailable() = underlyingNetworkAvailable()
                     override suspend fun discover(excluded: Set<String>): List<ServerEntry> {
-                        val list = engine.scan(excluded) { p -> if (id == sessionId) updateSession(id) {
+                        val list = engine.scan(excluded, mode) { p -> if (id == sessionId) updateSession(id) {
                             it.copy(phase = p.phase, taskMsg = p.message, configCount = p.configCount)
                         } }
                         currentCoroutineContext().ensureActive()

@@ -72,8 +72,8 @@ class HellboyEngine(private val context: Context) {
         if (list.isNotEmpty()) store.saveServers(list)
     }
 
-    suspend fun scan(excluded: Set<String>, onState: (Progress) -> Unit): List<ServerEntry> = withContext(Dispatchers.IO) {
-        onState(Progress(Phase.FETCHING, "دریافت تازهٔ سرورها…"))
+    suspend fun scan(excluded: Set<String>, mode: ConnectionMode = ConnectionMode.AUTO, onState: (Progress) -> Unit): List<ServerEntry> = withContext(Dispatchers.IO) {
+        onState(Progress(Phase.FETCHING, "دریافت تازهٔ سرورهای ${mode.displayName}…"))
         val (priorityRaw, publicRaw) = coroutineScope {
             val priority = async { runInterruptible { fetcher.fetchAll(prioritySubscriptions) } }
             val public = async { runInterruptible { fetcher.fetchAll(defaultSubscriptions) } }
@@ -81,11 +81,11 @@ class HellboyEngine(private val context: Context) {
         }
         currentCoroutineContext().ensureActive()
         fun parse(raw: List<String>) = raw.mapNotNull { runCatching { LinkParser.parse(it) }.getOrNull() }
-            .filter { supported(it) && ServerEntry(it).serverKey !in excluded }
+            .filter { supported(it) && mode.accepts(it.scheme) && ServerEntry(it).serverKey !in excluded }
             .distinctBy { ServerEntry(it).serverKey }
         val priority = parse(priorityRaw)
         val public = parse(publicRaw)
-        val saved = savedServers().filter { it.serverKey !in excluded }
+        val saved = savedServers().filter { mode.accepts(it.config.scheme) && it.serverKey !in excluded }
         // Reserve space for verified feeds instead of losing them in a tiny random sample.
         // Retest the complete saved entry: its successful dial address and carrier profile matter.
         val candidates = DiscoverySelection.select(saved, priority.shuffled().map { ServerEntry(it) },

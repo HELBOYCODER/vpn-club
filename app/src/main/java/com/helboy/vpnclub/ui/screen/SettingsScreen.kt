@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.helboy.vpnclub.corex.AppSettings
+import com.helboy.vpnclub.corex.ConnectionMode
 import com.helboy.vpnclub.corex.DiagLogger
 import com.helboy.vpnclub.corex.VpnController
 import com.helboy.vpnclub.ui.components.ClubCard
@@ -64,6 +66,7 @@ private val REPOS = listOf("HELBOYCODER/vpn-club")
 fun SettingsScreen(settings: AppSettings) {
     val ctx = LocalContext.current
     var carrier by remember { mutableStateOf(settings.carrierMode) }
+    var connectionMode by remember { mutableStateOf(settings.connectionMode) }
     var theme by remember { mutableStateOf(settings.themeMode) }
     var style by remember { mutableStateOf(settings.buttonStyle) }
     var fx by remember { mutableStateOf(settings.skinEffects) }
@@ -121,6 +124,37 @@ fun SettingsScreen(settings: AppSettings) {
                             )
                         }
                 }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("روش‌های اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("انتخاب پروتکل واقعی Xray. فقط کانفیگ‌های همان پروتکل جست‌وجو و آزمایش می‌شوند.",
+                    color = TextSecondary, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ConnectionMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = connectionMode == mode,
+                            onClick = { connectionMode = mode; VpnController.setConnectionMode(mode) },
+                            label = { Text(mode.displayName, fontSize = 12.sp) }
+                        )
+                    }
+                }
+                Text("با اتصال بعدی اعمال می‌شود. انتخاب خودکار همه پروتکل‌های قابل‌اجرا را بررسی می‌کند.",
+                    color = NeonCyan, fontSize = 11.sp)
+                Text("گزینه‌های MSN-GUARD که موتورشان هنوز منتقل نشده:",
+                    color = TextSecondary, fontSize = 12.sp)
+                listOf("MASQUE / HTTP3", "WireGuard / WARP", "Psiphon", "Tor / Tor over WARP")
+                    .forEach { name ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(name, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
+                            Text("غیرفعال", color = TextTertiary, fontSize = 11.sp)
+                        }
+                    }
+                Text("OpenVPN در کد پروژه وجود دارد، اما هنوز به اتصال هوشمند این صفحه متصل نیست.",
+                    color = TextTertiary, fontSize = 11.sp)
             }
         }
 

@@ -14,6 +14,11 @@ class AppSettings(context: Context) {
         get() = sp.getString("carrier", "auto") ?: "auto"
         set(v) { sp.edit().putString("carrier", v).apply() }
 
+    /** Only modes backed by the installed Xray core are selectable. */
+    var connectionMode: ConnectionMode
+        get() = ConnectionMode.fromId(sp.getString("connection_mode", "auto"))
+        set(v) { sp.edit().putString("connection_mode", v.id).apply() }
+
     /** ترافیک داخل ایران مستقیم برود (geoip:ir). */
     var bypassIran: Boolean
         get() = sp.getBoolean("bypass_iran", false) // پیش‌فرض: تونل کامل (همه‌ی ترافیک)
