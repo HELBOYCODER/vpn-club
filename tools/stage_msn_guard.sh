@@ -95,4 +95,27 @@ with zipfile.ZipFile(archive) as z:
             raise SystemExit(f"Missing native engines for {abi}: {', '.join(sorted(missing))}")
     print("MSN-GUARD JNI packaged:", {key: len(value) for key, value in extracted.items()})
 PY
+
+# Diagnose the Go JNI collision before attempting to publish any integrated APK.
+# Two GoMobile AARs can ship classes with identical names but incompatible
+# native implementations. Packaging pickFirst would make one silently fail.
+python3 - "$ROOT/app/libs/libv2ray.aar" "$ROOT/app/libs/psiphon-msn.aar" "$ROOT/msnengine/src/main/jniLibs/arm64-v8a/libgojni.so" <<'PYDIAG'
+import zipfile, hashlib, io, sys
+all_classes = {}
+for path in sys.argv[1:3]:
+    with zipfile.ZipFile(path) as aar:
+        jar = zipfile.ZipFile(io.BytesIO(aar.read("classes.jar")))
+        classes = {p for p in jar.namelist() if p.endswith(".class")}
+        all_classes[path] = classes
+        gojni = [n for n in aar.namelist() if n.endswith("/libgojni.so")]
+        sizes = [(n, len(aar.read(n)), hashlib.sha256(aar.read(n)).hexdigest()[:16]) for n in gojni]
+        print("Go JNI AAR audit:", path, "classes", len(classes), "JNI", sizes, flush=True)
+paths = list(all_classes)
+shared = all_classes[paths[0]] & all_classes[paths[1]]
+print("Go JNI duplicate class names:", len(shared), sorted(shared)[:40], flush=True)
+p=sys.argv[3]
+with open(p,"rb") as f: data=f.read()
+print("Go JNI upstream APK:", len(data), hashlib.sha256(data).hexdigest()[:16], flush=True)
+PYDIAG
+
 echo "MSN-GUARD $TAG / $COMMIT staged into Hellboy Android library."
