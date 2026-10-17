@@ -1,33 +1,20 @@
-# Hellboy / MSN-GUARD source integration
+# Native MSN transport engines inside Hellboy VPN
 
-MSN-GUARD (https://github.com/mbm110/MSN-GUARD), AGPL-3.0,
-is included at source revision `5fc12b8e17dba95741507dcb8303456ec5b4c65f`
-(tag `v3.0.0`). Its code, resources, service, settings screen and JNI
-transports are packaged **inside the Hellboy application** as the
-`:msnengine` Android library. Hellboy's original UI is kept, and its
-Settings screen links to the internal MSN transport control screen.
+Upstream source: [MSN-GUARD](https://github.com/mbm110/MSN-GUARD), AGPL-3.0, pinned at commit `5fc12b8e17dba95741507dcb8303456ec5b4c65f` (`v3.0.0`).
 
-The main app and integrated transport app share a package, and each
-declares a VpnService. Only one tunnel can hold Android's VPN permission
-at a time. Hellboy disconnects its own session before entering the
-native transport screen.
+Hellboy remains the only user-facing application and UI. Upstream native VPN services, tunnel managers and JNI binaries are embedded in the `:msnengine` Android library. The native transport's standalone `MainActivity`, shade-collapse activity, and QS tile are removed from the merged manifest; Hellboy's own Compose Settings and home dial control the real native connection through `NativeTransportBridge`, status broadcasts and traffic counters. Native notifications return to Hellboy's launcher.
 
-Reproduce the integrated source tree and build with:
+The bridge transfers Hellboy DNS, bypassed apps and Iran bypass settings into the native service's preferences before starting it. Only one Android VpnService should own the active tunnel; switching modes stops the previous session.
 
-```sh
+Xray is process-isolated via upstream `libxray.so`. This removes the conflicting PattNG GoMobile bridge while preserving the native Psiphon GoMobile bridge. Its VLESS/VMess/Trojan/Shadowsocks outbound configs are translated to standard Xray JSON. Core availability is verified by Gradle and Android emulator smoke tests.
+
+Rebuild:
+
+```bash
 bash tools/stage_msn_guard.sh
 gradle :app:testDebugUnitTest :app:lintDebug :app:assembleRelease -PhellboyPreview=true
 ```
 
-Staging verifies the pinned Git commit and SHA256 of the upstream release
-APK. The JNI files are extracted from the corresponding upstream APK,
-and original source is available in the exact pinned Git tree.
-`app/libs/psiphon-msn.aar` is extracted from that same tag.
-The generated `msnengine/src/main` and staged binaries are excluded
-from Git; they are reproducible from this script and the pinned source.
+The stage script clones and verifies the pinned Git commit and verifies the upstream release APK against upstream SHA256SUMS before extracting native libraries. The corresponding Psiphon AAR is included from the same revision. The generated source/JNI files are not committed, but reproducible.
 
-**Licensing:** MSN-GUARD is AGPL-3.0-only; the combined distributed work
-must meet AGPL source and notice conditions. See the bundled full license
-and the upstream source. The PSIPHON AAR and native binary third-party
-notices require independent audit before unrestricted redistribution.
-This integration does not assert ownership of MSN-GUARD.
+**Licensing and security:** The combined distributed application must comply with MSN-GUARD's AGPL-3.0 source and attribution requirements and all third-party native/Go dependency license notices. Build and emulator tests do **not** prove successful connectivity on every carrier, or verify trustworthiness of public relay endpoints. Source changes remain visible in this repository.
