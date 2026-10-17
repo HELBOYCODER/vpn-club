@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     permissions:
       contents: write
     steps:
@@ -27,7 +27,9 @@ jobs:
           gradle-version: '8.10.2'
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0 build-tools;36.0.0
+      - name: Fetch verified MSN-GUARD source and native engines
+        run: bash tools/stage_msn_guard.sh
       - name: Restore signing key or select separate preview app
         env:
           KEY_B64: ${{ secrets.HELLBOY_KEYSTORE_B64 || secrets.HB_KEYSTORE_B64 }}
@@ -41,7 +43,7 @@ jobs:
             echo "PREVIEW=false" >> "$GITHUB_ENV"
           else
             echo "BUILD_FLAGS=-PhellboyPreview=true" >> "$GITHUB_ENV"
-            echo "APP_ID=com.helboy.vpnclub.preview433" >> "$GITHUB_ENV"
+            echo "APP_ID=com.helboy.vpnclub.preview440" >> "$GITHUB_ENV"
             echo "PREVIEW=true" >> "$GITHUB_ENV"
             echo "No fixed release key: building a separate preview app."
           fi
