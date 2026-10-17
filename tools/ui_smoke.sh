@@ -36,8 +36,13 @@ sleep 4
 adb shell dumpsys activity activities > ui-evidence/msn-activity.txt
 grep -q 'com.msnguard.vpn.MainActivity' ui-evidence/msn-activity.txt
 adb exec-out screencap -p > ui-evidence/msn-center.png
-adb shell input keyevent KEYCODE_BACK
+# MSN-GUARD has its own nested navigation stack. A single BACK key returns
+# to its internal mode page, not necessarily Hellboy. Bring Hellboy to the
+# foreground explicitly before continuing with the original home/search test.
+adb shell am start -W -n "$APP_ID/com.helboy.vpnclub.MainActivity"
 sleep 2
+adb shell dumpsys activity activities > ui-evidence/returned-hellboy.txt
+grep -q "$APP_ID/com.helboy.vpnclub.MainActivity" ui-evidence/returned-hellboy.txt
 # Exercise the real search foreground service, then stop it during discovery.
 click_label 'خانه'
 click_label 'اتصال هوشمند'
