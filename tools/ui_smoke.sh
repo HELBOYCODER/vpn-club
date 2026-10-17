@@ -30,6 +30,14 @@ adb exec-out screencap -p > ui-evidence/servers.png
 click_label 'تنظیمات'
 sleep 2
 adb exec-out screencap -p > ui-evidence/settings.png
+# Verify the embedded MSN transport center can actually launch, not just display a label.
+click_label 'مرکز اتصال MSN-GUARD'
+sleep 4
+adb shell dumpsys activity activities > ui-evidence/msn-activity.txt
+grep -q 'com.msnguard.vpn.MainActivity' ui-evidence/msn-activity.txt
+adb exec-out screencap -p > ui-evidence/msn-center.png
+adb shell input keyevent KEYCODE_BACK
+sleep 2
 # Exercise the real search foreground service, then stop it during discovery.
 click_label 'خانه'
 click_label 'اتصال هوشمند'
