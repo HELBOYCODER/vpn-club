@@ -99,8 +99,10 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("اتصال هوشمند خودکار", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("هر بار: جست‌وجوی تازه، تست چند سرور و اتصال به بهترین گزینه. قطعی یا افت کیفیت، انتخاب سرور تازه را آغاز می‌کند.",
+                Text("روش اتصال: ${ui.connectionMode.displayName}", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (ui.connectionMode.isNative)
+                    "با دکمه اصلی Hellboy، موتور بومی ${ui.connectionMode.displayName} اجرا می‌شود. وضعیت و سرعت در همین صفحه نمایش داده می‌شود."
+                    else "هر بار: جست‌وجوی تازه، تست چند سرور و اتصال به بهترین گزینه. قطعی یا افت کیفیت، انتخاب سرور تازه را آغاز می‌کند.",
                     color = TextSecondary, fontSize = 12.sp)
             }
         }
@@ -113,6 +115,18 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         }
 
         if (ui.connected) {
+            if (ui.connectionMode.isNative) {
+                ClubCard(Modifier.fillMaxWidth(), border = StatusGreen.copy(alpha = 0.5f)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("تونل بومی ${ui.connectionMode.displayName}", color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text("زمان اتصال: ${formatDuration(now - ui.connectedSince)}", color = NeonCyan,
+                            fontSize = 13.sp)
+                        Text("هسته MSN در پس‌زمینه Hellboy فعال است؛ برنامه یا صفحه جداگانه‌ای اجرا نمی‌شود.",
+                            color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+            }
             ui.current?.let { ServerCard(it, ui.latencyMs, formatDuration(now - ui.connectedSince)) }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 StatTile("دانلود", formatSpeed(ui.downBps), "کل: ${formatBytes(ui.downTotal)}",
