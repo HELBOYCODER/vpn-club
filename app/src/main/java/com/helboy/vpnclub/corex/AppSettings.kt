@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("bypass_iran", false) // پیش‌فرض: تونل کامل (همه‌ی ترافیک)
         set(v) { sp.edit().putBoolean("bypass_iran", v).apply() }
 
+    /** Lock down traffic while the native transport reconnects. */
+    var nativeKillSwitch: Boolean
+        get() = sp.getBoolean("native_kill_switch", false)
+        set(v) { sp.edit().putBoolean("native_kill_switch", v).apply() }
+
     /** اتصال خودکار به‌محض باز شدن اپ. */
     var autoConnectOnLaunch: Boolean
         get() = sp.getBoolean("auto_launch", false)
