@@ -24,6 +24,10 @@ for dir in java res assets; do
   test -d "$SOURCE/$dir"
   cp -a "$SOURCE/$dir" "$ROOT/msnengine/src/main/"
 done
+# Hellboy already embeds hev-htproxy.aar, whose JNI binding class is
+# hev.htproxy.TProxyService. A duplicate copy from MSN makes D8 merge fail.
+# Keep the original Hellboy AAR so both engines bind to the same Java type.
+rm -f "$ROOT/msnengine/src/main/java/hev/htproxy/TProxyService.java"
 cp "$SOURCE/AndroidManifest.xml" "$ROOT/msnengine/src/main/AndroidManifest.xml"
 cp "$TMP/upstream/app/libs/psiphon.aar" "$ROOT/app/libs/psiphon-msn.aar"
 mkdir -p "$ROOT/app/src/main/assets/licenses"
