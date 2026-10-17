@@ -33,7 +33,8 @@ cp "$TMP/upstream/app/libs/psiphon.aar" "$ROOT/app/libs/psiphon-msn.aar"
 mkdir -p "$ROOT/app/src/main/assets/licenses"
 cp "$TMP/upstream/LICENSE" "$ROOT/app/src/main/assets/licenses/MSN-GUARD-AGPL-3.0.txt"
 
-# Keep all original MSN transport services. Remove duplicate launcher icon.
+# Keep MSN's *transport services*; remove MSN's standalone UI/tile.
+# Hellboy owns the only launcher, settings, status and quick tile.
 python3 - "$ROOT/msnengine/src/main/AndroidManifest.xml" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
@@ -46,19 +47,19 @@ app = root.find("application")
 # The main Hellboy manifest exclusively owns app name, branding, and theme.
 for key in ("label", "icon", "roundIcon", "theme"):
     app.attrib.pop("{%s}%s" % (uri, key), None)
-# Different authorities require different provider component names. Preserve
-# both paths providers and keep MSN's updater share intents functional.
+# The native VpnService, background jobs and JNI resources stay intact.
+# Remove standalone MSN Activity and its tile (Hellboy has its own).
+for activity in list(app.findall("activity")):
+    if activity.get("{%s}name" % uri) in (".MainActivity", ".ShadeCollapseActivity"):
+        app.remove(activity)
+for service in list(app.findall("service")):
+    if service.get("{%s}name" % uri) == ".MsnGuardTileService":
+        app.remove(service)
+
+# Different authorities require different provider component names.
 for provider in app.findall("provider"):
     if provider.get("{%s}name" % uri) == "androidx.core.content.FileProvider":
         provider.set("{%s}name" % uri, "com.msnguard.vpn.MsnGuardFileProvider")
-for activity in root.findall(".//activity"):
-    if activity.get("{%s}name" % uri) != ".MainActivity":
-        continue
-    activity.set("{%s}exported" % uri, "false")
-    for intent_filter in list(activity.findall("intent-filter")):
-        categories = [x.get("{%s}name" % uri) for x in intent_filter.findall("category")]
-        if "android.intent.category.LAUNCHER" in categories or "android.intent.category.LEANBACK_LAUNCHER" in categories:
-            activity.remove(intent_filter)
 tree.write(path, encoding="utf-8", xml_declaration=True)
 provider_class = __import__("pathlib").Path(path).parent / "java/com/msnguard/vpn/MsnGuardFileProvider.kt"
 provider_class.write_text(
@@ -66,6 +67,18 @@ provider_class.write_text(
     "/** Dedicated provider so Hellboy log shares do not shadow MSN shares. */\n"
     "class MsnGuardFileProvider : androidx.core.content.FileProvider()\n"
 )
+# Native notifications must open Hellboy instead of the removed MSN activity.
+service_file = __import__("pathlib").Path(path).parent / "java/com/msnguard/vpn/MsnGuardVpnService.kt"
+source = service_file.read_text()
+old = "Intent(this, MainActivity::class.java).apply {"
+new = "(packageManager.getLaunchIntentForPackage(packageName) ?: Intent(Intent.ACTION_MAIN).setPackage(packageName)).apply {"
+assert old in source, "MSN notification launcher hook moved upstream"
+source = source.replace(old, new)
+source = source.replace('setSession("MSN-GUARD")', 'setSession("Hellboy VPN")')
+source = source.replace('setSession("MSN-GUARD — Kill Switch")', 'setSession("Hellboy VPN — Kill Switch")')
+source = source.replace('.setContentTitle(title)', '.setContentTitle("Hellboy VPN · " + title)')
+source = source.replace('.setLargeIcon(appBadge())', '')  # Remove MSN artwork from the notification
+service_file.write_text(source)
 PY
 
 # Use release-matched upstream binaries with verified upstream checksums.
