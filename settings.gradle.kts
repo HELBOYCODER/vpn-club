@@ -12,6 +12,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "VPNClub"
+rootProject.name = "HellboyVPN"
 include(":app")
 include(":vpnLib")
+include(":msnengine")

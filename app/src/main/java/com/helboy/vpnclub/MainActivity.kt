@@ -2,41 +2,57 @@ package com.helboy.vpnclub
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import com.helboy.vpnclub.ui.screen.OneButtonScreen
-import com.helboy.vpnclub.ui.theme.VPNClubTheme
-import com.helboy.vpnclub.ui.viewmodel.MainViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import com.helboy.vpnclub.corex.VpnController
+import com.helboy.vpnclub.ui.screen.AppRoot
+import com.helboy.vpnclub.ui.theme.HellboyTheme
 
 /**
- * تک‌دکمه: هر ضربه = روشن/خاموش. مجوز VPN فقط بار اول از سیستم گرفته می‌شود.
+ * ورودی برنامه. منطق در [VpnController] (مستقل از Activity) است؛ اینجا فقط مجوز VPN و UI.
  */
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    companion object { const val ACTION_TOGGLE = "com.helboy.vpnclub.TOGGLE" }
+
+    /** کاری که بعد از گرفتن مجوز VPN باید انجام شود. */
+    private var pending: (() -> Unit)? = null
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.startCycle()
-        }
+        if (result.resultCode == Activity.RESULT_OK) pending?.invoke()
+        if (result.resultCode != Activity.RESULT_OK) VpnController.notify("مجوز VPN داده نشد؛ اتصال آغاز نشد")
+        pending = null
     }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
+    private fun withVpnPermission(action: () -> Unit) {
+        val prepare: Intent? = VpnService.prepare(this)
+        if (prepare == null) action()
+        else { pending = action; vpnPermissionLauncher.launch(prepare) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VpnController.init(applicationContext)
+        com.helboy.vpnclub.ui.theme.ThemeState.mode = VpnController.settings().themeMode
+        com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = VpnController.settings().buttonStyle
+        com.helboy.vpnclub.ui.theme.ThemeState.effects = VpnController.settings().skinEffects
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -44,14 +60,49 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // اتصال خودکار هنگام باز شدن (فقط اگر مجوز VPN از قبل داده شده)
+        if (intent.action != ACTION_TOGGLE && savedInstanceState == null && VpnController.settings().autoConnectOnLaunch &&
+            !VpnController.state.value.sessionActive && VpnService.prepare(this) == null) {
+            VpnController.connectFastest()
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                VpnController.state.collect { st ->
+                    if (st.needsPermission) {
+                        VpnController.clearPermissionFlag()
+                        withVpnPermission { VpnController.connectFastest() }
+                    }
+                }
+            }
+        }
+
+        handleShortcut(intent)
+
         setContent {
-            VPNClubTheme {
-                val ui by viewModel.ui.collectAsState()
-                OneButtonScreen(
-                    ui = ui,
-                    onToggle = { viewModel.toggle({ vpnPermissionLauncher.launch(it) }, {}) }
+            HellboyTheme {
+                AppRoot(
+                    onToggle = {
+                        val s = VpnController.state.value
+                        if (s.sessionActive) VpnController.toggle()
+                        else withVpnPermission { VpnController.toggle() }
+                    },
                 )
             }
         }
     }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcut(intent)
+    }
+
+    private fun handleShortcut(intent: Intent) {
+        if (intent.action != ACTION_TOGGLE) return
+        intent.action = null // rotation / recreation must not toggle a second time
+        val st = VpnController.state.value
+        if (st.sessionActive) VpnController.toggle()
+        else withVpnPermission { VpnController.toggle() }
+    }
+
 }

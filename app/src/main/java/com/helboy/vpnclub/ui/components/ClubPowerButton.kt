@@ -13,6 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +55,7 @@ fun ClubPowerButton(
     size: Dp = 240.dp,
     modifier: Modifier = Modifier,
 ) {
-    val busy = phase == Phase.FETCHING || phase == Phase.SCANNING_CF ||
+    val busy = phase == Phase.FETCHING ||
         phase == Phase.TESTING || phase == Phase.CONNECTING
 
     val accent = if (connected) Color(0xFF34D399) else Color(0xFF3B82F6)
@@ -131,5 +134,11 @@ fun ClubPowerButton(
                 radius = r * 0.7f, center = c,
             )
         }
+        Icon(
+            imageVector = Icons.Rounded.PowerSettingsNew,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size * 0.3f),
+        )
     }
 }

@@ -20,33 +20,75 @@ class Tun2Socks(private val context: Context) {
 
     private var tun: ParcelFileDescriptor? = null
 
-    /** راه‌اندازی تونل — پس از گرفتن مجوز VpnService. */
-    fun start(service: VpnService, socksPort: Int, mtu: Int = 1500): Boolean {
-        stop()
-        return try {
-            val builder = service.Builder()
-                .setMtu(mtu)
-                .addAddress(VPN_IP, 30)
-                .addRoute("0.0.0.0", 0)
-                .addDnsServer("1.1.1.1")
-                .addDnsServer("8.8.8.8")
-                .setSession("VPN CLUB")
-                .setBlocking(true)
-            // ponytail: split-tunnel/per-app در نسخه‌ی بعد؛ الان همه‌ی ترافیک داخل تونل.
-            val fd = builder.establish() ?: return false
-            tun = fd
-            service.protect(fd.fd)
+    /** دلیل آخرین شکست — برای تشخیص «مجوز VPN لغو شده» در کنترلر. */
+    @Volatile var lastFailure: String = ""
+        private set
 
-            val cfg = File(context.filesDir, "hev-socks5-tunnel.yaml")
-            cfg.writeText(buildHevConfig(mtu, socksPort))
-            val ok = TProxyService.TProxyStartService(cfg.absolutePath, fd.fd)
-            if (!ok) stop()
-            ok
-        } catch (e: Exception) {
-            Log.e(TAG, "tun start failed", e)
+    /** نوع آخرین شکست (برای تصمیم‌گیری؛ [lastFailure] فقط برای لاگ است). */
+    @Volatile var lastFailureKind: TunFailure? = null
+        private set
+
+    /**
+     * راه‌اندازی تونل با سه سطح عقب‌نشینی (دستگاه‌های عجیب/سازنده‌های خاص):
+     *  ۰) کامل (IPv4+IPv6، اپ‌های مستثنی)  ۱) بدون IPv6  ۲) فقط IPv4 و فقط خود اپ مستثنی.
+     * دلیل هر شکست در diag.log ثبت می‌شود.
+     */
+    fun start(
+        service: VpnService,
+        socksPort: Int,
+        mtu: Int = 1500,
+        bypassApps: Set<String> = emptySet()
+    ): Boolean {
+        stop()
+        lastFailure = ""; lastFailureKind = null
+        for (tier in 0..2) {
+            val ok = try {
+                establish(service, socksPort, mtu, bypassApps, ipv6 = tier == 0, withBypass = tier < 2)
+            } catch (e: Exception) {
+                lastFailure = "${e.javaClass.simpleName}: ${e.message}"
+                lastFailureKind = TunFailure.ESTABLISH_EXCEPTION
+                Log.e(TAG, "tun start failed", e)
+                false
+            }
+            if (ok) return true
+            DiagLogger.log("TUN fail tier$tier ${lastFailureKind} $lastFailure")
+            // بدون مجوز، سطح‌های بعدی هم بی‌فایده‌اند
+            if (lastFailureKind == TunFailure.PERMISSION_REVOKED) { stop(); return false }
             stop()
-            false
         }
+        return false
+    }
+
+    private fun establish(
+        service: VpnService, socksPort: Int, mtu: Int,
+        bypassApps: Set<String>, ipv6: Boolean, withBypass: Boolean
+    ): Boolean {
+        val builder = service.Builder()
+            .setMtu(mtu)
+            .addAddress(VPN_IP, 30)
+            .addRoute("0.0.0.0", 0)
+            .setSession("Hellboy VPN")
+            .setBlocking(true)
+        // DNS انتخابی کاربر (تنظیمات) + یک پشتیبان متفاوت
+        val dns = runCatching { AppSettings.of(context).dnsServer }.getOrDefault("1.1.1.1").trim()
+        for (d in listOf(if (DnsEndpoint.isIp(dns)) dns else "1.1.1.1"))
+            runCatching { builder.addDnsServer(d) }.onFailure { DiagLogger.log("TUN dns $d rejected: ${it.message}") }
+        if (ipv6) {
+            builder.addAddress(VPN_IP6, 126)
+            builder.addRoute("::", 0) // نشت IPv6 را می‌بندد
+        }
+        // سوکت‌های خروجی خود Xray/FragmentProxy نباید وارد TUN شوند (حلقه‌ی مسیریابی)
+        runCatching { builder.addDisallowedApplication(context.packageName) }
+        if (withBypass) for (pkg in bypassApps) runCatching { builder.addDisallowedApplication(pkg) }
+        val fd = builder.establish() ?: run {
+            lastFailure = "establish=null"; lastFailureKind = TunFailure.PERMISSION_REVOKED; return false
+        }
+        tun = fd
+        val cfg = File(context.filesDir, "hev-socks5-tunnel.yaml")
+        cfg.writeText(buildHevConfig(mtu, socksPort, ipv6))
+        val ok = TProxyService.TProxyStartService(cfg.absolutePath, fd.fd)
+        if (!ok) { lastFailure = "hev start=false"; lastFailureKind = TunFailure.HEV_FAILED }
+        return ok
     }
 
     fun stop() {
@@ -58,14 +100,26 @@ class Tun2Socks(private val context: Context) {
     val isRunning: Boolean
         get() = try { TProxyService.TProxyIsRunning() } catch (_: Throwable) { false }
 
-    /** آمار زنده: [rxBytes, txBytes] یا null. */
-    fun stats(): LongArray? = try { TProxyService.TProxyGetStats() } catch (_: Throwable) { null }
+    companion object {
+        private const val TAG = "Tun2Socks"
+        private const val VPN_IP = "26.26.26.1"
+        private const val VPN_IP6 = "fd00:26::1"
 
-    private fun buildHevConfig(mtu: Int, socksPort: Int): String = """
+        /**
+         * آمار زنده‌ی تونل: Pair(آپلود، دانلود) بر حسب بایت تجمعی، یا null.
+         * hev: [tx_packets, tx_bytes, rx_packets, rx_bytes] (tx = از دستگاه به سمت شبکه).
+         */
+        fun bytes(): Pair<Long, Long>? = try {
+            val s = TProxyService.TProxyGetStats()
+            if (s != null && s.size >= 4) s[1] to s[3] else null
+        } catch (_: Throwable) { null }
+    }
+
+    private fun buildHevConfig(mtu: Int, socksPort: Int, ipv6: Boolean): String = """
 tunnel:
   mtu: $mtu
   ipv4: $VPN_IP
-
+${if (ipv6) "  ipv6: '$VPN_IP6'\n" else ""}
 socks5:
   port: $socksPort
   address: 127.0.0.1
@@ -77,8 +131,5 @@ misc:
   log-level: warn
 """.trimIndent()
 
-    companion object {
-        private const val TAG = "Tun2Socks"
-        private const val VPN_IP = "26.26.26.1"
-    }
+
 }

@@ -31,8 +31,8 @@ data class ProxyConfig(
     var dialPort: Int = port
 
     /** مقدار SNI/Host که باید دست‌نخورده بماند تا TLS معتبر بماند. */
-    val sniHost: String get() = query.firstOrNull { it.first.equals("sni", true) }?.second
-        ?: query.firstOrNull { it.first.equals("host", true) }?.second
+    val sniHost: String get() = query.firstOrNull { it.first.equals("sni", true) && it.second.isNotBlank() }?.second
+        ?: query.firstOrNull { it.first.equals("host", true) && it.second.isNotBlank() }?.second?.substringBefore(',')
         ?: host
 
     val isInjected: Boolean get() = dialHost != host || dialPort != port
