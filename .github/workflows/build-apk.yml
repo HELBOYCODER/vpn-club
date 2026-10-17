@@ -88,9 +88,13 @@ jobs:
           if [ "$PREVIEW" = "true" ]; then TAG="$TAG-preview.1"; fi
           mkdir -p release-dist
           cp app/build/outputs/apk/release/*.apk "release-dist/HellboyVPN-$TAG.apk"
-          if unzip -l "release-dist/HellboyVPN-$TAG.apk" | grep -Ei 'libpsiphon|psiphon_servers'; then
-            echo "Removed Psiphon payload still present"; exit 1
-          fi
+          # The 4.4 integration *requires* both native Xray (process-isolated)
+          # and the MSN-GUARD engines. Do not apply 4.3's Psiphon-removal guard.
+          for so in libaether.so libaether_jni.so libtor.so libxray.so libgojni.so; do
+            if ! unzip -Z -1 "release-dist/HellboyVPN-$TAG.apk" | grep -Fq "lib/arm64-v8a/$so"; then
+              echo "Missing integrated native engine: $so"; exit 1
+            fi
+          done
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
           "$SIGNER" verify --print-certs "release-dist/HellboyVPN-$TAG.apk" > release-dist/signing-certificate.txt
           (cd release-dist && sha256sum "HellboyVPN-$TAG.apk" > SHA256SUMS)
