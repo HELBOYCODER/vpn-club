@@ -73,7 +73,7 @@ dependencies {
     implementation(files("libs/psiphon-msn.aar"))
 
     // هسته‌ی PattNG: Xray + hev-socks5-tunnel
-    implementation(files("libs/libv2ray.aar"))
+    // Xray now uses MSN-GUARD libxray.so in a separate process; no GoMobile AAR.
     implementation(files("libs/hev-htproxy.aar"))
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
