@@ -83,7 +83,7 @@ with zipfile.ZipFile(archive) as z:
         if len(parts) != 3 or parts[0] != "lib" or parts[1] not in abis or not member.endswith(".so"):
             continue
         # Already supplied by Hellboy's hev AAR.
-        if parts[2] == "libhev-socks5-tunnel.so":
+        if parts[2] in {"libhev-socks5-tunnel.so", "libgojni.so"}:
             continue
         dest = pathlib.Path(outdir) / parts[1] / parts[2]
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -96,26 +96,17 @@ with zipfile.ZipFile(archive) as z:
     print("MSN-GUARD JNI packaged:", {key: len(value) for key, value in extracted.items()})
 PY
 
-# Diagnose the Go JNI collision before attempting to publish any integrated APK.
-# Two GoMobile AARs can ship classes with identical names but incompatible
-# native implementations. Packaging pickFirst would make one silently fail.
-python3 - "$ROOT/app/libs/libv2ray.aar" "$ROOT/app/libs/psiphon-msn.aar" "$ROOT/msnengine/src/main/jniLibs/arm64-v8a/libgojni.so" <<'PYDIAG'
-import zipfile, hashlib, io, sys
-all_classes = {}
-for path in sys.argv[1:3]:
-    with zipfile.ZipFile(path) as aar:
-        jar = zipfile.ZipFile(io.BytesIO(aar.read("classes.jar")))
-        classes = {p for p in jar.namelist() if p.endswith(".class")}
-        all_classes[path] = classes
-        gojni = [n for n in aar.namelist() if n.endswith("/libgojni.so")]
-        sizes = [(n, len(aar.read(n)), hashlib.sha256(aar.read(n)).hexdigest()[:16]) for n in gojni]
-        print("Go JNI AAR audit:", path, "classes", len(classes), "JNI", sizes, flush=True)
-paths = list(all_classes)
-shared = all_classes[paths[0]] & all_classes[paths[1]]
-print("Go JNI duplicate class names:", len(shared), sorted(shared)[:40], flush=True)
-p=sys.argv[3]
-with open(p,"rb") as f: data=f.read()
-print("Go JNI upstream APK:", len(data), hashlib.sha256(data).hexdigest()[:16], flush=True)
-PYDIAG
+# One GoMobile library remains (Psiphon). Xray runs as the independent
+# libxray.so executable, which has its own process and own Go runtime.
+# Refuse to stage a second GoJNI copy: pickFirst is not a safe solution.
+python3 - "$ROOT/msnengine/src/main/jniLibs" "$ROOT/app/libs/psiphon-msn.aar" <<'PYVERIFY'
+import sys, pathlib, zipfile
+staged = pathlib.Path(sys.argv[1])
+assert not list(staged.rglob("libgojni.so")), "Duplicate libgojni was staged"
+with zipfile.ZipFile(sys.argv[2]) as a:
+    for abi in ("arm64-v8a", "armeabi-v7a", "x86_64"):
+        assert f"jni/{abi}/libgojni.so" in a.namelist(), f"Psiphon gojni missing: {abi}"
+print("GoMobile collision resolved by a single Psiphon runtime and process-isolated Xray")
+PYVERIFY
 
 echo "MSN-GUARD $TAG / $COMMIT staged into Hellboy Android library."
