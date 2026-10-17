@@ -12,8 +12,8 @@ android {
         applicationId = "com.helboy.vpnclub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 52
-        versionName = "4.3.3"
+        versionCode = 53
+        versionName = "4.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,7 +34,7 @@ android {
 
     buildTypes {
         release {
-            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview433"
+            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview440"
             isMinifyEnabled = false
             signingConfig = if (hbKeystore != null) signingConfigs.getByName("hellboy")
                             else signingConfigs.getByName("debug")
@@ -72,6 +72,8 @@ android {
 
 dependencies {
     implementation(project(":vpnLib"))
+    implementation(project(":msnengine"))
+    implementation(files("libs/psiphon-msn.aar"))
 
     // هسته‌ی PattNG: Xray + hev-socks5-tunnel
     implementation(files("libs/libv2ray.aar"))
