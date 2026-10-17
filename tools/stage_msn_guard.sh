@@ -38,6 +38,15 @@ uri = "http://schemas.android.com/apk/res/android"
 ET.register_namespace("android", uri)
 tree = ET.parse(path)
 root = tree.getroot()
+app = root.find("application")
+# The main Hellboy manifest exclusively owns app name, branding, and theme.
+for key in ("label", "icon", "roundIcon", "theme"):
+    app.attrib.pop("{%s}%s" % (uri, key), None)
+# Different authorities require different provider component names. Preserve
+# both paths providers and keep MSN's updater share intents functional.
+for provider in app.findall("provider"):
+    if provider.get("{%s}name" % uri) == "androidx.core.content.FileProvider":
+        provider.set("{%s}name" % uri, "com.msnguard.vpn.MsnGuardFileProvider")
 for activity in root.findall(".//activity"):
     if activity.get("{%s}name" % uri) != ".MainActivity":
         continue
@@ -47,6 +56,12 @@ for activity in root.findall(".//activity"):
         if "android.intent.category.LAUNCHER" in categories or "android.intent.category.LEANBACK_LAUNCHER" in categories:
             activity.remove(intent_filter)
 tree.write(path, encoding="utf-8", xml_declaration=True)
+provider_class = __import__("pathlib").Path(path).parent / "java/com/msnguard/vpn/MsnGuardFileProvider.kt"
+provider_class.write_text(
+    "package com.msnguard.vpn\n\n"
+    "/** Dedicated provider so Hellboy log shares do not shadow MSN shares. */\n"
+    "class MsnGuardFileProvider : androidx.core.content.FileProvider()\n"
+)
 PY
 
 # Use release-matched upstream binaries with verified upstream checksums.
