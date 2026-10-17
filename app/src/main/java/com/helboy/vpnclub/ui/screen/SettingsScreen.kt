@@ -85,6 +85,21 @@ fun SettingsScreen(settings: AppSettings) {
     ) {
         Text("تنظیمات", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
+        ClubCard(Modifier.fillMaxWidth().clickable {
+            // Android permits one active VPN per profile. Tear down Hellboy's
+            // existing session before opening MSN's own native VPN controller.
+            if (VpnController.state.value.sessionActive) VpnController.disconnect()
+            ctx.startActivity(Intent(ctx, com.msnguard.vpn.MainActivity::class.java))
+        }) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("مرکز اتصال MSN-GUARD", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text("MASQUE · WireGuard · WARP-on-WARP · Psiphon · Tor",
+                    color = NeonCyan, fontSize = 12.sp)
+                Text("ورود به مرکز اتصال یکپارچه در همین برنامه. ظاهر اصلی Hellboy حفظ می‌شود.",
+                    color = TextSecondary, fontSize = 11.sp)
+            }
+        }
+
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("ظاهر", color = TextPrimary, fontWeight = FontWeight.SemiBold)
@@ -144,15 +159,8 @@ fun SettingsScreen(settings: AppSettings) {
                 }
                 Text("با اتصال بعدی اعمال می‌شود. انتخاب خودکار همه پروتکل‌های قابل‌اجرا را بررسی می‌کند.",
                     color = NeonCyan, fontSize = 11.sp)
-                Text("گزینه‌های MSN-GUARD که موتورشان هنوز منتقل نشده:",
-                    color = TextSecondary, fontSize = 12.sp)
-                listOf("MASQUE / HTTP3", "WireGuard / WARP", "Psiphon", "Tor / Tor over WARP")
-                    .forEach { name ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(name, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
-                            Text("غیرفعال", color = TextTertiary, fontSize = 11.sp)
-                        }
-                    }
+                Text("حالت‌های MSN-GUARD از کارت «مرکز اتصال MSN-GUARD» در بالای تنظیمات باز می‌شوند.",
+                    color = TextSecondary, fontSize = 11.sp)
                 Text("OpenVPN در کد پروژه وجود دارد، اما هنوز به اتصال هوشمند این صفحه متصل نیست.",
                     color = TextTertiary, fontSize = 11.sp)
             }
