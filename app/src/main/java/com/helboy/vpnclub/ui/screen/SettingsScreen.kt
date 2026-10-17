@@ -87,48 +87,6 @@ fun SettingsScreen(settings: AppSettings) {
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("ظاهر", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("تم", color = TextSecondary, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("system" to "خودکار", "light" to "روز", "dark" to "شب").forEach { (id, label) ->
-                        FilterChip(selected = theme == id, onClick = {
-                            theme = id; settings.themeMode = id; com.helboy.vpnclub.ui.theme.ThemeState.mode = id
-                        }, label = { Text(label, fontSize = 12.sp) })
-                    }
-                }
-                SwitchRow("قطره‌های خون و آتش", "جلوه‌ی متحرک روی دیوار پس‌زمینه", fx) {
-                    fx = it; settings.skinEffects = it; com.helboy.vpnclub.ui.theme.ThemeState.effects = it
-                }
-                Text("دکمه‌ی اتصال", color = TextSecondary, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("hellboy" to "چهره‌ی هلبوی", "orb" to "گوی ذرات").forEach { (id, label) ->
-                        FilterChip(selected = style == id, onClick = { style = id; settings.buttonStyle = id; com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = id },
-                            label = { Text(label, fontSize = 12.sp) })
-                    }
-                }
-            }
-        }
-
-        ClubCard(Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("پروفایل شبکه", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("روش عبور از فیلتر برای اپراتور شما. «خودکار» همه را به‌ترتیب امتحان می‌کند.",
-                    color = TextSecondary, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("auto" to "خودکار", "mci" to "همراه اول", "irancell" to "ایرانسل", "plain" to "مستقیم")
-                        .forEach { (id, label) ->
-                            FilterChip(
-                                selected = carrier == id,
-                                onClick = { carrier = id; settings.carrierMode = id },
-                                label = { Text(label, fontSize = 12.sp) },
-                            )
-                        }
-                }
-            }
-        }
-
-        ClubCard(Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("روش‌های اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
                 Text("همه روش‌ها داخل خود Hellboy انتخاب می‌شوند. دکمه اصلی برنامه همان دکمه اتصال است.",
                     color = TextSecondary, fontSize = 12.sp)
@@ -171,6 +129,48 @@ fun SettingsScreen(settings: AppSettings) {
                     var killSwitch by remember { mutableStateOf(settings.nativeKillSwitch) }
                     SwitchRow("قطع اینترنت هنگام افت تونل", "Kill Switch در موتورهای بومی",
                         killSwitch) { killSwitch = it; settings.nativeKillSwitch = it }
+                }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ظاهر", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("تم", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("system" to "خودکار", "light" to "روز", "dark" to "شب").forEach { (id, label) ->
+                        FilterChip(selected = theme == id, onClick = {
+                            theme = id; settings.themeMode = id; com.helboy.vpnclub.ui.theme.ThemeState.mode = id
+                        }, label = { Text(label, fontSize = 12.sp) })
+                    }
+                }
+                SwitchRow("قطره‌های خون و آتش", "جلوه‌ی متحرک روی دیوار پس‌زمینه", fx) {
+                    fx = it; settings.skinEffects = it; com.helboy.vpnclub.ui.theme.ThemeState.effects = it
+                }
+                Text("دکمه‌ی اتصال", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("hellboy" to "چهره‌ی هلبوی", "orb" to "گوی ذرات").forEach { (id, label) ->
+                        FilterChip(selected = style == id, onClick = { style = id; settings.buttonStyle = id; com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = id },
+                            label = { Text(label, fontSize = 12.sp) })
+                    }
+                }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("پروفایل شبکه", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("روش عبور از فیلتر برای اپراتور شما. «خودکار» همه را به‌ترتیب امتحان می‌کند.",
+                    color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("auto" to "خودکار", "mci" to "همراه اول", "irancell" to "ایرانسل", "plain" to "مستقیم")
+                        .forEach { (id, label) ->
+                            FilterChip(
+                                selected = carrier == id,
+                                onClick = { carrier = id; settings.carrierMode = id },
+                                label = { Text(label, fontSize = 12.sp) },
+                            )
+                        }
                 }
             }
         }
