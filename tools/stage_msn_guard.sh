@@ -78,6 +78,13 @@ source = source.replace('setSession("MSN-GUARD")', 'setSession("Hellboy VPN")')
 source = source.replace('setSession("MSN-GUARD — Kill Switch")', 'setSession("Hellboy VPN — Kill Switch")')
 source = source.replace('.setContentTitle(title)', '.setContentTitle("Hellboy VPN · " + title)')
 source = source.replace('.setLargeIcon(appBadge())', '')  # Remove MSN artwork from the notification
+# Native service must not request an obsolete MSN-specific Quick Settings tile.
+old_tile = """TileService.requestListeningState(
+            this,
+            ComponentName(this, MsnGuardTileService::class.java),
+        )"""
+assert old_tile in source, "Upstream MSN Quick Tile hook moved"
+source = source.replace(old_tile, "/* Hellboy Quick Settings tile handles this connection. */")
 service_file.write_text(source)
 PY
 
