@@ -44,7 +44,7 @@ android {
             )
         }
         debug {
-            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview432"
+            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview440"
             isMinifyEnabled = false
         }
     }
