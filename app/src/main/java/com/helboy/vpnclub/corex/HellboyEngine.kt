@@ -183,7 +183,7 @@ class HellboyEngine(private val context: Context) {
             catch (ex: Exception) { frag?.stop(); return DelayResult.BuildError(ex.message.orEmpty()) }
         var future: java.util.concurrent.Future<Long>? = null
         return try {
-            future = delayPool.submit(Callable { libv2ray.Libv2ray.measureOutboundDelay(json, TEST_URL) })
+            future = delayPool.submit(Callable { NativeXrayRunner.measure(context, json, timeoutMs) })
             DelayResult.fromDelay(future.get(timeoutMs, TimeUnit.MILLISECONDS), MAX_DELAY_MS)
         } catch (_: java.util.concurrent.TimeoutException) {
             future?.cancel(true)
