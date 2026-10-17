@@ -1,12 +1,16 @@
 package com.helboy.vpnclub.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -18,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.helboy.vpnclub.corex.CountryFilter
 import com.helboy.vpnclub.corex.Phase
 import com.helboy.vpnclub.ui.components.ClubPowerButton
 import com.helboy.vpnclub.ui.viewmodel.MainViewModel
@@ -29,6 +34,7 @@ import com.helboy.vpnclub.ui.viewmodel.MainViewModel
 fun OneButtonScreen(
     ui: MainViewModel.UiState,
     onToggle: () -> Unit,
+    onCountry: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -71,6 +77,26 @@ fun OneButtonScreen(
                     color = Color(0xFF6B7280),
                     fontSize = 12.sp,
                 )
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "کشور خروجی (برای اتصال بعدی)",
+                color = Color(0xFF9CA3AF),
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CountryFilter.CHOICES.forEach { (code, label) ->
+                    FilterChip(
+                        selected = ui.country == code,
+                        onClick = { onCountry(code) },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
     }

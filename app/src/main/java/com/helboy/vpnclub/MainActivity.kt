@@ -49,7 +49,8 @@ class MainActivity : ComponentActivity() {
                 val ui by viewModel.ui.collectAsState()
                 OneButtonScreen(
                     ui = ui,
-                    onToggle = { viewModel.toggle({ vpnPermissionLauncher.launch(it) }, {}) }
+                    onToggle = { viewModel.toggle({ vpnPermissionLauncher.launch(it) }, {}) },
+                    onCountry = { viewModel.setCountry(it) },
                 )
             }
         }

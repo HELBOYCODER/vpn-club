@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.helboy.vpnclub.corex.CountryFilter
 import com.helboy.vpnclub.corex.CurrentConfigHolder
 import com.helboy.vpnclub.corex.HealthResult
 import com.helboy.vpnclub.corex.Phase
@@ -38,10 +39,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val usableCount: Int = 0,
         val connected: Boolean = false,
         val best: ProxyConfig? = null,
-        val lastHealth: Map<String, HealthResult> = emptyMap()
+        val lastHealth: Map<String, HealthResult> = emptyMap(),
+        /** کشور انتخابی برای اتصال هوشمند؛ "" = بدون فیلتر. */
+        val country: String = ""
     )
 
-    private val _ui = MutableStateFlow(UiState())
+    private val _ui = MutableStateFlow(UiState(country = CountryFilter.preferred(application)))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
     private var cycleJob: Job? = null
@@ -85,7 +88,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnect() {
         cycleJob?.cancel()
         engine.disconnect(getApplication())
-        _ui.value = UiState() // reset
+        // reset، ولی کشور انتخابی حفظ شود
+        _ui.value = UiState(country = _ui.value.country)
+    }
+
+    /** انتخاب کشور برای اتصال بعدی (ذخیره می‌شود). */
+    fun setCountry(code: String) {
+        CountryFilter.setPreferred(getApplication(), code)
+        _ui.value = _ui.value.copy(country = code)
     }
 
     /** پیش‌نمایش نتیجه‌ی آخرین سیکل (برای پنل جزئیات اختیاری). */

@@ -159,9 +159,20 @@ class VpnClubEngine(private val context: Context) {
                 val r = runCatching { f.get(10, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull()
                 if (r is ProxyConfig) collected.add(r)
             }
-            val pinged = collected.take(30)
+            // غربال کشور — فقط روی کانفیگ‌های زنده (کم‌هزینه‌تر از جست‌وجوی کل استخر)
+            val country = CountryFilter.preferred(context)
+            val alive = if (country.isBlank()) collected else {
+                onState(EngineState(Phase.TESTING, "غربال کشور $country…",
+                    configCount = configs.size, cleanIpCount = cleanIps.size))
+                CountryFilter.filter(collected, country).also {
+                    DiagLogger.log("country $country: ${collected.size} زنده -> ${it.size} در کشور")
+                }
+            }
+            val pinged = alive.take(30)
             if (pinged.isEmpty()) {
-                onState(EngineState(Phase.FAILED, "هیچ کانفیگی پینگ نداد",
+                val msg = if (country.isBlank()) "هیچ کانفیگی پینگ نداد"
+                else "هیچ کانفیگ سالمی در کشور $country پیدا نشد"
+                onState(EngineState(Phase.FAILED, msg,
                     configCount = configs.size, cleanIpCount = cleanIps.size))
                 return@withContext null
             }

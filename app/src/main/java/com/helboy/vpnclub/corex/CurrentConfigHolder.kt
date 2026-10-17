@@ -29,7 +29,7 @@ object CurrentConfigHolder {
     /** پروفایل ایرانِ ذخیره‌شده (اگر اتصال از مسیر موتور آمده باشد). */
     fun loadVariant(ctx: Context): IranVariants.Variant? = try {
         val id = variantFile(ctx).readText().trim()
-        IranVariants.all().firstOrNull { it.id == id }
+        IranVariants.byId(id)
     } catch (_: Exception) { null }
 
     fun clear(ctx: Context) {
