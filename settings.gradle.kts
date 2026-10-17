@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "HellboyVPN"
 include(":app")
 include(":vpnLib")
+include(":msnengine")

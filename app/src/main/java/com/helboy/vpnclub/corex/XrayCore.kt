@@ -1,11 +1,7 @@
 package com.helboy.vpnclub.corex
 
-import libv2ray.CoreCallbackHandler
-import libv2ray.CoreController
-import libv2ray.Libv2ray
 import org.json.JSONArray
 import org.json.JSONObject
-import go.Seq
 
 /**
  * پل به هسته‌ی Xray (libv2ray.aar از پروژه‌ی PattNG / AndroidLibXrayLite).
@@ -26,14 +22,8 @@ class XrayCore(
     val port: Int get() = socksPort
 
 
-    private var controller: CoreController? = null
+    private var process: Process? = null
     private val lock = Any()
-
-    private val callback = object : CoreCallbackHandler {
-        override fun onEmitStatus(p0: Long, p1: String?): Long { return 0 }
-        override fun shutdown(): Long { return 0 }
-        override fun startup(): Long { return 0 }
-    }
 
     /**
      * وقتی ست شود، هسته به‌جای آدرس واقعی کانفیگ به این آدرس وصل می‌شود
@@ -53,20 +43,22 @@ class XrayCore(
 
     private val effectiveVariant: IranVariants.Variant? get() = activeVariant
 
-    /** شروع هسته برای یک کانفیگ. true = موفق */
+    /** Start native executable without loading Go JNI into Android. */
     fun start(config: ProxyConfig): Boolean = synchronized(lock) {
         stop()
         try {
             initCoreEnv()
-            val json = buildConfig(config)
+            val ctx = appContext ?: error("No Android context available for native Xray")
+            val json = NativeXrayConfig.standardize(buildConfig(config))
             lastConfigJson = json
-            val ctrl = Libv2ray.newCoreController(callback)
-            ctrl.startLoop(json, 0)
-            controller = ctrl
-            // منتظر بالا آمدن SOCKS listener بمانیم (تا ۵ ثانیه)
-            val deadline = System.currentTimeMillis() + 5_000
-            while (!isRunning && System.currentTimeMillis() < deadline) Thread.sleep(100)
-            isRunning
+            val candidate = NativeXrayRunner.start(ctx, json)
+            process = candidate
+            if (!NativeXrayRunner.listenerReady(candidate, socksPort, 5_000)) {
+                lastError = "Native Xray SOCKS listener did not start"
+                stop()
+                return@synchronized false
+            }
+            true
         } catch (e: Exception) {
             lastError = e.message ?: e.javaClass.simpleName
             stop()
@@ -103,8 +95,7 @@ class XrayCore(
                     }
                 }
             }
-            val deviceId = deviceIdForXudp()
-            Libv2ray.initCoreEnv(assetDir.absolutePath, deviceId)
+            // Native executable uses XRAY_LOCATION_ASSET, no GoMobile init needed.
         } catch (e: Exception) {
             envInitialized.set(false)
             lastError = "env: ${e.message}"
@@ -112,11 +103,11 @@ class XrayCore(
     }
 
     fun stop() = synchronized(lock) {
-        try { controller?.stopLoop() } catch (_: Exception) {}
-        controller = null
+        NativeXrayRunner.stop(process)
+        process = null
     }
 
-    val isRunning: Boolean get() = synchronized(lock) { controller?.getIsRunning() == true }
+    val isRunning: Boolean get() = synchronized(lock) { process?.isAlive == true }
 
     /**
      * ساخت JSON کانفیگ Xray.
@@ -237,18 +228,9 @@ class XrayCore(
      */
     private fun pinFor(c: ProxyConfig, quic: Boolean): String? {
         val q = c.query.toMap()
-        listOf(q["pcs"], q["pinSHA256"], q["pinsha256"]).firstNotNullOfOrNull { validPin(it) }?.let { return it }
-        if (!isInsecure(q)) return null
-        val host = dialOverride?.substringBefore(':') ?: c.dialHost
-        val port = dialOverride?.substringAfter(':')?.toIntOrNull() ?: c.dialPort
-        val key = "$host:$port/${c.sniHost}/$quic"
-        pinCache[key]?.let { return it }
-        return try {
-            val req = JSONObject().put("address", host).put("port", port).put("serverName", c.sniHost).put("timeoutMs", 3_000).toString()
-            val res = JSONObject(if (quic) Libv2ray.fetchQuicCertSha256(req) else Libv2ray.fetchTlsCertSha256(req))
-            validPin(res.optString("sha256"))?.also { pinCache[key] = it }
-                .also { DiagLogger.log("CERT_PIN ${c.host}:${c.port} quic=$quic -> ${if (it != null) "ok" else "fail ${res.optString("error").take(80)}"}") }
-        } catch (e: Throwable) { DiagLogger.log("CERT_PIN ${c.host} err ${e.message?.take(80)}"); null }
+        // Preserve explicit SHA-256 pinning; never harvest an unverified certificate.
+        return listOf(q["pcs"], q["pinSHA256"], q["pinsha256"])
+            .firstNotNullOfOrNull { validPin(it) }
     }
 
     private fun outboundFor(c: ProxyConfig): JSONObject {
@@ -383,7 +365,6 @@ class XrayCore(
     }
 
     fun setAppContext(context: android.content.Context) {
-        Seq.setContext(context.applicationContext)
         appContext = context.applicationContext
     }
 

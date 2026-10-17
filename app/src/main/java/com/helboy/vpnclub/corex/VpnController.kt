@@ -45,6 +45,8 @@ object VpnController {
     private lateinit var app: Context
     private lateinit var engine: HellboyEngine
     private lateinit var prefs: AppSettings
+    private lateinit var nativeBridge: NativeTransportBridge
+    @Volatile private var activeMode: ConnectionMode = ConnectionMode.AUTO
     @Volatile private var initialized = false
     private var sessionJob: Job? = null
     private var statsJob: Job? = null
@@ -57,6 +59,7 @@ object VpnController {
             engine = HellboyEngine(app)
             prefs = AppSettings.of(app)
             prefs.clearRetiredSettings()
+            nativeBridge = NativeTransportBridge(app, ::onNativeStatus, ::onNativeTraffic)
             _state.value = UiState(connectionMode = prefs.connectionMode, dnsServer = prefs.dnsServer, directRules = prefs.directRules,
                 blockRules = prefs.blockRules, proxyRules = prefs.proxyRules)
             initialized = true
@@ -68,8 +71,12 @@ object VpnController {
     fun clearPermissionFlag() { _state.update { it.copy(needsPermission = false) } }
 
     fun setConnectionMode(mode: ConnectionMode) {
+        if (prefs.connectionMode == mode) return
+        // A mode switch must not leave an old native or Xray VPN running
+        // while the new choice is displayed on Hellboy's main screen.
+        if (_state.value.sessionActive) disconnect()
         prefs.connectionMode = mode
-        _state.update { it.copy(connectionMode = mode, message = "روش ${mode.displayName} با اتصال بعدی اعمال می‌شود") }
+        _state.update { it.copy(connectionMode = mode, message = "روش ${mode.displayName} انتخاب شد؛ برای اتصال دکمه را بزنید") }
     }
 
     fun setDnsServer(value: String) {
@@ -96,10 +103,21 @@ object VpnController {
         sessionJob?.cancel()
         statsJob?.cancel()
         val mode = prefs.connectionMode
+        activeMode = mode
         val id = ++sessionId
         _state.update { it.copy(connectionMode = mode, sessionActive = true, connected = false, current = null, servers = emptyList(),
             task = Task.CONNECT, phase = Phase.FETCHING, message = "", taskMsg = "یافتن سرورهای تازه…",
             connectedSince = 0, latencyMs = -1, testedDownloadBps = 0.0) }
+        if (mode.isNative) {
+            try {
+                nativeBridge.start(mode, prefs)
+            } catch (error: Exception) {
+                DiagLogger.log("HELLBOY_NATIVE_FAILURE ${error.javaClass.simpleName}: ${error.message}")
+                _state.update { it.copy(sessionActive = false, connected = false, task = Task.NONE,
+                    phase = Phase.FAILED, message = "موتور ${mode.displayName} راه‌اندازی نشد: ${error.message?.take(100)}") }
+            }
+            return
+        }
         HellboyVpnService.search(app, id)
         sessionJob = scope.launch {
             try {
@@ -159,6 +177,47 @@ object VpnController {
                 failSession(id)
             }
         }
+    }
+
+    /**
+     * Native status comes from the actual embedded MSN VPN service, not a fake
+     * connected flag. Only the selected active native session may paint Hellboy.
+     */
+    private fun onNativeStatus(status: String, detail: String?, progress: Int) {
+        if (!_state.value.sessionActive || !activeMode.isNative) return
+        val label = activeMode.displayName
+        val suffix = if (progress in 0..99) " ($progress٪)" else ""
+        val info = detail?.take(140).orEmpty()
+        when (status) {
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_CONNECTING,
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_STARTING,
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_SCANNING -> {
+                val scanning = status == com.msnguard.vpn.MsnGuardVpnService.STATUS_SCANNING
+                _state.update { it.copy(phase = if (scanning) Phase.FETCHING else Phase.CONNECTING,
+                    task = Task.CONNECT, connected = false,
+                    taskMsg = "اتصال $label$suffix ${info.ifBlank { "در حال بررسی شبکه…" }}") }
+            }
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_CONNECTED -> {
+                val now = System.currentTimeMillis()
+                _state.update { it.copy(phase = Phase.CONNECTED, task = Task.NONE, connected = true,
+                    connectedSince = if (it.connectedSince == 0L) now else it.connectedSince,
+                    message = "تونل $label برقرار شد", taskMsg = "") }
+            }
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_FAILED -> {
+                _state.update { it.copy(phase = Phase.FETCHING, task = Task.CONNECT, connected = false,
+                    taskMsg = "$label: ${info.ifBlank { "اتصال ناموفق بود؛ تلاش مجدد…" }}") }
+            }
+            com.msnguard.vpn.MsnGuardVpnService.STATUS_DISCONNECTED -> {
+                stopSession()
+            }
+        }
+    }
+
+    private fun onNativeTraffic(tx: Long, rx: Long, txSpeed: Long, rxSpeed: Long) {
+        if (!_state.value.sessionActive || !activeMode.isNative) return
+        _state.update { it.copy(upTotal = tx.coerceAtLeast(0L),
+            downTotal = rx.coerceAtLeast(0L), upBps = txSpeed.coerceAtLeast(0L),
+            downBps = rxSpeed.coerceAtLeast(0L)) }
     }
 
     private suspend fun activate(entry: ServerEntry, id: Long): Boolean {
@@ -222,8 +281,9 @@ object VpnController {
 
     @Synchronized fun disconnect() {
         val oldSession = sessionId
+        val wasNative = activeMode.isNative
         stopSession()
-        HellboyVpnService.stop(app, oldSession)
+        if (wasNative) nativeBridge.stop() else HellboyVpnService.stop(app, oldSession)
     }
     /** Notification/system stop ends retries as well as the active tunnel. */
     @Synchronized fun stopSession() {

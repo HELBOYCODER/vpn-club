@@ -87,6 +87,54 @@ fun SettingsScreen(settings: AppSettings) {
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("روش‌های اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("همه روش‌ها داخل خود Hellboy انتخاب می‌شوند. دکمه اصلی برنامه همان دکمه اتصال است.",
+                    color = TextSecondary, fontSize = 12.sp)
+                Text("اتصال‌های Xray", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ConnectionMode.xrayModes.forEach { mode ->
+                        FilterChip(
+                            selected = connectionMode == mode,
+                            onClick = { connectionMode = mode; VpnController.setConnectionMode(mode) },
+                            label = { Text(mode.displayName, fontSize = 12.sp) }
+                        )
+                    }
+                }
+                Text("اتصال‌های بومی (موتورهای منتقل‌شده)", color = NeonCyan,
+                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ConnectionMode.nativeModes.take(4).forEach { mode ->
+                        FilterChip(
+                            selected = connectionMode == mode,
+                            onClick = { connectionMode = mode; VpnController.setConnectionMode(mode) },
+                            label = { Text(mode.displayName, fontSize = 12.sp) }
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ConnectionMode.nativeModes.drop(4).forEach { mode ->
+                        FilterChip(
+                            selected = connectionMode == mode,
+                            onClick = { connectionMode = mode; VpnController.setConnectionMode(mode) },
+                            label = { Text(mode.displayName, fontSize = 12.sp) }
+                        )
+                    }
+                }
+                Text("تغییر روش، اتصال قبلی را قطع می‌کند. دکمه صفحه خانه روش انتخابی را اجرا می‌کند.",
+                    color = TextTertiary, fontSize = 11.sp)
+                if (connectionMode.isNative) {
+                    var killSwitch by remember { mutableStateOf(settings.nativeKillSwitch) }
+                    SwitchRow("قطع اینترنت هنگام افت تونل", "Kill Switch در موتورهای بومی",
+                        killSwitch) { killSwitch = it; settings.nativeKillSwitch = it }
+                }
+            }
+        }
+
+        ClubCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("ظاهر", color = TextPrimary, fontWeight = FontWeight.SemiBold)
                 Text("تم", color = TextSecondary, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -124,37 +172,6 @@ fun SettingsScreen(settings: AppSettings) {
                             )
                         }
                 }
-            }
-        }
-
-        ClubCard(Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("روش‌های اتصال", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("انتخاب پروتکل واقعی Xray. فقط کانفیگ‌های همان پروتکل جست‌وجو و آزمایش می‌شوند.",
-                    color = TextSecondary, fontSize = 12.sp)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ConnectionMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = connectionMode == mode,
-                            onClick = { connectionMode = mode; VpnController.setConnectionMode(mode) },
-                            label = { Text(mode.displayName, fontSize = 12.sp) }
-                        )
-                    }
-                }
-                Text("با اتصال بعدی اعمال می‌شود. انتخاب خودکار همه پروتکل‌های قابل‌اجرا را بررسی می‌کند.",
-                    color = NeonCyan, fontSize = 11.sp)
-                Text("گزینه‌های MSN-GUARD که موتورشان هنوز منتقل نشده:",
-                    color = TextSecondary, fontSize = 12.sp)
-                listOf("MASQUE / HTTP3", "WireGuard / WARP", "Psiphon", "Tor / Tor over WARP")
-                    .forEach { name ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(name, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
-                            Text("غیرفعال", color = TextTertiary, fontSize = 11.sp)
-                        }
-                    }
-                Text("OpenVPN در کد پروژه وجود دارد، اما هنوز به اتصال هوشمند این صفحه متصل نیست.",
-                    color = TextTertiary, fontSize = 11.sp)
             }
         }
 

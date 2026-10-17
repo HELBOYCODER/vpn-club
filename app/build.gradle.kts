@@ -12,8 +12,8 @@ android {
         applicationId = "com.helboy.vpnclub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 52
-        versionName = "4.3.3"
+        versionCode = 53
+        versionName = "4.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,7 +34,7 @@ android {
 
     buildTypes {
         release {
-            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview433"
+            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview440"
             isMinifyEnabled = false
             signingConfig = if (hbKeystore != null) signingConfigs.getByName("hellboy")
                             else signingConfigs.getByName("debug")
@@ -44,7 +44,7 @@ android {
             )
         }
         debug {
-            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview432"
+            if (providers.gradleProperty("hellboyPreview").orNull == "true") applicationIdSuffix = ".preview440"
             isMinifyEnabled = false
         }
     }
@@ -52,9 +52,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -72,9 +69,11 @@ android {
 
 dependencies {
     implementation(project(":vpnLib"))
+    implementation(project(":msnengine"))
+    implementation(files("libs/psiphon-msn.aar"))
 
     // هسته‌ی PattNG: Xray + hev-socks5-tunnel
-    implementation(files("libs/libv2ray.aar"))
+    // Xray now uses MSN-GUARD libxray.so in a separate process; no GoMobile AAR.
     implementation(files("libs/hev-htproxy.aar"))
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -98,4 +97,10 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
