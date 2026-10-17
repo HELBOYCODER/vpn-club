@@ -1,20 +1,16 @@
-# Hellboy VPN 4.3.3 — Protocol selector
+# Hellboy VPN 4.4.0 Preview — Embedded MSN-GUARD engines
 
-در این نسخه، **انتخاب واقعی نوع اتصال** در صفحهٔ تنظیمات اضافه شده است: خودکار، VLESS، VMess، Trojan، Shadowsocks و Hysteria2.
+این بیلد، موتور و صفحات اصلی MSN-GUARD نسخهٔ ۳.۰.۰ را داخل همان APK هل‌بوی ادغام می‌کند.
 
-- انتخاب کاربر ذخیره می‌شود و در اتصال بعدی اعمال می‌شود.
-- موتور کشف سرور، سرورهای ذخیره‌شده و تست تونل فقط روی پروتکل انتخاب‌شده انجام می‌شوند.
-- گزینهٔ «خودکار» تمام پروتکل‌های پشتیبانی‌شدهٔ موتور فعلی Xray را در نظر می‌گیرد.
-- گزینه‌های MSN-GUARD شامل MASQUE، WireGuard/WARP، Psiphon و Tor هنوز پیاده‌سازی نشده‌اند و غیرفعال مشخص شده‌اند، نه اینکه دکمه‌های نمایشی اتصال باشند.
-- پوسته و منوی اصلی Hellboy VPN حفظ شده است.
-- نسخهٔ Preview با شناسهٔ مستقل `com.helboy.vpnclub.preview433` منتشر می‌شود تا با کلید امضای Previewهای قبلی تداخل نکند.
+- مسیر فعلی اتصال هوشمند Hellboy و ظاهر اصلی برنامه حفظ شده است.
+- از **تنظیمات > مرکز اتصال MSN-GUARD** به صفحهٔ داخلی ترابری‌ها وارد شوید.
+- قابلیت‌های بومی MASQUE / HTTP3، WireGuard، WARP-on-WARP، Psiphon و Tor به‌همراه سرویس VPN و فایل‌های بومی متناظر از پروژهٔ اصلی بسته‌بندی شده‌اند.
+- قبل از ورود به مرکز اتصال جدید، تونل فعلی Hellboy قطع می‌شود تا دو VpnService همزمان به سیستم متصل نشوند.
+- پروتکل‌های Xray در تنظیمات اصلی Hellboy همچنان قابل انتخاب هستند.
+- این بسته مستقل با شناسهٔ `com.helboy.vpnclub.preview440` نصب می‌شود.
 
-این نسخه **ادغام کامل MSN-GUARD نیست** و اجرای پروتکل‌های جدید بدون موتور مربوطه را ادعا نمی‌کند.
+کد MSN-GUARD از commit ثابت `5fc12b8e17dba95741507dcb8303456ec5b4c65f` با مجوز AGPL-3.0 دریافت و همراه فایل‌های بومی انتشار همان نسخه و با تأیید SHA256 بسته‌بندی شده است.
 
-## English
+**محدودیت تست:** موفقیت بیلد و تست روی شبیه‌ساز به معنی تضمین اتصال در شبکه‌های محدودشده یا اعتبار همهٔ سرورهای واقعی نیست.
 
-Version 4.3.3 adds a working protocol filter to Settings. Select Automatic, VLESS, VMess, Trojan, Shadowsocks or Hysteria2. The choice is persisted and applied to future scans, including cached candidates and native outbound delay measurements.
-
-Unavailable MSN-GUARD transports (MASQUE, WireGuard/WARP, Psiphon and Tor) are clearly identified as not yet implemented. No fake transport buttons.
-
-Preview uses the separate package ID `com.helboy.vpnclub.preview433` because existing preview APKs may have incompatible release signing certificates. No full MSN-GUARD integration is claimed.
+Source, attribution and build instructions: [MSN_INTEGRATION.md](MSN_INTEGRATION.md).
