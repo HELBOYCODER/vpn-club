@@ -90,8 +90,11 @@ jobs:
           cp app/build/outputs/apk/release/*.apk "release-dist/HellboyVPN-$TAG.apk"
           # The 4.4 integration *requires* both native Xray (process-isolated)
           # and the MSN-GUARD engines. Do not apply 4.3's Psiphon-removal guard.
+          # Save the full ZIP listing before grepping: grep -q directly in a
+          # pipe may close early and make unzip fail with SIGPIPE under pipefail.
+          unzip -Z -1 "release-dist/HellboyVPN-$TAG.apk" > "$RUNNER_TEMP/hellboy-apk-files.txt"
           for so in libaether.so libaether_jni.so libtor.so libxray.so libgojni.so; do
-            if ! unzip -Z -1 "release-dist/HellboyVPN-$TAG.apk" | grep -Fq "lib/arm64-v8a/$so"; then
+            if ! grep -Fxq "lib/arm64-v8a/$so" "$RUNNER_TEMP/hellboy-apk-files.txt"; then
               echo "Missing integrated native engine: $so"; exit 1
             fi
           done
