@@ -1,5 +1,7 @@
 package com.helboy.vpnclub.ui.screen
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.platform.testTag
 import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -76,12 +78,14 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
         Text("HELLBOY VPN", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
             letterSpacing = 3.sp)
 
-        if (com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle == "orb")
-            ParticleOrb(phase = shownPhase, connected = ui.connected, busy = busy,
-                downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 280.dp)
-        else
-            HellboyFace(phase = shownPhase, connected = ui.connected, busy = busy,
-                downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 300.dp)
+        Box(Modifier.testTag("connect_button")) {
+            if (com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle == "orb")
+                ParticleOrb(phase = shownPhase, connected = ui.connected, busy = busy,
+                    downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 280.dp)
+            else
+                HellboyFace(phase = shownPhase, connected = ui.connected, busy = busy,
+                    downBps = ui.downBps, upBps = ui.upBps, onClick = onToggle, size = 300.dp)
+        }
 
         val (title, tColor) = when {
             ui.connected -> "متصل" to StatusGreen

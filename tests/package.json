@@ -1,0 +1,12 @@
+{
+  "name": "hellboy-vpn-e2e",
+  "private": true,
+  "description": "End-to-end tests for Hellboy VPN (Android), run with the e2e framework by TesterArmy",
+  "scripts": {
+    "test": "e2e run --target android --reporter list,junit"
+  },
+  "devDependencies": {
+    "@e2e-dev/mobile": "*",
+    "e2e": "*"
+  }
+}

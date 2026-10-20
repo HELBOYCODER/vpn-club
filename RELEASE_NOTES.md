@@ -1,3 +1,17 @@
+# 🔥 Hellboy VPN v4.2.2 — تست‌های E2E و تگ‌های تست
+
+## 🇮🇷 فارسی
+- **تست‌های سرتاسری (E2E)** با [e2e](https://e2e.tester.army) از TesterArmy: در پوشه‌ی `tests/` — باز شدن اپ، دکمه‌ی اتصال و ناوبری پایین. بدون کلید AI.
+- **CI اندروید:** `.github/workflows/e2e-android.yml` روی هر push و PR یک emulator اندروید بالا می‌آورد و تست‌ها را اجرا می‌کند.
+- تگ‌های تست روی ناوبری، دکمه‌ی اتصال و صفحات (بدون تغییر ظاهر برای کاربر).
+- ظاهر و قالب Hellboy حفظ شده است.
+
+## 🇬🇧 English
+- **End-to-end tests** with [e2e](https://e2e.tester.army) from TesterArmy, under `tests/`: app launch, connect button, bottom navigation. No AI key needed.
+- **Android CI:** `.github/workflows/e2e-android.yml` runs the flows on an emulator on each push and PR.
+- Test tags on navigation, the connect button and screens; no visible UI change.
+- Hellboy skin and template are kept.
+
 # 🔥 Hellboy VPN v4.2.1 — فاز ۱ مهاجرت از Narcic Gateway (Aether)
 
 ## 🇮🇷 فارسی

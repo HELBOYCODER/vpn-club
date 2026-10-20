@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import androidx.compose.ui.platform.testTag
 import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,7 +71,7 @@ fun ServersScreen(
     actionsFor?.let { s -> ServerActionsDialog(s, onClose = { actionsFor = null }) }
     if (showImport) ImportConfigDialog(onClose = { showImport = false })
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("screen_servers"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

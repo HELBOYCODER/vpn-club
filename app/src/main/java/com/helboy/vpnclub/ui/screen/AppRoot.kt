@@ -1,5 +1,8 @@
 package com.helboy.vpnclub.ui.screen
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.platform.testTag
 import com.helboy.vpnclub.ui.theme.Palette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -37,6 +40,7 @@ import com.helboy.vpnclub.ui.theme.TextTertiary
 import com.helboy.vpnclub.ui.theme.Palette
 
 /** ریشهٔ UI: چهار تب جدا — خانه، سرورها، اسکنر IP، تنظیمات. راست‌چین. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun AppRoot(
     onToggle: () -> Unit,
@@ -47,6 +51,7 @@ fun AppRoot(
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
+            modifier = Modifier.semantics { testTagsAsResourceId = true },
             containerColor = androidx.compose.ui.graphics.Color.Transparent,
             bottomBar = {
                 NavigationBar(containerColor = CardBg) {
@@ -55,13 +60,13 @@ fun AppRoot(
                         indicatorColor = NeonCyan, unselectedIconColor = TextTertiary,
                         unselectedTextColor = TextTertiary,
                     )
-                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, colors = colors,
+                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, colors = colors, modifier = Modifier.testTag("nav_home"),
                         icon = { Icon(Icons.Rounded.Home, null) }, label = { Text("خانه") })
-                    NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = colors,
+                    NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = colors, modifier = Modifier.testTag("nav_servers"),
                         icon = { Icon(Icons.Rounded.Dns, null) }, label = { Text("سرورها") })
-                    NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors,
+                    NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors, modifier = Modifier.testTag("nav_scanner"),
                         icon = { Icon(Icons.Rounded.Radar, null) }, label = { Text("اسکنر IP") })
-                    NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = colors,
+                    NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = colors, modifier = Modifier.testTag("nav_settings"),
                         icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("تنظیمات") })
                 }
             },

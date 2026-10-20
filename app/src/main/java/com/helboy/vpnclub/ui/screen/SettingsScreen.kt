@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.screen
 
+import androidx.compose.ui.platform.testTag
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -78,7 +79,7 @@ fun SettingsScreen(settings: AppSettings) {
     val scope = rememberCoroutineScope()
 
     Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.testTag("screen_settings").verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("تنظیمات", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
