@@ -261,6 +261,7 @@ class HellboyEngine(private val context: Context) {
     /** تست تاخیر با خطای نوع‌دار — نگاه کنید به [DelayResult]. */
     fun delayTestR(e: ServerEntry, timeoutMs: Long = DELAY_TIMEOUT_MS): DelayResult {
         if (e.id in brokenConfigs) return DelayResult.ConfigError("cached")
+        if (e.config.scheme == "aether") return aetherDelayR(e, timeoutMs)
         XrayCore.ensureEnv(context)
         val xr = XrayCore(0)
         xr.setVariant(IranVariants.byId(e.variantId))
@@ -286,6 +287,19 @@ class HellboyEngine(private val context: Context) {
             }
             r
         } finally { frag?.stop() }
+    }
+
+    /** Aether: هسته‌ی واقعی را روی یک پورت آزاد بالا می‌آورد و تاخیر تونل را می‌سنجد؛ بعد می‌بندد. */
+    private fun aetherDelayR(e: ServerEntry, timeoutMs: Long): DelayResult {
+        val profile = com.helboy.vpnclub.corex.aether.AetherLink.parse(e.config.raw)?.second
+            ?: return DelayResult.ConfigError("aether link")
+        val session = com.helboy.vpnclub.corex.aether.AetherRunner.start(context, profile,
+            com.helboy.vpnclub.corex.aether.AetherRunner.freePort())
+            ?: return DelayResult.CoreError("aether core did not start")
+        return try {
+            val ms = HealthTester.tunnelLatency(session.port, timeoutMs.toInt())
+            if (ms > 0) DelayResult.fromDelay(ms, MAX_DELAY_MS) else DelayResult.Timeout
+        } finally { session.stop() }
     }
 
     /** تست یک ServerEntry (برای تعویض خودکار). null = ناسالم. */

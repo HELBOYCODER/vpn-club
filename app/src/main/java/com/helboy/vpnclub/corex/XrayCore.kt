@@ -474,6 +474,12 @@ class XrayCore(
 
         fun isSupported(c: ProxyConfig): Boolean {
             if (c.scheme == SERVERLESS) return true
+            if (c.scheme == "aether") {
+                val p = com.helboy.vpnclub.corex.aether.AetherLink.parse(c.raw)?.second ?: return false
+                return com.helboy.vpnclub.corex.aether.AetherCommands.problemOf(p) == null &&
+                    p.psiphon == com.helboy.vpnclub.corex.aether.AetherProfile.CARRIER_OFF &&
+                    p.tor == com.helboy.vpnclub.corex.aether.AetherProfile.CARRIER_OFF
+            }
             if (c.scheme == "wireguard") return c.uuidOrUser.isNotBlank() && !c.query.toMap()["publickey"].isNullOrBlank()
             // Hysteria2: فقط پورت تکی (پورت‌هاپینگ «443,20000-30000» پشتیبانی نمی‌شود)
             if (c.scheme == "hysteria2" || c.scheme == "hy2") return c.uuidOrUser.isNotBlank() && c.port in 1..65535 &&

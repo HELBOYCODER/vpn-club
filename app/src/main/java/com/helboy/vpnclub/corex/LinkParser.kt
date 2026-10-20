@@ -14,7 +14,7 @@ import org.json.JSONObject
  */
 object LinkParser {
 
-    private val schemes = setOf("vless", "trojan", "hysteria2", "hy2", "vmess", "ss", "socks", "socks5", "wireguard", "wg")
+    private val schemes = setOf("vless", "trojan", "hysteria2", "hy2", "vmess", "ss", "socks", "socks5", "wireguard", "wg", "aether")
 
     fun parse(link: String): ProxyConfig? {
         val trimmed = link.trim()
@@ -27,6 +27,7 @@ object LinkParser {
                 "ss" -> parseSs(trimmed)
                 "socks", "socks5" -> parseSocks(trimmed, scheme)
                 "wg" -> parseQueryStyle("wireguard" + trimmed.substring(2), "wireguard")
+                "aether" -> parseAether(trimmed)
                 else -> parseQueryStyle(trimmed, scheme)
             }
         } catch (_: Exception) {
@@ -130,4 +131,15 @@ object LinkParser {
     /** آدرس IPv6 در URI داخل [ ] می‌آید؛ هسته و Socket بدون براکت می‌خواهند. */
     private fun cleanHost(h: String?): String? =
         h?.trim()?.trim('[', ']')?.takeIf { it.isNotEmpty() }
+
+    /**
+     * aether://… (Narcic / PattNG). مقصد لینک (endpoint) برای پروفایل‌های دو-hop خالی است؛ در آن صورت یک میزبان
+     * ساختگی گذاشته می‌شود تا کلید سرور پایدار بماند. خود پروفایل همیشه از [ProxyConfig.raw] خوانده می‌شود.
+     */
+    private fun parseAether(link: String): ProxyConfig? {
+        val (name, profile) = com.helboy.vpnclub.corex.aether.AetherLink.parse(link) ?: return null
+        val host = profile.server.ifEmpty { "aether.local" }
+        val port = profile.serverPort.takeIf { it in 1..65535 } ?: 443
+        return ProxyConfig(scheme = "aether", host = host, port = port, query = emptyList(), tag = name, raw = link)
+    }
 }

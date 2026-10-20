@@ -1,3 +1,17 @@
+# 🔥 Hellboy VPN v4.2.1 — فاز ۱ مهاجرت از Narcic Gateway (Aether)
+
+## 🇮🇷 فارسی
+- **موتور Aether** (هسته‌ی `libaether.so`): پروتکل‌های WARP (WireGuard / MASQUE / gool …) مستقیم از گوشی، به‌صورت پردازه و با SOCKS روی لوپ‌بک؛ تونل سیستم مثل بقیه‌ی سرورها به آن وصل می‌شود.
+- **لینک `aether://`** (همان فرمت PattNG و Narcic): وارد کردن از کلیپ‌بورد یا QR؛ تست واقعی تاخیر با هسته قبل از اتصال.
+- ثبت خودکار کلید WARP وقتی لازم است.
+- **محدودیت این نسخه:** حامل‌های داخلی Psiphon و Tor داخل Aether هنوز نیستند (پروفایل‌هایی که به آن‌ها نیاز دارند رد می‌شوند). SNI spoof، OpenConnect، IKEv2، SSH، DNS tunnels و بقیه‌ی فازها در نسخه‌های بعدی می‌آیند.
+
+## 🇬🇧 English
+- **Aether engine** (`libaether.so`): WARP protocols (WireGuard / MASQUE / gool …) run as a process with a loopback SOCKS; the system tunnel connects to it like any other server.
+- **`aether://` links** (PattNG / Narcic format): import via clipboard or QR; real delay test with the core before connecting.
+- Automatic WARP key registration when needed.
+- **Limits:** Psiphon and Tor carriers inside Aether are not in this version (profiles needing them are rejected). SNI spoof, OpenConnect, IKEv2, SSH, DNS tunnels follow in later phases.
+
 # 🔥 Hellboy VPN v4.1.0 — روش Netra + امکانات ZeroNet
 
 ## 🇮🇷 فارسی

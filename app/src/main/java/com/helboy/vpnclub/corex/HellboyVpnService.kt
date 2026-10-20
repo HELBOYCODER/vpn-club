@@ -37,6 +37,8 @@ class HellboyVpnService : VpnService() {
     private var xray: XrayCore? = null
     private var tun: Tun2Socks? = null
     private var launched: LaunchedTunnel? = null
+    /** هسته‌ی Aether (اگر سرور از نوع aether:// است). */
+    private var aether: com.helboy.vpnclub.corex.aether.AetherSession? = null
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var tunnelUp = false
     @Volatile private var tickerOn = false
@@ -85,6 +87,21 @@ class HellboyVpnService : VpnService() {
             return
         }
         launched?.stop(); launched = null
+        aether?.stop(); aether = null
+        val aetherProfile = if (entry.config.scheme == "aether") com.helboy.vpnclub.corex.aether.AetherLink.parse(entry.config.raw)?.second else null
+        if (aetherProfile != null) {
+            val session = com.helboy.vpnclub.corex.aether.AetherRunner.start(this, aetherProfile, SOCKS_PORT)
+            if (session == null) {
+                val e = SvcError.Core("هسته‌ی Aether بالا نیامد — لاگ را ببینید")
+                DiagLogger.log("SERVICE aether_fail ${entry.config.host}:${entry.config.port}")
+                _status.value = SvcStatus(SvcState.FAILED, e.userMessage, entry.id, e)
+                if (!tunnelUp) { stopAll(); finish() }
+                return
+            }
+            aether = session
+            afterCoreUp(entry)
+            return
+        }
         var l = TunnelLauncher.launch(xray!!, entry)
         if (l == null) {
             // احتمال خطای geodata در قوانین مسیریابی؛ یک بار بدون قوانین امتحان کن
@@ -101,6 +118,11 @@ class HellboyVpnService : VpnService() {
             return
         }
         launched = l
+        afterCoreUp(entry)
+    }
+
+    /** هسته (Xray یا Aether) بالاست: تونل سیستم را روی SOCKS آن وصل می‌کند و وضعیت UP را می‌گذارد. */
+    private fun afterCoreUp(entry: ServerEntry) {
         if (psiphonOnly) { psiphonOnly = false; PsiphonRunner.stop(); tunnelUp = false }
         if (!tunnelUp || tun?.isRunning != true) {
             // سایفون (اگر کاربر روشن کرده): روی SOCKS هسته؛ تونل سیستم به SOCKS سایفون وصل می‌شود
@@ -206,6 +228,8 @@ class HellboyVpnService : VpnService() {
         tunnelUp = false
         try { launched?.stop() } catch (_: Exception) {}
         launched = null
+        try { aether?.stop() } catch (_: Exception) {}
+        aether = null
         try { tun?.stop() } catch (_: Exception) {}
         try { xray?.stop() } catch (_: Exception) {}
     }

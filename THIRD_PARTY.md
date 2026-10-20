@@ -18,3 +18,4 @@
 - Cloudflare WARP: device registration via the public WARP API; keys generated on-device (X25519, RFC 7748).
 - ZeroNet by zeghostwriter (MIT): https://github.com/zeghostwriter/ZeroNet — features re-implemented on the Xray engine (serverless profile, connection styles, routing profiles, DNS choice, tested feed list incl. its crowd-data verified list, Cloudflare alt ports, empty-host fix). No ZeroNet code is bundled.
 - Netra Panel by netrair (MIT): https://github.com/netrair/netra-panel — default cipher-suite list and two-stage finalmask fragment values reused for the "Netra" profile.
+- Narcic Gateway by valid7996 (GPL-3.0): https://github.com/valid7996/Narcic-Getway — Phase 1 ports the Aether core integration (aether:// link format, command builder and fronting overlay, from app/shared domain/config: AetherProfile, AetherCommands, AetherLink, PsiphonFronting) and the bundled libaether.so core binary. The core runs as a separate process, as it does in Narcic.
