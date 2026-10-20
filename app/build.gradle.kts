@@ -1,49 +1,68 @@
+import java.io.FileInputStream
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+
 android {
-    namespace = "com.helboy.vpnclub"
-    compileSdk = 35
+    namespace = "dev.valid7996.narcicgeteway"
+
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.helboy.vpnclub"
-        minSdk = 29
-        targetSdk = 35
-        versionCode = 48
-        versionName = "4.2.2"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = (project.property("narcicgeteway.versionCode") as String).toInt()
+        versionName = project.property("narcicgeteway.versionName") as String
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables { useSupportLibrary = true }
+
+        val includeDefaultSubs = (project.findProperty("narcicgeteway.includeDefaultSubs") as? String) != "false"
+        buildConfigField("boolean", "INCLUDE_DEFAULT_SUBSCRIPTIONS", includeDefaultSubs.toString())
     }
 
-    // امضای ثابت: بدون آن هر بیلد CI با یک کلید debug تصادفی امضا می‌شد و نسخه‌ی جدید
-    // روی نسخه‌ی قبلی نصب نمی‌شد. کلید از Secretهای گیت‌هاب (HELLBOY_KEYSTORE_*) می‌آید.
-    val hbKeystore = System.getenv("HELLBOY_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
     signingConfigs {
-        if (hbKeystore != null) {
-            create("hellboy") {
-                storeFile = hbKeystore
-                storePassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("HELLBOY_KEY_ALIAS") ?: "hellboyvpn"
-                keyPassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                (keystoreProperties["storeType"] as String?)?.let { storeType = it }
             }
         }
     }
 
     buildTypes {
+        debug {
+            isDebuggable = true
+        }
         release {
-            isMinifyEnabled = false
-            signingConfig = if (hbKeystore != null) signingConfigs.getByName("hellboy")
-                            else signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
-        }
-        debug {
-            isMinifyEnabled = false
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -51,11 +70,24 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    sourceSets.getByName("main").assets.srcDir(
+        rootProject.file("shared/build/composeResForAndroid"),
+    )
+
+    val buildingBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+    splits {
+        abi {
+            isEnable = !buildingBundle
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
     }
 
     packaging {
@@ -64,35 +96,84 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
+
+            excludes += "**/x86/*.so"
         }
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlin:kotlin-stdlib:${libs.versions.kotlin.get()}",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${libs.versions.kotlin.get()}",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${libs.versions.kotlin.get()}",
+        )
+    }
+}
+
+tasks.matching {
+    it.name.matches(Regex("merge.*Assets")) || it.name.contains("lint", ignoreCase = true)
+}.configureEach {
+    dependsOn(":shared:copyComposeResForAndroid")
+}
+
 dependencies {
-    implementation(project(":vpnLib"))
+    implementation(project(":shared"))
 
-    // هسته‌ی PattNG: Xray + hev-socks5-tunnel
-    implementation(files("libs/libv2ray.aar"))
-    implementation(files("libs/hev-htproxy.aar"))
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
+    implementation(libs.androidx.graphics.shapes)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
 
-    // OkHttp for fetching VPNGate mirror feeds
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // QR کد برای اشتراک کانفیگ (فقط هسته‌ی جاوا، بدون دوربین)
-    implementation("com.google.zxing:core:3.5.3")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.service)
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.bouncycastle)
+
+    implementation(files("libs/nrgcore.aar"))
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
 }

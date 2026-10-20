@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- فقط پوشه‌ی لاگ برای اشتراک — نه فایل‌های دیگر اپ -->
-<paths>
-    <cache-path name="logs" path="logs/" />
-</paths>

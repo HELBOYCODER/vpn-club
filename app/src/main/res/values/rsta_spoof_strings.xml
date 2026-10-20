@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rsta_title">SNI spoof (no root)</string>
+    <string name="rsta_sub">Connect IP, port, fake SNI and method for configs that point at 127.0.0.1:40443</string>
+    <string name="rsta_note">Works like RstaNG. Import or make a config whose server is 127.0.0.1 and port 40443 (its TLS server name and host are the real ones); it then goes through the built-in engine, which connects to the IP below and disguises the first packets with the fake SNI. Changes apply to the next connection or test.</string>
+    <string name="rsta_connect_ip">Connect IP</string>
+    <string name="rsta_connect_ip_hint">A clean IP of the CDN the server is behind</string>
+    <string name="rsta_connect_port">Connect port</string>
+    <string name="rsta_fake_sni">Fake SNI</string>
+    <string name="rsta_fake_sni_hint">A server name the filter lets through, such as cdnjs.cloudflare.com</string>
+    <string name="rsta_method">Bypass method</string>
+    <string name="rsta_status">Engine status</string>
+    <string name="rsta_status_hint">It starts with a connection or a test and stops when they end.</string>
+    <string name="rsta_view_log">View log</string>
+    <string name="rsta_log_empty">No log lines yet.</string>
+</resources>

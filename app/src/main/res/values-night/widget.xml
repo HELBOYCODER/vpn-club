@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_bg">#101513</color>
+    <color name="widget_text">#DFE7E2</color>
+    <color name="widget_text_dim">#A3B0A9</color>
+    <color name="widget_accent">#6FDBA8</color>
+    <color name="widget_accent_off">#3C4A43</color>
+    <color name="widget_on_accent">#06301F</color>
+    <color name="widget_chip_bg">#1A231E</color>
+    <color name="widget_ok">#5BD99B</color>
+    <color name="widget_warn">#F2B8B5</color>
+</resources>

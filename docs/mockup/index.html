@@ -1,0 +1,1486 @@
+<!doctype html>
+<html dir="rtl" lang="fa">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نرسیس گیت‌وی — طرح iOS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#08080c;font-family:Vazirmatn,-apple-system,'Segoe UI',Tahoma,sans-serif;color:#fff;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit;background:none;border:none;outline:none}
+button{cursor:pointer}
+#stage{display:flex;align-items:center;justify-content:center;gap:46px;height:100vh}
+#fit{position:relative;width:calc(392px*var(--s,1));height:calc(852px*var(--s,1))}
+.phone{position:absolute;top:0;right:0;width:392px;height:852px;transform:scale(var(--s,1));transform-origin:top right;border-radius:58px;background:#000;border:9px solid #17171d;box-shadow:0 60px 140px -30px rgba(0,0,0,.85),0 0 0 2px #2c2c34,0 0 90px -20px rgba(10,132,255,.18);overflow:hidden}
+#sidehint{width:268px;color:#9b9baf;font-size:12.5px;line-height:2.15}
+#sidehint h2{color:#fff;font-size:16px;margin-bottom:12px}
+#sidehint b{color:#bfe3ff;font-weight:600}
+#sidehint .k{display:inline-block;background:#1b1b25;border:1px solid #2a2a36;border-radius:7px;padding:1px 7px;margin:0 2px;font-size:11px;color:#d6d6e6}
+.island{position:absolute;top:11px;right:50%;transform:translateX(50%);width:122px;height:36px;background:#000;border-radius:22px;z-index:60}
+.island:before{content:'';position:absolute;left:11px;top:50%;transform:translateY(-50%);width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#20304c,#05070d 60%)}
+.statusbar{position:absolute;top:0;right:0;left:0;height:52px;padding:14px 30px 0;display:flex;justify-content:space-between;align-items:center;z-index:55;pointer-events:none;color:var(--t)}
+.statusbar .tm{font-size:15.5px;font-weight:600}
+.statusbar .stic{display:flex;align-items:center;gap:6px}
+.homebar{position:absolute;bottom:7px;right:50%;transform:translateX(50%);width:142px;height:5px;border-radius:3px;background:rgba(255,255,255,.85);z-index:70;pointer-events:none}
+.phone[data-ct="light"] .homebar{background:rgba(15,15,20,.8)}
+.phone[data-ct="dark"]{--bg:#0b0b0f;--bg2:#101016;--card:#15161c;--card2:#1d1e26;--fill:rgba(120,120,138,.22);--sep:rgba(255,255,255,.075);--t:#f2f2f7;--t2:rgba(235,235,245,.6);--t3:rgba(235,235,245,.34);--sheet:#1c1c22;--nav:rgba(12,12,17,.74);--bar:rgba(255,255,255,.06);--ok:#30d158;--warn:#ffd60a;--bad:#ff453a;--onac:#fff;--hm:rgba(0,0,0,.42)}
+.phone[data-ct="dark"][data-amoled="1"]{--bg:#000;--bg2:#08080b;--card:#101014;--card2:#17171d;--fill:rgba(120,120,138,.2);--sep:rgba(255,255,255,.09);--sheet:#16161b;--nav:rgba(6,6,9,.82)}
+.phone[data-ct="light"]{--bg:#f2f2f7;--bg2:#e9e9ef;--card:#fff;--card2:#f6f6fa;--fill:rgba(118,118,128,.13);--sep:rgba(60,60,67,.13);--t:#000;--t2:rgba(60,60,67,.63);--t3:rgba(60,60,67,.38);--sheet:#f4f4f9;--nav:rgba(250,250,252,.82);--bar:rgba(0,0,0,.05);--ok:#34c759;--warn:#f5b800;--bad:#ff3b30;--onac:#fff;--hm:rgba(0,0,0,.42)}
+.screen{position:absolute;inset:0;background:var(--bg);color:var(--t);display:flex;flex-direction:column}
+.page{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)}
+.content{overflow-y:auto;flex:1;padding:0 0 108px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.hbar{padding:56px 16px 8px;display:flex;align-items:flex-end;justify-content:space-between;min-height:94px;flex:none}
+.hbar h1{font-size:28px;font-weight:800;letter-spacing:-.3px}
+.hbar .acts{display:flex;gap:8px;align-items:center;padding-bottom:6px}
+.icbtn{width:33px;height:33px;border-radius:50%;background:var(--bar);display:flex;align-items:center;justify-content:center;color:var(--t)}
+.icbtn svg{width:16px;height:16px}
+.icbtn:active{transform:scale(.88)}
+.group{background:var(--card);border-radius:var(--cr,16px);margin:0 16px 20px;overflow:hidden}
+.group .hd{padding:9px 17px 6px;font-size:12.5px;color:var(--t2)}
+.row{display:flex;align-items:center;gap:11px;padding:var(--rp,11px) 14px;min-height:44px;border-bottom:1px solid var(--sep);cursor:pointer;position:relative}
+.group .row:last-child,.group>:last-child{border-bottom:none}
+.row:active{background:rgba(128,128,140,.09)}
+.row .rt{flex:1;min-width:0}
+.row .rt .t{font-size:15px}
+.row .rt .s{font-size:12px;color:var(--t2);margin-top:2px;line-height:1.65}
+.row .ric{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none;color:#fff}
+.row .ric svg{width:16px;height:16px}
+.chev{width:8px;height:8px;border-right:2.2px solid var(--t3);border-top:2.2px solid var(--t3);transform:rotate(225deg);flex:none;opacity:.8;border-radius:1px}
+html[dir=ltr] .chev{transform:rotate(45deg)}
+.val{color:var(--t2);font-size:14px}
+.val.ac{color:var(--accent);font-weight:650}
+.sw{width:50px;height:30px;border-radius:16px;background:var(--fill);position:relative;flex:none;transition:.28s cubic-bezier(.3,.7,.4,1)}
+.sw:after{content:'';position:absolute;top:2px;right:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35);transition:.28s cubic-bezier(.3,.7,.4,1)}
+.sw.on{background:var(--ok)}
+.sw.on:after{transform:translateX(-20px)}
+.seg{display:flex;background:var(--fill);border-radius:10px;padding:2px;gap:2px;flex:none;width:210px}
+.seg button{flex:1;padding:7px 3px;border-radius:8px;font-size:12px;color:var(--t);white-space:nowrap}
+.seg button.on{background:var(--accent);color:var(--onac);font-weight:650}
+.stepper{display:flex;align-items:center;background:var(--fill);border-radius:9px;flex:none}
+.stepper b{min-width:58px;text-align:center;font-size:14px;font-weight:650}
+.stepper button{width:32px;height:30px;font-size:18px;color:var(--t)}
+.stepper button:active{color:var(--accent)}
+.txt{background:var(--card2);border:1px solid var(--sep);border-radius:11px;padding:10px 13px;width:100%;font-size:14px;color:var(--t)}
+.txt::placeholder{color:var(--t3)}
+.txtarea{min-height:92px;resize:vertical;font-size:12px;line-height:1.9;font-family:Vazirmatn-TTF,ui-monospace,Consolas,monospace;direction:ltr;text-align:left}
+.lbl{font-size:12.5px;color:var(--t2);margin:10px 5px 6px}
+.btn{display:block;width:100%;padding:13px;border-radius:14px;background:var(--accent);color:var(--onac);font-weight:700;font-size:14.5px;text-align:center}
+.btn:active{filter:brightness(.82)}
+.btn.gray{background:var(--fill);color:var(--t)}
+.btn:disabled{opacity:.45}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:650;background:var(--fill);color:var(--t2)}
+.pill.g{color:#32d74b;background:rgba(50,215,75,.14)}
+.pill.y{color:#ffd60a;background:rgba(255,214,10,.12)}
+.pill.r{color:#ff453a;background:rgba(255,69,58,.12)}
+.badge{font-size:10.5px;font-weight:700;padding:2.5px 9px;border-radius:10px;background:var(--accent);color:var(--onac)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:20px;background:var(--card);font-size:12.5px;white-space:nowrap;cursor:pointer;border:1px solid var(--sep);color:var(--t2)}
+.chip.on{background:var(--fill);color:var(--t);font-weight:650;border-color:transparent}
+.chiprow{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 10px;scrollbar-width:none;flex:none}
+.chiprow::-webkit-scrollbar{display:none}
+.search{display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:11px;padding:8px 13px;margin:2px 16px 10px;flex:none}
+.search svg{width:15px;height:15px;color:var(--t2);flex:none}
+.search input{flex:1;font-size:14.5px;color:var(--t)}
+.search input::placeholder{color:var(--t3)}
+.empty{padding:54px 36px;text-align:center;color:var(--t2)}
+.empty .e{font-size:38px;margin-bottom:12px}
+.empty .t{font-size:16px;font-weight:750;color:var(--t);margin-bottom:7px}
+.empty .b{font-size:12.5px;line-height:2}
+.tabbar{position:absolute;bottom:0;right:0;left:0;height:82px;background:var(--nav);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-top:1px solid var(--sep);display:flex;z-index:48;padding-top:9px;justify-content:space-around}
+.tabbar.plain{border-top:none}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--t3);font-size:10.5px;cursor:pointer;transition:.18s}
+.tab svg{width:23px;height:23px}
+.tab.on{color:var(--accent)}
+.tab:active{transform:scale(.88)}
+.tabbar.pill{height:auto;top:auto;border:none;background:transparent;padding:0;bottom:24px}
+.tabbar.pill .wrap{display:flex;gap:6px;background:var(--nav);backdrop-filter:blur(30px);padding:8px;border-radius:34px;margin:0 auto;border:1px solid var(--sep);box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.tabbar.pill .tab{color:var(--t);padding:8px}
+.tabbar.pill .tab.on{background:var(--accent);color:var(--onac);border-radius:24px}
+.tabbar.mini{border-top:none;background:transparent;height:60px;padding:0 30px;align-items:center}
+.tabbar.mini .wrap{flex:1;display:flex;justify-content:space-around}
+.tabbar.mini .tab.on:after{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.tabbar.mini .tab{height:46px;justify-content:center;flex:none}
+.tabbar.mini .tab svg{width:22px;height:22px}
+.tabbar.mini .tab .tl{display:none}
+.fab{position:absolute;left:18px;bottom:100px;width:52px;height:52px;border-radius:26px;background:var(--accent);color:var(--onac);z-index:47;box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 35%,rgba(0,0,0,.35));display:flex;align-items:center;justify-content:center}
+.fab:active{transform:scale(.9)}
+.toast{position:absolute;top:64px;left:50%;transform:translateX(-50%) translateY(-14px);background:rgba(30,30,36,.97);border:1px solid rgba(255,255,255,.1);color:#fff;padding:9px 17px;border-radius:24px;font-size:13px;z-index:300;opacity:0;transition:.32s;pointer-events:none;max-width:80%;text-align:center;backdrop-filter:blur(20px)}
+.phone[data-ct="light"] .toast{background:rgba(28,28,32,.92)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.tdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:7px;vertical-align:1px;background:#0a84ff}
+.toast.good .tdot{background:#32d74b}.toast.warn .tdot{background:#ffd60a}.toast.bad .tdot{background:#ff453a}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.3s;z-index:90}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;right:0;left:0;bottom:0;background:var(--sheet);border-radius:22px 22px 0 0;z-index:95;transform:translateY(104%);transition:.44s cubic-bezier(.32,.72,0,1.04);max-height:87%;display:flex;flex-direction:column;box-shadow:0 -12px 60px rgba(0,0,0,.45)}
+.sheet.show{transform:translateY(0)}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--fill);margin:9px auto 1px;flex:none}
+.shd{padding:10px 20px 8px;display:flex;align-items:center;justify-content:space-between;flex:none}
+.shd h3{font-size:16.5px;font-weight:750}
+.shd .x{color:var(--t2);font-size:14px;background:var(--fill);width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.sbody{overflow-y:auto;padding:8px 18px 36px;scrollbar-width:none}
+.sbody::-webkit-scrollbar{display:none}
+.action{background:var(--card2);border-radius:15px;margin-bottom:10px;overflow:hidden}
+.a-item{padding:13px;display:flex;align-items:center;gap:12px;font-size:14.5px;border-bottom:1px solid var(--sep);cursor:pointer}
+.a-item:last-child{border:none}
+.a-item:active{background:rgba(128,128,140,.12)}
+.a-item.dgr{color:var(--bad)}
+.a-item .tic{width:26px;text-align:center;font-size:15px}
+.a-item .c{flex:1}
+.a-item .cs{font-size:11.5px;color:var(--t2);margin-top:1px}
+.cancl{width:100%;background:var(--card2);border-radius:15px;padding:13px;text-align:center;font-weight:700;font-size:14.5px}
+.alertwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:160;pointer-events:none}
+.alertwrap.show{pointer-events:auto}
+.alert{width:272px;background:rgba(48,48,56,.6);backdrop-filter:blur(34px);-webkit-backdrop-filter:blur(34px);border-radius:17px;overflow:hidden;color:#fff;transform:scale(1.12);opacity:0;transition:.32s cubic-bezier(.3,.7,.35,1);text-align:center}
+.phone[data-ct="light"] .alert{background:rgba(252,252,253,.88);color:#000}
+.alert.show{transform:scale(1);opacity:1}
+.alert .tt{font-size:15px;font-weight:750;padding:18px 20px 4px}
+.alert .bb{font-size:12.5px;padding:5px 17px 16px;line-height:1.95;color:var(--t,#fff)}
+.phone[data-ct="dark"] .alert .bb{color:rgba(240,240,248,.78)}
+.phone[data-ct="light"] .alert .bb{color:rgba(40,40,50,.8)}
+.alert .bs{display:flex;border-top:1px solid rgba(140,140,160,.3)}
+.alert .ab{flex:1;padding:12px 6px;font-size:14.5px;border-right:1px solid rgba(140,140,160,.3);color:#0a84ff}
+.alert .ab:last-child{border:none}
+.alert .ab.def{font-weight:700}
+.alert .ab.dgr{color:#ff453a}
+.alert input.sinput{width:86%;background:rgba(120,120,130,.16);border-radius:9px;padding:7px 10px;margin:0 auto 14px;font-size:14px;text-align:center;color:inherit}
+.srv{display:flex;gap:11px;align-items:center;padding:var(--rp,11px) 12px;border-bottom:1px solid var(--sep);cursor:pointer;position:relative}
+.srv:active{background:rgba(128,128,140,.09)}
+.srv .fl{width:37px;height:37px;border-radius:50%;background:var(--fill);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.srv .nm{flex:1;min-width:0}
+.srv .nm .n{font-size:14px;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv .nm .p{font-size:11px;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv .ck{width:21px;height:21px;border-radius:50%;border:2px solid var(--t3);flex:none;margin-left:4px}
+.srv.act .ck{border-color:var(--accent);background:var(--accent);position:relative}
+.srv.act .ck:after{content:'';position:absolute;top:3px;left:8px;width:4px;height:9px;border-right:2px solid var(--onac);border-bottom:2px solid var(--onac);transform:rotate(45deg)}
+.srv.act{background:linear-gradient(-90deg,transparent,color-mix(in srgb,var(--accent) 9%,transparent) 55%)}
+.srv .dots{color:var(--t3);font-size:17px;letter-spacing:1px;padding:2px 4px 8px;flex:none}
+.srv-toolsbar{position:absolute;bottom:100px;right:16px;left:16px;display:flex;gap:9px;z-index:46}
+.srv-toolsbar .pb{flex:1;background:var(--nav);backdrop-filter:blur(26px);border:1px solid var(--sep);color:var(--t);padding:11px;border-radius:15px;font-size:12px;font-weight:650;text-align:center}
+.srv-toolsbar .pb:disabled{opacity:.45}
+.srv-toolsbar .pb svg{width:13px;height:13px;vertical-align:-2px;margin-left:5px}
+.size-count{font-size:11.5px;color:var(--t3);text-align:center;padding:2px 0 12px}
+.homepad{padding-top:62px}
+.logo{display:flex;align-items:center;gap:10px;padding:4px 18px 10px}
+.logo .lg{width:37px;height:37px;border-radius:11px;background:linear-gradient(135deg,color-mix(in srgb,var(--acc) 88%,#fff 14%),color-mix(in srgb,var(--acc) 58%,#0a0a14));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px color-mix(in srgb,var(--acc) 42%,transparent)}
+.logo svg{width:19px;height:19px;color:#fff}
+.logo .brand{flex:1}
+.logo .brand .n{font-size:14px;font-weight:800}
+.logo .brand .v{font-size:9.5px;color:var(--t3)}
+.statline{text-align:center;padding:14px 0 0}
+.stattext{font-size:24px;font-weight:800;letter-spacing:-.3px}
+.statrow{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--t2);font-size:12.5px;margin-top:3px;min-height:24px}
+.dotsink{display:inline-flex;gap:3px}
+.dotsink i{width:5px;height:5px;border-radius:50%;background:var(--acc);animation:bl 1.1s infinite}
+.dotsink i:nth-child(2){animation-delay:.14s}.dotsink i:nth-child(3){animation-delay:.28s}
+@keyframes bl{0%,100%{opacity:.2}50%{opacity:1}}
+.coWrap{display:flex;flex-direction:column;align-items:center;margin:14px 0 18px}
+.core{position:relative;width:196px;height:196px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.core .cbtn{width:148px;height:148px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--cac) 82%,#fff 16%),var(--cac) 46%,color-mix(in srgb,var(--cac) 60%,#000));box-shadow:0 16px 56px -8px color-mix(in srgb,var(--cac) 52%,transparent),0 2px 8px rgba(0,0,0,.3),inset 0 -10px 24px rgba(0,0,0,.24);transition:transform .16s;cursor:pointer;z-index:2;border:none}
+.core .cbtn:active{transform:scale(.94)}
+.core .cbtn svg{width:50px;height:50px;color:#fff;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
+.core .or1,.core .or2{position:absolute;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--cac) 55%,transparent);pointer-events:none}
+.core .or1{inset:14px;width:168px;height:168px;animation:breathe 3.6s ease-in-out infinite}
+.core .or2{inset:0;width:196px;height:196px;border-style:dashed;animation:spin 24s linear infinite}
+.core[data-st="connecting"] .cbtn{animation:pulse 1s ease-in-out infinite}
+.core[data-st="connected"] .or1{animation:breathe 2.2s infinite}
+@keyframes breathe{0%,100%{transform:scale(.97);opacity:.85}50%{transform:scale(1.045);opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(.965)}}
+.holdring{position:absolute;inset:-10px;width:216px;height:216px;transform:rotate(-90deg);pointer-events:none;opacity:0}
+.holdring.show{opacity:1}
+.connectbar{width:82%;background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--cac) 85%,#fff 12%),var(--cac) 50%,color-mix(in srgb,var(--cac) 64%,#000));border-radius:18px;color:#fff;font-weight:800;font-size:15px;padding:15px;text-align:center;box-shadow:0 10px 34px color-mix(in srgb,var(--cac) 42%,transparent);cursor:pointer}
+.corebar-mask{position:absolute;inset:0;border-radius:18px;background:rgba(0,0,0,.3);transform:scaleX(0);transform-origin:right}
+.coWrap[data-style="pill"] .core,.coWrap[data-style="bar"] .core,.coWrap[data-style="icon"] .core{width:auto;height:auto;border:none}
+.coWrap[data-style="bar"] .core{width:100%}
+.coWrap[data-style="pill"] .core .cbtn{width:auto;height:auto;border-radius:26px;padding:13px 24px;font-size:15px;font-weight:750;color:#fff;gap:9px}
+.coWrap[data-style="icon"] .core .cbtn{width:58px;height:58px}
+.coWrap[data-style="icon"] .core .cbtn svg{width:24px;height:24px;position:absolute}
+.coWrap[data-style="icon"] .core .cbtn .ic2{position:static}
+.coWrap[data-style="pill"] .core{height:auto}
+.coWrap[data-style="icon"] .core{padding:4px}
+.orbr{position:absolute;inset:-4px;border-radius:30px;border:2px dashed color-mix(in srgb,var(--cac) 52%,transparent);animation:spin 28s linear infinite;pointer-events:none}
+.coWrap[data-style="icon"] .orbr{border-radius:50%}
+.swipe{position:relative;overflow:hidden;background:var(--card);border-radius:24px;height:58px;width:88%;box-shadow:inset 0 0 0 1px var(--sep)}
+.swipe .flr{display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:13.5px;font-weight:650}
+.swipe .knob{position:absolute;top:5px;width:48px;height:48px;border-radius:50%;background:var(--cac);display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 4px 16px rgba(0,0,0,.45);touch-action:none}
+.swipe .knob svg{width:19px;height:19px;color:#fff}
+.coWrap[data-style="swipe"]{align-items:stretch}
+.cfgcard{border-radius:18px;margin:2px 16px 12px;padding:12px 15px;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-backdrop-filter:none}
+.cfgcard .fl{width:42px;height:42px;border-radius:13px;background:var(--fill);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.cfgcard .cn{flex:1;min-width:0}
+.cfgcard .cn .t{font-size:15px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfgcard .cn .s{font-size:11px;color:color-mix(in srgb,var(--on-theme) 65%,var(--t2));margin-top:3px}
+.cfgcard .sc{display:flex;align-items:center;gap:7px}
+.tiles{display:grid;gap:10px;margin:0 16px 12px}
+.tiles.g2{grid-template-columns:1fr 1fr}
+.tile{background:var(--tilebg,var(--card));border-radius:16px;padding:12px 14px;box-shadow:inset 0 0 0 1px var(--sep)}
+.tile .hd{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);font-weight:600}
+.tile .hd svg{width:13px;height:13px}
+.tile .num{font-size:20px;font-weight:800;margin-top:5px;font-variant-numeric:tabular-nums;color:var(--numc,var(--t))}
+.tile .num small{font-size:10.5px;color:var(--t2);font-weight:500;margin-right:2px}
+.tile canvas{width:100%;height:30px;display:block;margin-top:7px}
+.ringtile{display:flex;gap:12px;align-items:center;background:var(--tilebg,var(--card));border-radius:16px;padding:13px}
+.ringtile svg{width:60px;height:60px;flex:none}
+.ringtile .rt2{flex:1}
+.ringtile .rv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.ringtile .rh{font-size:11px;color:var(--t2);margin-top:2px}
+.sess{font-size:10.5px;color:var(--t3);text-align:center;margin:0 16px 12px}
+.infocard{background:var(--card);border-radius:16px;margin:0 16px 12px;overflow:hidden}
+.infobuf{padding:10px 15px;display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--sep);font-size:12.5px;cursor:pointer}
+.infobuf .k{color:var(--t2)}
+.infobuf .v{font-weight:620;text-align:left;direction:ltr;font-variant-numeric:tabular-nums}
+.quickrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:0 16px 10px}
+.qbox{background:var(--card);border-radius:16px;padding:14px 4px 11px;text-align:center;cursor:pointer}
+.qbox:active{transform:scale(.95)}
+.qbox svg{width:21px;height:21px;color:var(--acc)}
+.qbox .qt{font-size:11px;color:var(--t2);margin-top:6px;font-weight:620}
+.subpage{position:absolute;inset:0;background:var(--bg);z-index:34;display:none;flex-direction:column}
+@keyframes subin{from{transform:translateX(-100%)}}
+@keyframes subout{to{transform:translateX(-100%)}}
+@keyframes subback{from{transform:translateX(34%)}}
+@keyframes subexitb{to{transform:translateX(34%)}}
+.mapwrap{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(165deg,#0d1a2c,#101b30 55%,#0b1322);margin:0 16px 14px}
+.mapwrap svg{width:100%;display:block}
+.gaugebox{margin:0 16px 14px;background:var(--card);border-radius:18px;padding:18px 14px;text-align:center}
+.gauge-num{font-size:36px;font-weight:800;margin-top:-52px;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.gauge-unit{font-size:12px;color:var(--t2);margin-bottom:10px}
+.phase{font-size:12.5px;color:var(--t2);min-height:20px}
+.spgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 14px}
+.spbox{background:var(--card);border-radius:14px;padding:11px;text-align:center}
+.spbox .sv{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.spbox .sk{font-size:10.5px;color:var(--t2);margin-top:2px}
+.meter{height:8px;border-radius:5px;background:var(--fill);overflow:hidden;margin-top:7px}
+.meter i{display:block;height:100%;border-radius:5px;background:var(--acc);transition:width .5s}
+.logwrap{background:#0b0b10;border-radius:14px;padding:12px;margin:0 16px 12px;max-height:400px;overflow-y:auto;scrollbar-width:none}
+.logwrap::-webkit-scrollbar{display:none}
+.logline{font-size:10px;font-family:ui-monospace,Consolas,monospace;direction:ltr;text-align:left;padding:1.8px 0;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.logline .lt{color:#565668}
+.logline.w{color:#ffd60a}.logline.e{color:#ff6b5e}.logline.g{color:#39d66a}
+.bubble{max-width:80%;padding:10px 14px;border-radius:19px;font-size:13.5px;line-height:2;margin-bottom:8px;background:var(--fill);border-bottom-left-radius:6px}
+.bubble.me{background:var(--acc);color:var(--onac);align-self:flex-end;border-bottom-left-radius:19px;border-bottom-right-radius:6px}
+.chatwrap{display:flex;flex-direction:column;flex:1;min-height:0}
+.chatlist{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column}
+.chatin{display:flex;gap:8px;padding:10px 14px 18px;border-top:1px solid var(--sep)}
+.chatin input{flex:1;background:var(--card);border-radius:20px;padding:9px 15px;font-size:13.5px}
+.chatin .send{width:38px;height:38px;border-radius:50%;background:var(--acc);color:var(--onac);display:flex;align-items:center;justify-content:center;flex:none}
+.typing span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--t2);margin:0 1px;animation:bl 1s infinite}
+.typing span:nth-child(2){animation-delay:.14s}.typing span:nth-child(3){animation-delay:.28s}
+.rule{padding:10px 13px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--sep)}
+.rule .go{padding:2px 9px;border-radius:8px;font-size:10.5px;font-weight:700}
+.rule .go.proxy{background:rgba(10,132,255,.16);color:#5aa9ff}
+.rule .go.direct{background:rgba(50,215,75,.14);color:#39d66a}
+.rule .go.block{background:rgba(255,69,58,.13);color:#ff6b5e}
+.rule .rn{flex:1;min-width:0}
+.rule .rn .t2{font-size:13px;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rule .rn .m{font-size:10px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rule .rb{color:var(--t3);width:26px;text-align:center;font-size:15px}
+.cardopt{margin:0 16px 12px;background:var(--card);border-radius:16px;overflow:hidden}
+.cardopt .cd{padding:12px 15px;display:flex;gap:11px;align-items:flex-start;border-bottom:1px solid var(--sep);cursor:pointer}
+.cardopt .cd:active{background:rgba(128,128,140,.08)}
+.cardopt .cd .o{width:19px;height:19px;border-radius:50%;border:2px solid var(--t3);flex:none;margin-top:2px;position:relative}
+.cardopt .cd.on .o{border-color:var(--acc);background:var(--acc)}
+.cardopt .cd.on .o:after{content:'';position:absolute;inset:4px;background:var(--onac);border-radius:50%}
+.cardopt .cd .z{flex:1}
+.cardopt .cd .zt{font-size:14.5px;font-weight:650}
+.cardopt .cd .zm{font-size:11px;color:var(--t2);margin-top:2px;line-height:1.85}
+.swatchrow{display:flex;gap:9px;padding:12px 15px;flex-wrap:wrap}
+.swatch{width:31px;height:31px;border-radius:10px;cursor:pointer;position:relative}
+.swatch.on{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--acc)}
+.profilecard{width:100px;flex:none;background:var(--card);border-radius:14px;padding:9px;text-align:center;cursor:pointer}
+.profilecard.on{box-shadow:inset 0 0 0 2px var(--acc)}
+.profilecard .pv{height:50px;border-radius:9px;margin:2px 0 9px}
+.profilecard .pt{font-size:11px;font-weight:650}
+.hscroll{display:flex;gap:10px;overflow-x:auto;padding:11px 16px;scrollbar-width:none}
+.hscroll::-webkit-scrollbar{display:none}
+#pagetrans-layer{position:absolute;inset:0;pointer-events:none;z-index:5}
+.pagex{position:absolute;inset:0}
+.an-f{animation:pf .34s both}.anf-q{animation:pfo .3s both}
+.an-s{animation:psl .4s cubic-bezier(.3,.7,.3,1) both}.ans-q{animation:pslq .3s ease-in both}
+.an-p{animation:ppu .42s cubic-bezier(.3,.7,.3,1) both}.anp-q{animation:ppuq .3s ease-in both}
+.an-d{animation:pde .4s cubic-bezier(.3,.7,.3,1) both}.and-q{animation:pdez .3s ease-in both}
+.an-e{animation:pel .55s cubic-bezier(.3,.7,.3,1) both}.ane-q{animation:pelq .35s ease-in both}
+.an-c{animation:pcur .4s cubic-bezier(.3,.7,.3,1) both}.anc-q{animation:pcurq .3s ease-in both}
+.an-fp{animation:pfl .5s cubic-bezier(.3,.7,.3,1) both,.pfo2 .3s both reverse}
+@keyframes pf{from{opacity:0}to{opacity:1}}
+@keyframes pfo{from{opacity:1}to{opacity:0}}
+@keyframes psl{from{transform:translateX(-44%);opacity:0}}
+@keyframes pslq{to{transform:translateX(20%);opacity:0}}
+@keyframes ppu{from{transform:scale(.92) translateX(-16%);opacity:0}}
+@keyframes ppuq{to{transform:scale(.94) translateX(7%);opacity:0}}
+@keyframes pde{from{transform:scale(1.16);opacity:0}}
+@keyframes pdez{to{transform:scale(.88);opacity:0}}
+@keyframes pel{55%{transform:translateX(5%);opacity:0}75%{transform:translateX(-2%) scale(1.02)}from{transform:translateX(-58%) scale(.95);opacity:0}}
+@keyframes pelq{30%{transform:translateX(4%)}to{transform:translateX(28%);opacity:0}}
+@keyframes pcur{from{transform:translateY(4%);opacity:.2}}
+@keyframes pcurq{to{transform:translateY(3%) scale(.98);opacity:0}}
+@keyframes pfl{from{transform:perspective(900px) rotateY(66deg);opacity:0}}
+@keyframes pflq{to{transform:perspective(900px) rotateY(-42deg);opacity:0}}
+.phone[data-rm="1"] *{animation:none!important;transition:none!important}
+.scanov{position:absolute;inset:0;background:#000;z-index:85;display:none;flex-direction:column;align-items:center}
+.scanov.show{display:flex;animation:pf .3s both}
+.scanov .top{padding:70px 30px 0;text-align:center;color:#fff;z-index:2}
+.scanov .frame{margin-top:30px;width:238px;height:238px;position:relative;z-index:2}
+.scanov .frame i{position:absolute;width:42px;height:42px;border:3.5px solid var(--acc)}
+.scanov .frame i:nth-child(1){top:0;right:0;border-left:none;border-bottom:none;border-radius:10px 0 0 0}
+.scanov .frame i:nth-child(2){top:0;left:0;border-right:none;border-bottom:none;border-radius:0 10px 0 0}
+.scanov .frame i:nth-child(3){bottom:0;right:0;border-left:none;border-top:none;border-radius:0 0 10px 0}
+.scanov .frame i:nth-child(4){bottom:0;left:0;border-right:none;border-top:none;border-radius:0 0 0 10px}
+.scanov .laser{position:absolute;top:8px;right:8px;left:8px;height:2.5px;background:var(--acc);border-radius:2px;animation:las 1.9s ease-in-out infinite;box-shadow:0 0 14px var(--acc)}
+@keyframes las{0%{transform:translateY(0)}50%{transform:translateY(220px)}100%{transform:translateY(0)}}
+.scanov .grain{position:absolute;inset:0;background:radial-gradient(circle at 30% 20%,rgba(60,80,120,.3),transparent 60%),radial-gradient(circle at 75% 75%,rgba(30,60,90,.3),transparent 55%)}
+.qrc{width:196px;height:196px;background:#fff;border-radius:16px;margin:20px auto;display:block}
+.linkbox{font-size:11px;direction:ltr;text-align:left;background:var(--card2);border:1px dashed var(--sep);border-radius:11px;padding:10px 12px;line-height:1.9;word-break:break-all;color:var(--t2)}
+.usagebar{height:5px;border-radius:3px;background:var(--fill);overflow:hidden;margin-top:6px}
+.usagebar i{display:block;height:100%;border-radius:3px;background:var(--acc)}
+.note{font-size:11.5px;color:var(--t2);line-height:2.05;background:var(--card);border-radius:14px;padding:12px 14px;margin:0 16px 14px}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 16px;color:var(--t2)}
+.kv b{color:var(--t);font-weight:620}
+.mon-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 14px}
+.mbox{background:var(--card);border-radius:16px;padding:13px}
+.mbox .mk{font-size:11px;color:var(--t2);font-weight:620}
+.mbox .mv{font-size:22px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums}
+.mbox .mv small{font-size:10.5px;color:var(--t2);font-weight:500}
+input[type=color]{width:44px;height:34px;border:none;border-radius:9px;padding:0;background:none}
+.tdrow{display:flex;align-items:center;gap:10px}
+.appi{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;background:var(--fill);flex:none}
+.wgrow{display:flex;align-items:center;gap:9px}
+.wgrow svg{width:15px;height:15px;color:var(--warn)}
+.lan{background:var(--fill);border-radius:8px;padding:2px 7px;font-size:10.5px;color:var(--acc);font-weight:700}
+</style>
+</head>
+<body>
+<div id="stage">
+<div id="sidehint">
+<h2>طرح iOS — نرسیس گیت‌وی</h2>
+<div style="margin-bottom:10px">نمونهٔ کامل تعاملی رابط برنامه؛ <b>تمام بخش‌ها حتی کوچک‌ترین جزئیات</b> کار می‌کنند و هر تغییر در <b>localStorage</b> می‌ماند. [برخی رفتارهای وابسته به شبکه در این طرح شبیه‌سازی می‌شوند.]</div>
+<div>OE — <span class="k">Home</span> دکمهٔ اتصال (تپ/نگه‌داشتن) ∙ سرعت زنده ∙ اطلاعات IP ∙ نقشه ∙ تست سرعت ∙ لاگ‌ها | <span class="k">Servers</span> جستجو، گروه‌ها، پینگ، افزودن از ۹ مسیر، منوی کامل سرور | <span class="k">گاوصندوق</span> ساخت/ورود/باز کردن ‎.zsx | <span class="k">تنظیمات</span> همهٔ صفحه‌ها با کنش واقعی.</div>
+<div style="margin-top:12px;color:#6f6f83">فریم‌ها: Docs/Mockup/index.html داخل همان ریپو.</div>
+</div>
+<div id="fit">
+<div class="phone" id="phone" data-ct="dark" data-amoled="1" data-rm="0">
+<div class="statusbar">
+<div class="tm" id="clocktime">9:41</div>
+<div class="stic">
+<svg width="17" height="11" viewBox="0 0 18 12" fill="currentColor"><rect y="7" width="3" height="4" rx="1"/><rect x="4.5" y="4.5" width="3" height="7" rx="1"/><rect x="9" y="2" width="3" height="9.5" rx="1"/><rect x="13.5" width="3" height="11.5" rx="1" opacity=".32"/></svg>
+<svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor"><path d="M14.5 4.1a10.5 10.5 0 0 0-13 0l1.6 2a7 7 0 0 1 9.8 0z" opacity=".55"/><path d="M11.3 7.7a5 5 0 0 0-6.6 0L6.3 9.9a2 2 0 0 1 3.4 0z" opacity=".85"/><circle cx="8" cy="10.4" r="1.1"/></svg>
+<svg width="24" height="11" viewBox="0 0 25 12" fill="none"><rect x=".5" y=".5" width="21" height="11" rx="3.5" stroke="currentColor" opacity=".38"/><rect x="2" y="2" width="17" height="8" rx="2" fill="currentColor"/><path d="M23.5 4v4c1-.3 1.5-1.1 1.5-2s-.5-1.7-1.5-2z" fill="currentColor" opacity=".45"/></svg>
+</div>
+</div>
+<div class="island"></div>
+<div class="screen">
+<div class="page" id="p-home"><div class="content homepad" id="homeBody"></div></div>
+<div class="page" id="p-servers">
+<div class="hbar"><h1 id="srvTitle">سرورها</h1><div class="acts"><button class="icbtn" onclick="ui.srvMore()"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><button class="icbtn" onclick="ui.openAdd()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+<div class="chiprow" id="srvChips"></div>
+<div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg><input id="srvSearch" placeholder="جست‌وجوی سرورها"></div>
+<div class="content" style="padding-bottom:158px"><div class="srvlist" id="srvList"></div></div>
+<div class="srv-toolsbar" id="srvTools"></div>
+<div class="pingpb" id="pingpb" style="position:absolute;bottom:86px;right:16px;left:16px;display:none;z-index:46"><i></i></div>
+<button class="fab" id="srvFAB" onclick="ui.openAdd()"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>
+<div class="page" id="p-vault">
+<div class="hbar"><h1>گاوصندوق</h1><div class="acts"><span class="badge" style="background:var(--warn);color:#3a2a00">آزمایشی</span></div></div>
+<div class="content" id="vaultBody"></div>
+</div>
+<div class="page" id="p-settings">
+<div class="hbar"><h1>تنظیمات</h1><div class="acts"><button class="icbtn" onclick="ui.about()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></svg></button></div></div>
+<div class="content" id="setRoot"></div>
+</div>
+<div class="subpage" id="subpage"></div>
+<div class="scanov" id="scanov"></div>
+</div>
+<div class="scrim" id="scrim" onclick="ui.closeTop()"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><div class="sbody" id="sheetBody"></div></div>
+<div class="alertwrap" id="alertwrap"></div>
+<div class="toast" id="toast"></div>
+<div class="tabbar" id="tabbar"></div>
+<div class="homebar"></div>
+</div>
+</div>
+</div>
+<script>
+"use strict";
+function $(t){return document.querySelector(t)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fd(n){return String(n).replace(/[0-9]/g,function(d){return'۰۱۲۳۴۵۶۷۸۹'[d]})}
+function faMS(n){if(n==null)return null;return fd(n)}
+function fmtBytes(b){if(b<1024)return fd(Math.round(b))+' KB';if(b<1048576)return fd((b/1024).toFixed(1))+' MB';return fd((b/1048576).toFixed(2))+' GB'}
+function fmtSpd(mb){return mb<1?mb.toFixed(2):mb.toFixed(1)}
+function nowStr(){var d=new Date(),h=clockH(),m=String(d.getMinutes()).padStart(2,'0');return h+':'+m}
+function clockH(){var d=new Date(),h=d.getHours()%12;if(h===0)h=12;return String(h); }
+var uid=(function(){var i=100;return function(){return++i}})();
+function copyTxt(t){navigator&&navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):null}
+function vibrate(){}
+</script>
+<script>
+"use strict";
+var DEFAULTS={theme:'dark',amoled:0,accent:'#0F9D6C',dynColor:0,lang:'fa',fs:'normal',rm:0,transition:'push',connStyle:'hero',cac:'#0F9D6C',profile:'narcis',conned:'#0A6E4E',
+tileStyle:'duo',tileTop:0,tileSize:'normal',navStyle:'full',twoCol:0,corner:'rounded',density:'comf',dlColor:'#3FD898',ulColor:'#FFCE54',dlTile:'#0A2E22',ulTile:'#332705',srvCard:'#0B2A20',srvAct:'#0F9D6C',cfgBg:'#0D2F24',cfgTxt:'#E2FFF2',
+mode:'vpn',runPhase:'idle',activeServer:2,srvGroup:'all',multi:0,msel:[],
+mtu:8500,vpnDns:'dns://1.1.1.1',v6:0,v6pref:0,localDns:0,fakeDns:0,httpProxy:0,bypassLan:'none',tun:'zeptun',hevLog:'hiz',lanShare:1,lanUser:'narcic',lanPass:'',lanPort:'18115',killSwitch:0,notifLive:1,notifChip:'speed',
+localProxy:1,socksPort:'10808',dynPort:1,socksUser:'',socksPass:'',socksUdp:1,sniff:1,routeOnly:0,logLevel:'warn',outResolve:'AsIs',
+mux:0,muxN:8,xudpN:8,xudpQuic:'agg',
+frg:0,frgPkts:'1-3',frgLen:'100-200',frgInt:'10-20',frgMax:'0',
+sbMux:0,sbMuxProto:'h2mux',sbConn:4,sbPad:0,sbBrutal:0,sbUp:'30',sbDown:'80',sbFrag:0,sbRecFrag:0,sbUtls:'chrome',sbUot:0,sbStack:'auto',sbStrict:1,sbNat:0,sbCache:1,sbNtp:0,sbNtpSrv:'time.apple.com',
+autoSel:1,autoChk:20,autoSweep:300,autoMargin:60,autoRetry:1,delayUrl:'https://cp.cloudflare.com/generate_204',realConc:5,autoSub:1,autoSubInt:'24h',autoTest:1,autoInv:0,autoSort:1,bootConn:0,
+routingMode:'global',blockAds:0,domStrat:'IPIfNonMatch',customProxy:'',customDirect:'geoip:ir\ndomain:ir',customBlock:'geosite:category-ads-all',
+paMode:'off',sysApps:0,apps:{},
+geoSrc:'chocolate',
+dnsOverride:0,dnsList:'178.22.122.18\n185.51.200.2',dnsPool:0,poolList:'178.22.122.18\n185.51.200.2\n8.8.8.8',poolVerify:'ssh',dnsWorkers:'per',dnsNoFall:1,dnsRemote:'پیش‌فرض (8.8.8.8 ، 1.1.1.1)',dnsFall:'1.1.1.1',dnsHosts:'',
+torMode:'default',torOwn:'',torRend:1,torEntry:'',torExit:'',torStrict:0,torPad:1,torFakeSni:'',torCirc:1800,torMaxDirt:18000,torFascist:0,
+sshComp:0,sshMax:8,sshCipher:'auto',
+speedNotif:1,confirmDel:1,logsAmount:'200',batteryOptim:0,
+monHeat:0,aiOn:0,aiProvider:'gemini',aiKey:'',aiOk:0,aiModel:'gemini-2.0-flash',aiAllow:0,aiStanding:'',
+vaultName:'',vaultPass:'',vaultExpiry:'۰',vaultNote:'',
+dlOct:0,ulOct:0,upLinks:0};
+var S=load();
+function load(){try{var r=localStorage.getItem('narcic-mock');if(r){var o=JSON.parse(r);for(var k in o){if(!(k in DEFAULTS))delete o[k]};if(o.runPhase==='connecting'||o.runPhase==='disconnecting')o.runPhase='idle';if(typeof o.msel==='undefined')o.msel=[];return o}}catch(e){}return JSON.parse(JSON.stringify(DEFAULTS))}
+function save(){try{localStorage.setItem('narcic-mock',JSON.stringify(S))}catch(e){}}
+for(var dk in DEFAULTS){if(!(dk in S))S[dk]=DEFAULTS[dk]}
+if(typeof S.apps!=='object'||!S.apps)S.apps={};
+if(typeof S.msel!=='object'||!S.msel)S.msel=[];
+S.runPhase='idle';
+</script>
+<style>
+.phone[data-glow="1"]:before{content:'';position:absolute;inset:-80px;background:radial-gradient(560px 420px at 70% -10%,color-mix(in srgb,var(--acc) 26%,transparent),transparent 70%);pointer-events:none;z-index:0}
+.phone[data-glow="1"] .page{z-index:1}
+</style>
+<script>
+"use strict";
+window.ui=window.ui||{};
+var ICON={chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>',
+dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+house:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 11.2 12 4.5l8 6.7V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1z"/></svg>',
+stack:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 9.5h17M9.5 9.5v10"/></svg>',
+lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="3.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.4"/><path d="M12 2.8v2.4m0 13.6v2.4M4.5 7.2l2 1.2m11 7.2 2 1.2M4.5 16.8l2-1.2m11-7.2 2-1.2M3 12h2.3m13.4 0H21"/></svg>',
+shield:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4.5 5v6.2c0 4.6 3.2 8.9 7.5 10.3 4.3-1.4 7.5-5.7 7.5-10.3V5z" opacity=".92"/><path d="M9.2 9.2v6h1.7v-3.5l2.6 3.5h1.3v-6h-1.7v3.4l-2.5-3.4z" fill="#0a84ff" style="mix-blend-mode:normal" opacity=".85"/></svg>',
+gauge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 15a8 8 0 1 1 16 0"/><path d="M12 15l4-4.5"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/></svg>',
+map:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 5 3.8 7v12L9 17l6 2 5.2-2V5L15 7z"/><path d="M9 5v12M15 7v12"/></svg>',
+speed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 3 6 13h5l-2 8 9-11h-5.4L14.7 3z" stroke-linejoin="round"/></svg>',
+log:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5h14M5 10h14M5 15h9"/></svg>',
+bot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="4"/><path d="M12 8V5M9 14v2m6-2v2M2 13v3m20-3v3"/></svg>',
+trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 4h4M7 7l1 13h8l1-13M10 11v6m4-6v6"/></svg>',
+share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15V4m0 0 4 4m-4-4L8 8" stroke-linejoin="round"/><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"/></svg>',
+edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20h16M14.5 4.5 19 9 9.5 18.5 4 20l1.5-5.5z"/></svg>',
+qr:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h6v6H4zm1 1v4h4V5zM5 6h2v2H5zM14 4h6v6h-6zm1 1v4h4V5zm-4 0h2v2h-2zM4 14h6v6H4zm1 1v4h4v-4zm-1-4h2v2H4zm4 0h2v2H8zm4 4h2v2h-2zm4-4h2v2h-2zm4 0h2v2h-2zm-4 4h2v2h-2zm4 0h2v2h-2zm-8 4h6v2h-6zm6 2h2v2h-2z"/></svg>',
+paste:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 4a3 3 0 0 1 6 0h2.5v3h-11V4z"/></svg>',
+file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg>',
+rocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3c3.5 1.6 5.5 5 5.5 9l-2.5 2h-6L6.5 12C6.5 8 8.5 4.6 12 3z"/><circle cx="12" cy="10" r="1.6"/><path d="M8.5 17.5 7 21m9-3.5L17.5 21M12 14v3.5"/></svg>',
+globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.3 3.9 8.5S14.6 18.1 12 20.5c-2.6-2.4-3.9-5.3-3.9-8.5S9.4 5.9 12 3.5z"/></svg>',
+key:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="8" cy="14.5" r="3.5"/><path d="M11 12 20 3m-3 3 2.5 2.5M14.5 8.5 17 11"/></svg>',
+refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M18 2.5V7h-4.5" stroke-linejoin="round"/></svg>',
+copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" /></svg>',
+updown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20V6m0 0L4.5 9.5M8 6l3.5 3.5M16 4v14m0 0 3.5-3.5M16 18l-3.5-3.5"/></svg>',
+dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5M5 20h14"/></svg>',
+ul:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V8m0 0 4.5 4.5M12 8l-4.5 4.5M5 4h14"/></svg>',
+battery:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="16" height="9" rx="2.5"/><path d="M19 11v3M6 12h4l1.2 2.5" stroke-linecap="round"/></svg>',
+chip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M9.5 2.5v3m5-3v3m-5 13v3m5-3v3M2.5 9.5h3m-3 5h3m13-5h3m-3 5h3" stroke-linecap="round"/></svg>',
+flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S9 11 10.5 11c0-4 1.5-8 1.5-8z"/><path d="M12 21a3 3 0 0 0 3-3"/></svg>',
+back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+arrow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+pin:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a6.5 6.5 0 0 1 6.5 6.5c0 4.8-4.6 8.4-6.5 12-1.9-3.6-6.5-7.2-6.5-12A6.5 6.5 0 0 1 12 2zm0 4a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
+star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3.5 2.7 5.4 6 .9-4.3 4.2 1 5.9-5.4-2.8-5.4 2.8 1-5.9L3.3 9.8l6-.9z"/></svg>',
+heart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20.5S4 15 4 9.5A4.5 4.5 0 0 1 8.5 5c1.6 0 2.7.8 3.5 2 .8-1.2 1.9-2 3.5-2A4.5 4.5 0 0 1 20 9.5c0 5.5-8 11-8 11z"/></svg>',
+info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01" stroke-linecap="round"/></svg>',
+eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>',
+sni:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M4 12c4-6 12-6 16 0M8 16c2.5-3.5 5.5-3.5 8 0" stroke-linejoin="round"/></svg>',
+};
+</script>
+<script>
+"use strict";
+var ACCENTS=[['blue','#0A84FF','آبی iOS'],['green','#30D158','سبز برند'],['purple','#BF5AF2','ارغوانی'],['orange','#FF9F0A','نارنجی'],['pink','#FF375F','صورتی'],['teal','#64D2FF','فیروزه‌ای'],['indigo','#5E5CE6','نیلی'],['red','#FF453A','قرمز']];
+var CONN_COLORS=[['#30D158','سبز'],['#0A84FF','آبی'],['#64D2FF','فیروزه‌ای'],['#FF9F0A','نارنجی'],['#FF375F','صورتی'],['#BF5AF2','ارغوانی'],['#FF453A','قرمز'],['#8E8E93','خاکستری']];
+var PROFILES=[
+ {id:'narcis',name:'Narcis (پیش‌فرض)',desc:'قالب اصلی سبز نرسیس گیت‌وی',emoji:'🟢',acc:'#0F9D6C',amoled:false,dl:'#3FD898',ul:'#FFCE54',dlT:'#0A2E22',ulT:'#332705',conn:'#0F9D6C',conned:'#0A6E4E',srvCard:'#0B2A20',srvAct:'#0F9D6C',cfgBg:'#0D2F24',cfgTxt:'#E2FFF2'},
+ {id:'azkaban',name:'Azkaban (آزکابان)',desc:'نئون آبی سایبری',emoji:'⚡',acc:'#38BDF8',amoled:false,dl:'#BAE6FD',ul:'#E2E8F0',dlT:'#0A1628',ulT:'#081220',conn:'#38BDF8',conned:'#0284C7',srvCard:'#091322',srvAct:'#38BDF8',cfgBg:'#0B1728',cfgTxt:'#F0F9FF'},
+ {id:'noir',name:'Noir (سیاه و سفید)',desc:'تک‌رنگ خالص شبانه',emoji:'🌑',acc:'#E4E4E7',amoled:true,dl:'#FFFFFF',ul:'#94A3B8',dlT:'#121214',ulT:'#18181B',conn:'#E4E4E7',conned:'#27272A',srvCard:'#121214',srvAct:'#27272A',cfgBg:'#16161A',cfgTxt:'#F4F4F5'},
+ {id:'blossom',name:'Blossom (دخترونه صورتی)',desc:'صورتی پاستلی',emoji:'🌸',acc:'#F472B6',amoled:true,dl:'#FF85A1',ul:'#FFC2D6',dlT:'#230D18',ulT:'#2A101D',conn:'#F472B6',conned:'#DB2777',srvCard:'#180A12',srvAct:'#DB2777',cfgBg:'#210E1A',cfgTxt:'#FFF1F5'}];
+var TRANSITIONS=[['fade','محو'],['slide','لغزش'],['push','هل دادن'],['depth','عمق'],['elastic','کشسان'],['curtain','پرده'],['flip','چرخش']];
+var CONNSTYLES=[['hero','ضربه روی هسته'],['pill','کلید'],['ring','حلقه'],['bar','نوار'],['icon','آیکون'],['swipe','کشیدنی']];
+var TILESTYLES=[['duo','یک کارت دوقسمتی'],['cards','دو کارت'],['rings','حلقه‌ای'],['minimal','مینیمال'],['graph','نمودار زنده']];
+var NAVSTYLES=[['full','تمام‌عرض iOS'],['pill','قرصی شناور'],['mini','مینیمال']];
+var FONTSIZES=[['smallest','خیلی کوچک'],['smaller','کوچک'],['normal','معمولی'],['larger','بزرگ'],['largest','خیلی بزرگ']];
+var appVersions='7.2.1';
+function sev(id,name,proto,flag,addr,ping,group){return{id:id,name:name,proto:proto,flag:flag,addr:addr,ping:ping,group:group,fail:0}}
+var servers=[
+ sev(2,'آلمان ۱ · فرانکفورت','VLESS · REALITY','🇩🇪','de1.narcic.net:443',96,'دستی'),
+ sev(3,'ترکیه ۲ · استانبول','VLESS · WS+TLS','🇹🇷','tr2.narcic.net:443',110,'دستی'),
+ sev(4,'هلند · آمستردام','Trojan · TCP','🇳🇱','nl3.xvault.io:2056',145,'دستی'),
+ sev(5,'هیستریا۲ · سنگاپور','Hysteria2 · QUIC','🇸🇬','sg.hyz.io:8443',null,'دستی'),
+ sev(6,'وایرگارد · دبی','WireGuard UDP','🇦🇪','db1.wg-gate.io:51820',180,'دستی'),
+ sev(1,'سایفون · خودکار','تونل Psiphon','🌐','psiphon-auto',212,'سایفون'),
+ sev(7,'اتصال چندمسیره ۱','VLESS · REALITY','🇸🇪','st1.cyad.net:443',null,'سی‌کلاد'),
+ sev(8,'هم‌بندی ۲ · توکیو','Trojan · gRPC','🇯🇵','jp.uqid.biz:443',null,'سی‌کلاد'),
+];
+var vaultZsx=[{id:1,name:'کانفیگ دوستانه · من از سینا',note:'برای خودت از سینا — ۱۴ روز اعتبار',expiry:14,pass:'',created:'۴ روز پیش',servers:['آلمان ۱ · فرانکفورت']}];
+var subsList=[{id:1,name:'سی‌کلاد',url:'https://sub.cyad.io/api/v1/client/subscribe?token=a91…',count:2,used:ue(),quota:null,ua:'v2rayNG'}];
+function ue(){return'12.4GB'}
+var rules=[
+ {id:uid(),remarks:'شبکهٔ محلی',outbound:'direct',domain:'',ip:'geoip:private',port:'',locked:1},
+ {id:uid(),remarks:'همهٔ دامنه‌های ایرانی',outbound:'direct',domain:'ir\ngeoip:ir',ip:'',port:'',locked:1},
+ {id:uid(),remarks:'تبلیغ‌ها اگر روشن باشد',outbound:'block',domain:'geosite:category-ads-all',ip:'',port:'',locked:0}
+];
+var APPS=[['تلگرام','#2AABEE','✈️'],['‏اینستاگرام','#DD2A7B','📷'],['ڵیداری گوگل‌کروم','#4285F4','🌐'],['یوتیوب','#FF0000','▶️'],['واتساپ','#25D366','💬'],['اسپاتیفای','#1DB954','🎧'],['‏X (توییتر)','#5c5c5c','𝕏'],['تنظیمات','#8E8E93','⚙️'],['بانک من','#5E5CE6','🏦'],['همراه من','#f3a812','📶'],['اسنپ','#00c54a','🚕'],['دیجی‌کالا','#ef394e','🛒'],['گوگل‌مپ','#34A853','🗺️'],['‏شبکه‌ای #000','#1769aa','🛜'],['‌کافه‌بازار','#00b35a','🛍️'],['‏شبیه‌ساز کنسول','#FF6B6B','🎮']];
+APPS.forEach(function(a,i){if(!(a[2] in S.apps))S.apps[a[2]]=false});
+var SYSAPPS=[['برنامهٔ اندروید سیستمی','#777','🤖'],['‏شبکه‌ای SIM','#999','📡'],['‏شبکه‌های کارخانگی','#555','🧩'],['به‌روزرسان سیستم','#666','⬆️']];
+var dayNames='';
+var LOGPOOL=[
+ ['INFO','core: inbound socks[127.0.0.1:10808] tcp:raw accepted'],
+ ['INFO','dns: resolved cp.cloudflare.com -> 104.17.x.x'],
+ ['INFO','tcp→proxied inbound: de1.narcic.net:443'],
+ ['WARN','transport: handshake slow (SNI=de1.narcic.net)'],
+ ['INFO','realDelay: server de1 -> 96ms'],
+ ['ERROR','connection reset by peer (fragmented) — retrying'],
+ ['INFO','observatory: best node = آلمان ۱ (96ms)'],
+ ['INFO','router: rule #2 matched dir=iranomain'],
+];
+function mline(){return LOGPOOL[Math.floor(Math.random()*LOGPOOL.length)]}
+function logTime(){var d=new Date(),p=function(n){return String(n).padStart(2,'0')};return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())};
+var pingState={running:false,kind:null,done:0,total:0};
+var countryIP={ '🇩🇪':'45.87.212.14','🇹🇷':'185.122.90.61','🇳🇱':'148.113.201.30','🇸🇬':'103.7.44.118','🇦🇪':'94.200.13.77','🇸🇪':'45.86.14.209','🇯🇵':'133.11.28.201','🌐':'172.98.206.120','🇮🇷':'2.56.44.190'};
+var mapXY={'🇮🇷':[254,64],'🇩🇪':[84,46],'🇹🇷':[168,54],'🇳🇱':[83,34],'🇸🇬':[262,124],'🇦🇪':[228,74],'🇸🇪':[112,20],'🇯🇵':[273,70],'🌐':[210,100]};
+</script>
+<script>
+"use strict";
+var toastT=null;
+function toast(msg,kind){var t=$('#toast');t.className='toast show '+(kind||'');t.innerHTML='<span class="tdot"></span>'+esc(msg);clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},2200)}
+function iosAlert(o){var w=$('#alertwrap');var bs=o.buttons.map(function(b,i){return'<button class="ab '+(b.role||'')+'" data-i="'+i+'">'+esc(b.label)+'</button>'}).join('');w.classList.add('show');
+ w.innerHTML='<div class="bg"></div><div class="alert"><div class="tt">'+esc(o.title)+'</div><div class="bb">'+(o.body?esc(o.body):'')+(o.input!==undefined?'<div style="margin:0 auto 4px"><input class="sinput" type="'+(o.secure?'password':'text')+'" placeholder="'+esc(o.ph||'')+'"></div>':'')+'</div><div class="bs">'+bs+'</div></div>';
+ requestAnimationFrame(function(){requestAnimationFrame(function(){var a=w.querySelector('.alert');if(a)a.classList.add('show')})});
+ w.querySelectorAll('.ab').forEach(function(bt){bt.onclick=function(ev){ev.stopPropagation();var inp=w.querySelector('.sinput');var v=inp?inp.value:undefined;var a=w.querySelector('.alert');if(a)a.classList.remove('show');w.classList.remove('show');o.buttons[+bt.dataset.i].cb&&o.buttons[+bt.dataset.i].cb(v)}});
+ }
+function openSheet(html){var sc=$('#sheetBody');sc.innerHTML=html;$('#sheet').classList.add('show');$('#scrim').classList.add('show')}
+function closeSheet(){$('#sheet').classList.remove('show');$('#scrim').classList.remove('show')}
+var ACTIONS={};
+function act(i){var f=ACTIONFN[i];closeSheet();setTimeout(function(){f&&f()},60)}
+var ACTIONFN=[];
+function aSheet(title,groups){ACTIONFN=[];var id=0;var h=title?'<div style="text-align:center;font-size:12px;color:var(--t2);padding:0 0 10px">'+esc(title)+'</div>':'';
+ groups.forEach(function(g){h+='<div class="action">';g.forEach(function(it){ACTIONFN[id]=it.cb;h+='<div class="a-item'+(it.dgr?' dgr':'')+'" onclick="act('+id+')"><div class="tic">'+(it.ic||'')+'</div><div class="c">'+esc(it.label)+(it.sub?'<div class="cs">'+esc(it.sub)+'</div>':'')+'</div>'+(it.chev!==false?'<span class="chev"></span>':'')+'</div>';id++});h+='</div>'});
+ h+='<button class="cancl" onclick="closeSheet()">لغو</button>';
+ openSheet(h)}
+</script>
+<script>
+"use strict";
+function colorFor(name){if(String(name).charAt(0)==='#')return name;for(var i=0;i<ACCENTS.length;i++)if(ACCENTS[i][0]===name)return ACCENTS[i][1];return'#0A84FF'}
+function applyTheme(){
+ var ph=$('#phone');
+ var ct=S.theme==='auto'?(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):S.theme;
+ ph.dataset.ct=ct;ph.dataset.amoled=(S.theme==='dark'&&ct==='dark'&&S.amoled)?'1':'0';
+ var acc=colorFor(S.accent);ph.style.setProperty('--acc',acc);ph.style.setProperty('--acc2',acc);ph.style.setProperty('--accent',acc);
+ var con=String(S.cac||'').charAt(0)==='#'?S.cac:acc;
+ var coned=String(S.conned||'').charAt(0)==='#'?S.conned:con;
+ ph.style.setProperty('--cac',(S.runPhase==='connected')?coned:con);ph.style.setProperty('--conned',coned);
+ ph.style.setProperty('--dltile',S.dlTile||'var(--card)');ph.style.setProperty('--ultile',S.ulTile||'var(--card)');
+ ph.style.setProperty('--srvcard',S.srvCard||'var(--card)');ph.style.setProperty('--srvact',(String(S.srvAct||'').charAt(0)==='#')?S.srvAct:acc);
+ ph.style.setProperty('--cfgbg',S.cfgBg||'var(--card)');ph.style.setProperty('--cfgtext',S.cfgTxt||'var(--t)');
+ ph.dataset.rm=S.rm?'1':'0';ph.dataset.lang=S.lang==='fa'?'rtl':'ltr';
+ ph.style.setProperty('--cr',S.corner==='squared'?'9px':S.corner==='pill'?'26px':'16px');
+ ph.style.setProperty('--rp',S.density==='comp'?'7px':'11px');
+ ph.dataset.fs=S.fs;
+ document.documentElement.dir=(S.lang==='fa'?'rtl':'ltr');
+ }
+function fit(){var hint=$('#sidehint');var w=window.innerWidth,h=window.innerHeight;var extra=(w>1100&&hint)?hint.offsetWidth+46:0;
+ var s=Math.min(1,(h-46)/852,(w-extra-36)/392);document.getElementById('fit').style.setProperty('--s',s?String(s):'1');$('#sidehint')&&($('#sidehint').style.display=(w>1100)?'block':'none');}
+window.addEventListener('resize',function(){fit();applyTheme()});
+window.matchMedia('(prefers-color-scheme: light)').addEventListener("change",function(){if(S.theme==='auto')applyTheme()});
+</script>
+<style id="dynfont">
+.phone{--fs:1}
+.phone[data-fs="smallest"]{--fs:.86}.phone[data-fs="smaller"]{--fs:.92}.phone[data-fs="larger"]{--fs:1.07}.phone[data-fs="largest"]{--fs:1.15}
+.phone .rt .t,.phone .row .rt .t{font-size:calc(15px*var(--fs))}
+.phone .rt .s,.phone .row .rt .s{font-size:calc(12px*var(--fs))}
+.phone .srv .nm .n{font-size:calc(14px*var(--fs))}
+.phone .tile .num{font-size:calc(20px*var(--fs))}
+.phone .stattext{font-size:calc(24px*var(--fs))}
+.phone .a-item{font-size:calc(14.5px*var(--fs))}
+.phone .cfgcard .cn .t{font-size:calc(15px*var(--fs))}
+.phone .hbar h1{font-size:calc(28px*var(--fs))}
+@media(max-width:980px){#sidehint{display:none!important}#stage{gap:0}}
+@keyframes dashmove{to{stroke-dashoffset:-13}}
+</style>
+<script>
+"use strict";
+var curTab='home';
+var TABS=[['home','خانه',ICON.house],['servers','سرورها',ICON.stack],['vault','گاوصندوق',ICON.lock],['settings','تنظیمات',ICON.gear]];
+function renderTabbar(){var tb=$('#tabbar');tb.className='tabbar'+(S.navStyle==='pill'?' pill':S.navStyle==='mini'?' mini plain':'');
+ var h=S.navStyle==='pill'?'<div class="wrap">':'';TABS.forEach(function(t,i){h+='<div class="tab'+(curTab===t[0]?' on':'')+'" onclick="ui.tab(\''+t[0]+'\')">'+t[2]+'<span class="tl">'+t[1]+'</span></div>'});
+ if(S.navStyle==='pill')h+='</div>';tb.innerHTML=h}
+var ANIM={fade:['an-f','anf-q'],slide:['an-s','ans-q'],push:['an-p','anp-q'],depth:['an-d','and-q'],elastic:['an-e','ane-q'],curtain:['an-c','anc-q'],flip:['an-fp','anf-q']};
+function switchTab(id){if(id===curTab)return;var from=$('#p-'+curTab),to=$('#p-'+id);
+ var pair=S.rm?['an-f','anf-q']:(ANIM[S.transition]||ANIM.push);
+ to.style.display='flex';to.style.zIndex=5;from.style.zIndex=3;
+ to.classList.remove('an-f','an-s','an-p','an-d','an-e','an-c','an-fp');to.classList.add(pair[0]);
+ from.classList.remove('anf-q','ans-q','anp-q','and-q','ane-q','anc-q','anf-q');from.classList.add(pair[1]);
+ curTab=id;renderTabbar();setTimeout(function(){from.style.display='none';from.classList.remove(pair[1]);to.classList.remove(pair[0]);to.style.zIndex=''},260);
+ }
+ ui.tab=function(id){switchTab(id);applyTheme()};
+</script>
+<script>
+"use strict";
+var IV={};
+function iv(name,ms,fn){if(IV[name])clearInterval(IV[name]);if(ms)IV[name]=setInterval(fn,ms)}
+function stopIv(name){if(IV[name]){clearInterval(IV[name]);delete IV[name]}}
+</script>
+<script>
+"use strict";
+function activeServer(){return servers.filter(function(s){return s.id===S.activeServer})[0]||null}
+function statHtml(){var ph=S.runPhase,t1=ph==='idle'?'متصل نیستید':ph==='connecting'?'در حال اتصال…':ph==='connected'?'متصل شد':'در حال قطع…';
+ return '<div class="statline"><div class="stattext" id="stTx">'+t1+'</div><div class="statrow" id="stSub"></div></div>'}
+function coreHtml(){var st=S.runPhase,cs=S.connStyle;
+ if(cs==='swipe'){var on=st==='connected';return '<div class="coWrap" data-style="swipe"><div class="swipe" id="swipeEl" style="width:100%"><div class="flr">'+(on?'برای قطع بکشید':'برای اتصال بکشید')+'</div><div class="knob" id="swipeKnob"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="'+(on?'M8 12h8':'M5 12h14M11 6l6 6-6 6')+'"/></svg></div></div></div>'}
+ if(cs==='bar'){return '<div class="coWrap" data-style="bar"><div class="core"><button class="connectbar" id="coreBtn">'+(st==='idle'?'اتصال':st==='connected'?'قطع اتصال':'...')+'<div class="corebar-mask" id="holdMask"></div></button></div>'+holdRing()+'</div>'}
+ if(cs==='icon'){return '<div class="coWrap" data-style="icon"><div class="core"><div class="orbr"></div><button class="cbtn csmall" id="coreBtn" style="width:58px;height:58px"><svg class="ic2" viewBox="0 0 24 24" fill="currentColor">'+ICON.shieldSmall2+'</svg></button></div>'+holdRing()+'</div>'}
+ if(cs==='pill'){return '<div class="coWrap" data-style="pill"><div class="core"><button class="cbtn" id="coreBtn" style="width:auto;height:auto;border-radius:26px;display:flex;align-items:center;gap:9px;padding:13px 24px;color:#fff;font-weight:750;font-size:15px">'+(st==='idle'?'<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">'+ICON.shieldSmall2+'</svg>اتصال':'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18"/></svg>قطع اتصال')+'</button></div>'+holdRing()+'</div>'}
+ if(cs==='ring'){return '<div class="coWrap"><div class="core"><div class="or2"></div><button class="cbtn" id="coreBtn" style="width:128px;height:128px"><svg viewBox="0 0 24 24" width="42" height="42" fill="currentColor" style="opacity:.95">'+ICON.shieldSmall2+'</svg></button></div>'+holdRing()+'</div>'}
+ return '<div class="coWrap"><div class="core" id="coreBtn" data-st="'+st+'"><svg class="csvg" style="display:none"></svg><div class="or1"></div><div class="or2"></div><button class="cbtn"><svg viewBox="0 0 24 24" fill="currentColor" width="50" height="50">'+ICON.shieldSmall2+'</svg></button>'+holdRing()+'</div></div>'}
+function holdRing(){return '<svg class="holdring" id="holdRing" viewBox="0 0 216 216"><circle cx="108" cy="108" r="102" fill="none" stroke="var(--cac)" stroke-width="5" stroke-linecap="round" stroke-dasharray="641" stroke-dashoffset="641"/></svg>'}
+ICON.shieldSmall2='<path d="M12 2 4.5 5v6.2c0 4.6 3.2 8.9 7.5 10.3 4.3-1.4 7.5-5.7 7.5-10.3V5z" fill="currentColor"/>';
+function tilesHtml(){var st=S.tileStyle;
+ if(st==='rings'){return '<div style="margin:0 16px 12px;display:flex;flex-direction:column;gap:10px">'+ringTile('dlv','دانلود',ICON.dl,S.dlColor)+ringTile('ulv','آپلود',ICON.ul,S.ulColor)+'</div>'}
+ if(st==='minimal'){return '<div class="sess" style="margin:0 16px 10px;display:flex;justify-content:space-between;padding:0 4px"><span>↓ <b id="dlv">0.00</b> <small>MB/s</small></span><span>↑ <b id="ulv">0.00</b> <small>MB/s</small></span></div>'}
+ if(st==='duo'){var sz=S.tileSize==='small'?'14px':S.tileSize==='large'?'19px':'17px';
+  return '<div class="tile" style="margin:0 16px 12px;display:flex;gap:10px;padding:14px"><div class="tdrow" style="flex:1"><svg style="color:'+dlC()+';width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5"/></svg><div><div class="num" id="dlv" style="font-size:'+(S.tileSize==='small'?'16px':S.tileSize==='large'?'23px':'20px')+'">0.00<small>MB/s</small></div><div style="font-size:10.5px;color:var(--t2)">دانلود</div></div></div><div style="width:1px;background:var(--sep)"></div><div class="tdrow" style="flex:1"><svg style="color:'+ulC()+';width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 20V8m0 0 4.5 4.5M12 8l-4.5 4.5"/></svg><div><div class="num" id="ulv" style="font-size:'+(S.tileSize==='small'?'16px':S.tileSize==='large'?'23px':'20px')+'">0.00<small>MB/s</small></div><div style="font-size:10.5px;color:var(--t2)">آپلود</div></div></div></div>'}
+ return '<div class="tiles g2" style="margin:0 16px 12px">'+miniTile('dlv','دانلود',ICON.dl,dlC(),st==='graph')+miniTile('ulv','آپلود',ICON.ul,ulC(),st==='graph')+'</div>'}
+function miniTile(id,label,icon,col,graph){return '<div class="tile"><div class="hd" style="color:'+col+'">'+icon.replace('<svg','<svg style="color:'+col+'"')+'<span style="color:var(--t2)">'+label+'</span></div><div class="num" id="'+id+'">0.00<small>MB/s</small></div>'+(graph?'<canvas id="'+id+'c" width="150" height="30"></canvas>':'')+'</div>'}
+function ringTile(id,label,icon,col){return '<div class="ringtile"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="25" fill="none" stroke="var(--fill)" stroke-width="6"/><circle id="'+id+'r" cx="30" cy="30" r="25" fill="none" stroke="'+col+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157" transform="rotate(-90 30 30)"/></svg><div class="rt2"><div class="rv" id="'+id+'">0.00 <small style="font-size:10px;color:var(--t2)">MB/s</small></div><div class="rh">'+label+'</div></div></div>'}
+function dlC(){return S.dlColor||'#0A84FF'}
+function ulC(){return S.ulColor||'#30D158'}
+function cfgCard(){var a=activeServer();return '<div class="cfgcard" id="cfgCard" onclick="ui.pickServer()"><div class="fl">'+(a?a.flag:'❓')+'</div><div class="cn"><div class="t" style="color:var(--cfgtext,var(--t))">'+(a?esc(a.name):'کانفیگ فعالی نیست')+'</div><div class="s" style="color:var(--cfgtext,var(--t2));opacity:.72">'+(a?esc(a.proto)+' · برای تغییر بزنید':'برای شروع یک سرور انتخاب کنید')+'</div></div><span class="chev" style="color:var(--cfgtext,var(--t2))"></span></div>'}
+function infoHtml(){return '<div class="infocard" id="ipCard"><div style="padding:12px 15px 4px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12.5px;color:var(--t2);font-weight:650">جزئیات اتصال</span><button class="icbtn" style="width:27px;height:27px;background:var(--fill)" onclick="ui.refreshIp()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M18 2.5V7h-4.5"/></svg></button></div><div class="infobuf" onclick="ui.copyKv(1)"><span class="k">IPv4</span><span class="v" id="kv4">—</span></div><div class="infobuf" onclick="ui.copyKv(2)"><span class="k">IPv6</span><span class="v" id="kv6">—</span></div><div class="infobuf" onclick="ui.copyKv(3)"><span class="k">اپراتور</span><span class="v" id="kvisp">—</span></div><div class="infobuf" style="border:none" onclick="ui.copyKv(4)"><span class="k">موقعیت</span><span class="v" id="kvloc">—</span></div></div>'}
+function quickHtml(){return '<div class="quickrow"><div class="qbox" onclick="ui.openMap()">'+ICON.map+'<div class="qt">نقشهٔ مسیر</div></div><div class="qbox" onclick="ui.openSpeed()">'+ICON.gauge+'<div class="qt">تست سرعت</div></div><div class="qbox" onclick="ui.openLogs()">'+ICON.log+'<div class="qt">لاگ‌ها</div></div></div>'}
+function renderHome(){var ip=ivId('homeBody');
+ var hb=$('#homeBody');hb.innerHTML='<div class="logo"><div class="lg"><svg viewBox="0 0 24 24" fill="currentColor">'+ICON.shieldSmall2+'</svg></div><div class="brand"><div class="n">نرسیس گیت‌وی</div><div class="v">خصوصی. سریع. مالِ خودت. · نسخه '+fd(appVersions)+'</div></div><div class="radar" id="radar"></div></div>'
+ +statHtml()+coreHtml()+cfgCard()+tilesHtml()+'<div class="sess" id="sessT">این نشست: — دریافت · — ارسال</div>'+infoHtml()+quickHtml();
+ renderRadar();updateStatsSub();updateSession(0,0);setIpShown(simIps());
+ bindCore();}
+ui.renderHome=renderHome;
+function updateStatsSub(){var el=$('#stSub');if(!el)return;var a=activeServer();var ph=S.runPhase;
+ if(ph==='connecting'){el.innerHTML='<span class="dotsink"><i></i><i></i><i></i></span><span style="margin-right:6px">در حال یافتن بهترین مسیر…</span>'}
+ else if(ph==='connected'&&a){el.innerHTML='<span class="pill g">'+a.flag+' '+(a.ping!=null?faMS(a.ping)+' ms':'—')+'</span><span>'+(S.mode==='vpn'?'تونل کامل اپ‌ها':'فقط پروکسی محلی')+'</span>'}
+ else{el.innerHTML='<span style="color:var(--t3)">'+(a?esc(a.name):'—')+'</span>'}
+ var t1=$('#stTx');if(t1)t1.textContent=ph==='idle'?'متصل نیستید':ph==='connecting'?'در حال اتصال…':ph==='connected'?'متصل شد':'در حال قطع…'}
+function renderRadar(){var r=$('#radar');
+ if(r&&!r.children.length){var b='';for(var i=0;i<5;i++)b+='<span style="height:'+(5+i*2.6)+'px"></span>';r.innerHTML=b}
+ if(!r)return;var ph=S.runPhase;r.style.opacity=ph==='idle'?'.35':'1'}
+ui.refreshIp=function(){var b=$('#ipCard .icbtn');if(b)b.style.opacity='.4';setTimeout(function(){setIpShown(simIps(true));if(b)b.style.opacity='1'},900)};
+function simIps(re){var a=activeServer();var con=S.runPhase==='connected';
+ var v4=con&&a?(countryIP[a.flag]||'45.87.212.14'):'2.56.44.190';
+ var isp=con&&a?({'🇩🇪':'Contabo GmbH · دادهٔ πραγμα','🇹🇷':'TurkNet İletişim','🇳🇱':'LeaseWeb Amsterdam','🇸🇬':'A3X Cloud SG','🇦🇪':'Emirates Telecom','🇸🇪':'Bahnhof Stockholm','🇯🇵':'Gremlin Tokyo','🌐':'Psiphon CDN'}[a.flag]||'آسیا‌تل'):'آسیا‌تل';
+ var loc=con&&a?({'🇩🇪':'فرانکفورت، آلمان','🇹🇷':'استانبول، ترکیه','🇳🇱':'آمستردام، هلند','🇸🇬':'سنگاپور','🇦🇪':'دبی، امارات','🇸🇪':'استکهلم، سوئد','🇯🇵':'توکیو، ژاپن','🌐':'چندسر','اوله': 'نامشخص'}[a.flag]||'نامشخص'):'تهران، ایران';
+ var diSha=con&&a&&a.flag==='🌐'?'کدو':'';
+ var v6=S.v6&&con?'2606:4700:4700::'+(re?'6611':'64a8'):'موجود نیست';
+ return {v4:v4,v6:v6,isp:isp,loc:loc};}
+function ivId(w){return w}
+function setIpShown(o){$('#kv4').textContent=o.v4;$('#kv6').textContent=o.v6;$('#kvisp').textContent=o.isp;$('#kvloc').textContent=o.loc}
+ui.copyKv=function(n){var el={'1':'#kv4','2':'#kv6','3':'#kvisp','4':'#kvloc'}[n];var v=$(el).textContent;copyTxt(v);toast('کپی شد','good')};
+var connT=null,connectAt=0,dlArr=[],ulArr=[];
+function doConnect(){if(S.runPhase!=='idle')return;var a=activeServer();if(!a){iosAlert({title:'اول یک کانفیگ انتخاب کنید',buttons:[{label:'باشه',role:'def'}]});return}
+ S.runPhase='connecting';save();renderCore();updateStatsSub();renderRadar();
+ var txt=$('#stSub');
+ connT=setTimeout(function(){S.runPhase='connected';S.save&&0;save();applyTheme();renderCore();updateStatsSub();renderRadar();connT=null;connectAt=Date.now();updateSession(0,0);setIpShown(simIps());
+ startTickers();toast('متصل شد · '+a.flag+' '+a.name.split(' · ')[0],'good');
+ pushLog('INFO','tunnel: connection established via '+a.addr,'g','tnl');},1400)}
+function doDisconnect(){if(S.runPhase==='idle')return;S.runPhase='disconnecting';save();renderCore();updateStatsSub();renderRadar();
+ connT=setTimeout(function(){connT=null;S.runPhase='idle';save();applyTheme();stopIv('speed');stopIv('dur');renderCore();updateStatsSub();renderRadar();updateSession(null,null);setIpShown(simIps());toast('قطع شد')},520)}
+ui.connectToggle=function(){if(S.runPhase==='idle')doConnect();else doDisconnect()};
+function startTickers(){var dl=0,ul=0,lastT=0;
+ iv('speed',700,function(){var con=S.runPhase==='connected';var a=activeServer();
+  dl=con?(2+Math.random()*9):0;ul=con?(0.3+Math.random()*1.9):0;
+  updateSession(dl,ul,true);});
+ iv('dur',1000,function(){if(S.runPhase==='connected'){updateSession(lastDlV,lastUlV,false)}});}
+ ui.coreTap=function(){ui.connectToggle()};
+function dragCore(){return}
+</script>
+<script>
+"use strict";
+var lastDlV=0,lastUlV=0,totDl=0,totUl=0;
+function renderCore(){var cw=$('#homeBody').querySelector('.coWrap');
+ if(!cw)return;
+ var st=S.runPhase;
+ var html=coreHtml();
+ var tmp=document.createElement('div');tmp.innerHTML=html;var nw=tmp.querySelector('.coWrap');
+ cw.replaceWith(nw);
+ if(st==='connected'){var i=nw.querySelector('.or1');}
+ bindCore();}
+ui.renderCore=renderCore;
+var holdRaf=0,holdTmr=0,holdFired=false;
+function bindCore(){var el=$('#coreBtn');var ring=$('#holdRing');
+ if(!el)return;
+ if(S.connStyle==='swipe'){bindSwipe();return}
+ var mask=$('#holdMask'),rlen=641;
+ function startHold(){ring&&ring.classList.add('show');var t0=Date.now();holdRaf=requestAnimationFrame(function stp(){var p=Math.min(1,(Date.now()-t0)/1100);
+  if(ring)ring.firstElementChild.style.strokeDashoffset=String(rlen*(1-p));
+  if(mask)mask.style.transform='scaleX('+p+')';
+  if(p>=1){holdFired=true;stopHold();if(S.runPhase==='connected')doDisconnect()}
+  else holdRaf=requestAnimationFrame(stp)})}
+ function stopHold(){if(holdRaf){cancelAnimationFrame(holdRaf);holdRaf=0}
+  if(ring){ring.classList.remove('show');ring.firstElementChild.style.strokeDashoffset=String(rlen)}
+  if(mask)mask.style.transform='scaleX(0)'}
+ el.addEventListener('click',function(){ui.connectToggle()});
+ el.addEventListener('pointerdown',function(){if(holdTmr)clearTimeout(holdTmr);
+  if(S.runPhase==='connected'){holdFired=false;holdTmr=setTimeout(startHold,240)}});
+ ['pointerup','pointercancel','pointerleave'].forEach(function(ev){el.addEventListener(ev,function(){
+  if(holdTmr&&holdRaf&&holdFired){holdFired=false}
+  if(holdTmr){clearTimeout(holdTmr)}
+  if(holdRaf)stopHold();holdTmr=0})});
+ }
+function bindSwipe(){var knob=$('#swipeKnob');if(!knob)return;var wrap=knob.parentElement;
+ var rtl=document.documentElement.dir==='rtl';
+ var active=false,sx=0;
+ knob.style[rtl?'right':'left']='6px';knob.style.top='5px';
+ knob.addEventListener('pointerdown',function(e){active=true;try{knob.setPointerCapture(e.pointerId)}catch(_){}
+  sx=e.clientX;knob.style.transition='none'});
+ knob.addEventListener('pointermove',function(e){if(!active)return;
+  var D=wrap.offsetWidth-60;var delta=rtl?(sx-e.clientX):(e.clientX-sx);var p=clamp2(-1,1,delta/D);
+  var px=Math.round(Math.max(-12,Math.min(D,delta)));
+  knob.style.transform='translateX('+(rtl?-px:px)+'px)';knob.dataset.p=String(p)});
+ function end(){if(!active)return;active=false;var p=parseFloat(knob.dataset.p||'0');knob.dataset.p='0';
+  knob.style.transition='transform .32s';knob.style.transform='translateX(0)';setTimeout(function(){knob.style.transition=''},340);
+  if(p>=.82)ui.connectToggle()}
+ knob.addEventListener('pointerup',end);knob.addEventListener('pointercancel',end);knob.addEventListener('pointerleave',end)}
+function clamp2(a,b,v){return Math.max(a,Math.min(b,v))}
+ui.pickServer=function(){var h='<div class="shd"><h3>انتخاب کانفیگ</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:4px 18px">';
+ servers.forEach(function(s,i){h+='<div class="srv'+(s.id===S.activeServer?' act':'')+'" onclick="ui.selSrv('+i+')"><div class="fl">'+s.flag+'</div><div class="nm"><div class="n">'+esc(s.name)+'</div><div class="p">'+esc(s.proto)+(s.ping!=null?' · '+faMS(s.ping)+' ms':'')+'</div></div><div class="ck"></div></div>'});
+ h+='</div>';openSheet(h)}
+ui.selSrv=function(i){S.activeServer=servers[i].id;save();closeSheet();renderHome();if(S.runPhase==='connected'){doDisconnect();setTimeout(doConnect,400)}else{toast('کانفیگ انتخاب شد','good')}}
+ui.deepOpenServerList=function(){ui.tab('servers')};
+function updateSession(dl,ul,add){var el=$('#sessT');var dEl=$('#dlv'),uEl=$('#ulv');
+ if(dl!=null){lastDlV=dl;lastUlV=ul;totDl+=dl*0.7/1024;totUl+=ul*0.7/1024}
+ if(add==false||dl==null){/*leave*/}
+ var speedCol=S.runPhase==='connected';
+ if(dEl){dEl.innerHTML=fmtSpd(dl&&speedCol?dl:0)+'<small> MB/s</small>';uEl.innerHTML=fmtSpd(ul&&speedCol?ul:0)+'<small> MB/s</small>'}
+ var dR=$('#dlv-r'),uR=$('#ulv-r');if(dR){dR.style.strokeDashoffset=String(157-157*Math.min(1,lastDlV/12));uR.style.strokeDashoffset=String(157-157*Math.min(1,lastUlV/12))}
+ var c=$('#dlv-c'),c2=$('#ulv-c');if(c){pushSpd(dlArr,lastDlV);drawGraph(c,dlArr,dlC())}if(c2){pushSpd(ulArr,lastUlV);drawGraph(c2,ulArr,ulC())}
+ if(el){el.textContent=S.runPhase==='connected'?('این نشست: '+fmtBytes(totDl*1048576)+' دریافت · '+fmtBytes(totUl*1048576)+' ارسال'):'این نشست: — دریافت · — ارسال'}}
+function pushSpd(arr,v){arr.push(v);while(arr.length>32)arr.shift()}
+function drawGraph(cv,arr,col){var ctx=cv.getContext('2d');var w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);ctx.beginPath();
+ arr.forEach(function(v,i){var x=w-(arr.length-i)*(w/32),y=h-Math.min(1,v/12)*h;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+ ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.stroke();ctx.lineTo(w,h);ctx.lineTo(w-arr.length*(w/32),h);ctx.closePath();ctx.fillStyle=col+'22';ctx.fill()}
+var logLinesArr=[],logFilter='all',logSearch='',logAutoscroll=true,openLogsView=false;
+function pushLog(lvl,txt,col,src){logLinesArr.unshift({t:logTime(),lvl:lvl,txt:txt,src:src||'tnl'});if(logLinesArr.length>300)logLinesArr.pop();if(openLogsView)ui.logRender()}
+function pushLog(lvl,txt,col,src){logLinesArr.unshift({t:logTime(),lvl:lvl,txt:txt,src:src||'tnl'});if(logLinesArr.length>300)logLinesArr.pop();if(openLogsView)ui.logRender()}
+ui.openLogs=function(){openLogsView=true;openSheet('<div class="shd"><h3>لاگ‌ها</h3><button class="x" onclick="ui.closeLogs()">'+ICON.x+'</button></div>'
+ +'<div style="display:flex;gap:6px;padding:0 18px;flex-wrap:wrap" id="logChips">'+logChip('all','همه')+logChip('i','اطلاع')+logChip('w','هشدار')+logChip('e','خطا')+'</div>'
+ +'<div class="search" style="margin:10px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg><input id="logSrch" placeholder="جست‌وجو در لاگ" oninput="ui.logSrch(this.value)"></div>'
+ +'<div class="logwrap" id="logList"></div><div style="display:flex;gap:8px;padding:0 18px 4px"><button class="btn gray" style="padding:9px" onclick="ui.logCopy()">کپی لاگ‌ها</button><button class="btn gray" style="padding:9px;color:var(--bad)" onclick="ui.logClear()">پاک کردن</button></div><div style="height:6px"></div>');
+ ui.logRender()}
+ui.closeLogs=function(){openLogsView=false;closeSheet()}
+ui.logF=function(k){logFilter=k;ui.logRender();renderLogChips()}
+function logChip(k,l){return '<span class="chip'+(logFilter===k?' on':'')+'" onclick="ui.logF(\''+k+'\')">'+l+'</span>'}
+function renderLogChips(){var c=$('#logChips');if(c)c.innerHTML=logChip('all','همه')+logChip('i','اطلاع')+logChip('w','هشدار')+logChip('e','خطا')}
+ui.logSrch=function(v){logSearch=v;ui.logRender()}
+ui.logRender=function(){var el=$('#logList');if(!el)return;var out='';
+ logLinesArr.forEach(function(l){var matches=(logFilter==='all'||l.lvl===logFilter)&&(!logSearch||l.txt.toLowerCase().indexOf(logSearch.toLowerCase())>=0);if(!matches)return;
+  var cls=l.lvl==='w'?' w':l.lvl==='e'?' e':l.lvl==='g'?' g':'';out+='<div class="logline'+cls+'"><span class="lt">'+l.t+'</span> ['+l.lvl.toUpperCase()+'] '+esc(l.txt)+'</div>'});
+ el.innerHTML=out||'<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">هنوز لاگی نیست.</div>'}
+ui.logClear=function(){logLinesArr=[];pushLog('INFO','logs: cleared by user');ui.logRender();toast('پاک شد')}
+ui.logCopy=function(){var s='';logLinesArr.forEach(function(l){s+='['+l.t+'] '+l.lvl.toUpperCase()+' '+l.txt+'\n'});copyTxt(s);toast('لاگ‌ها کپی شد','good')}
+function openMapSheet(){var a=activeServer(),con=S.runPhase==='connected';
+ var ex=con&&a?mapXY[a.flag]||[210,100]:null;
+ var svSvg='<svg viewBox="0 0 340 170"><defs><linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+(con?'#0A84FF':'#7a8198')+'" stop-opacity=".85"/><stop offset="1" stop-color="'+(con?'#30D158':'#7a8198')+'" stop-opacity=".85"/></linearGradient></defs>'
+ +'<path d="M20 40 q40 -14 70 -6 q10 -22 34 -20 q26 2 22 24 q-20 4 -18 18 q-6 16 -28 12 q-40 -4 -80 -28z" fill="#20293c"/>'
+ +'<path d="M150 34 q46 -12 78 4 q30 12 44 40 q6 18 -12 26 q-36 10 -74 -6 q-34 -14 -36 -64z" fill="#1c2638"/>'
+ +'<path d="M40 96 q40 6 56 34 q8 18 -8 26 q-30 8 -60 -22 q-8 -14 12 -38z" fill="#181f30"/>'
+ +'<path d="M250 122 q22 4 28 20 q2 14 -16 16 q-22 0 -26 -22 q2 -12 14 -14z" fill="#1a2333"/>'
+ +(ex?'<line x1="254" y1="64" x2="'+ex[0]+'" y2="'+ex[1]+'" stroke="url(#mg)" stroke-width="2.4" stroke-dasharray="6 7" style="animation:dashmove 1.6s linear infinite"/><circle cx="254" cy="64" r="5" fill="#FF3B30"/><text x="254" y="46" text-anchor="middle" font-size="9" fill="#ff8a80">تو اینجایی 🇮🇷</text><circle cx="'+ex[0]+'" cy="'+ex[1]+'" r="5" fill="#30D158"/><text x="'+ex[0]+'" y="'+(ex[1]-12)+'" text-anchor="middle" font-size="9" fill="#7ee6a2">خروجی '+(a?a.flag:'')+(a&&a.ping!=null?' · '+faMS(a.ping)+'ms':'')+'</text>':'<circle cx="254" cy="64" r="5" fill="#FF3B30"/><text x="254" y="46" text-anchor="middle" font-size="9" fill="#ff8a80">تو اینجایی 🇮🇷</text>')
+ +'</svg>';
+ openSheet('<div class="shd"><h3>نقشهٔ مسیر</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div>'
+ +'<div class="mapwrap">'+svSvg+'</div>'
+ +'<div class="note" style="margin:0 18px 16px">'+(con?'ترافیک شما از «'+esc(activeServer().name)+'» بیرون می‌آید — مسیر مستقیم تا نود خروجی مسدود است.':'<b>متصل نیستی</b> — الان از این موقعیت دیده می‌شوی. برای دیدن مسیر واقعی، وصل شو.')+'</div>'
+ +'<div style="padding:0 18px 26px"><div class="kv"><span>زمینهٔ DNS</span><b>'+(S.fakeDns?'FakeDNS':'سیستم')+'</b></div><div class="kv"><span>پینگ آخرین تست</span><b>'+(a&&a.ping!=null?faMS(a.ping)+' ms':'—')+'</b></div></div>')}
+ui.openMap=openMapSheet;
+var spState={phase:'idle',r:0};
+ui.openSpeed=function(){spState={phase:'idle'};openSheet('<div class="shd"><h3>تست سرعت</h3><div style="display:flex;gap:8px;align-items:center"><span class="pill" id="spVia">'+(S.runPhase==='connected'?'از طریق تونل':'اتصال مستقیم')+'</span><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div></div>'
+ +'<div class="gaugebox"><svg viewBox="0 0 200 120"><path d="M20 108 A90 90 0 0 1 180 108" fill="none" stroke="var(--fill)" stroke-width="14" stroke-linecap="round"/><path id="gArc" d="M20 108 A90 90 0 0 1 180 108" fill="none" stroke="var(--acc)" stroke-width="14" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>'
+ +'<div class="gauge-num" id="gNum">0.0</div><div class="gauge-unit" id="gUnit">Mbps</div><div class="phase" id="gPhase">آماده</div>'
+ +'<button class="btn" id="gGo" style="max-width:200px;margin:6px auto 0" onclick="ui.spRun()">شروع</button></div>'
+ +'<div class="spgrid" id="spBoxes"><div class="spbox"><div class="sv" id="sP">—</div><div class="sk">پینگ</div></div><div class="spbox"><div class="sv" id="sJ">—</div><div class="sk">جیتر</div></div><div class="spbox"><div class="sv" id="sD">—</div><div class="sk">دانلود (Mbps)</div></div><div class="spbox"><div class="sv" id="sU">—</div><div class="sk">آپلود (Mbps)</div></div></div>'
+ +'<div class="kv" id="sBuf" style="display:none"><span>تورم بافر</span><b id="sBufV"></b></div><div style="height:22px"></div>')};
+ui.spRun=function(){var btn=$('#gGo');btn.disabled=true;btn.textContent='توقف';spState.stop=false;btn.onclick=ui.spStop;
+ var arc=$('#gArc'),num=$('#gNum'),ph=$('#gPhase');
+ var via=S.runPhase==='connected';
+ var pTarget=via?(activeServer()&&activeServer().ping||96):(20+Math.random()*30);
+ var dTarget=via?(7+Math.random()*16):(18+Math.random()*40);
+ var uTarget=via?(1.2+Math.random()*4.5):(4+Math.random()*11);
+ var sets=[];var jit=Math.round(via?6+Math.random()*8:2+Math.random()*4);
+ var bufPh=Math.round(pTarget+(via?25+Math.random()*45:10+Math.random()*14));
+ var phases=[
+  ['در حال سنجش تأخیر…',900,function(p){var v=pTarget*(0.7+(0.3)*p);num.textContent=v.toFixed(0);num.style.fontSize='36px';num.parentElement.querySelector('.gauge-num');arc.style.strokeDashoffset=String(283-283*Math.min(.08,(pTarget*.01+ .03)*(p1(0.1,p)) ));}],
+ ];
+ function p1(a,b){return 0}
+ var t=0,rafId=0,kill=false;
+ function ramp(from,to,dur,cb,done){var t0=Date.now();function step(){if(kill||spState.stop){cancel();return}
+  var p=Math.min(1,(Date.now()-t0)/dur);var v=from+(to-from)*(1-Math.pow(1-p,2));cb(v,p);var pr=clamp2(0,1,p);phase(pr);
+  if(p<1)rafId=requestAnimationFrame(step);else done&&done()}
+ rafId=requestAnimationFrame(step)}
+ function setArc(v,max){var ratio=Math.max(.02,Math.min(1,v/max));arc.style.strokeDashoffset=String(283-283*ratio)}
+ function phase(p){arc.style.strokeDashoffset=String(283-283*Math.max(.06,p))}
+ function cancel(){kill=true;finish()}
+ function finish(){setIm('پایان');btn.disabled=false;btn.textContent='دوباره';btn.onclick=ui.spRun;
+  $('#sP').textContent=faMS(Math.round(pTarget))+' ms';$('#sJ').textContent=faMS(jit)+' ms';
+  $('#sD').textContent=fmtSpd(dTarget);$('#sU').textContent=fmtSpd(uTarget);
+  $('#sBuf').style.display='flex';$('#sBufV').textContent='+'+faMS(Math.round(bufPh-pTarget))+' ms زیر بار';}
+ function setIm(t){ph.textContent=t}
+ setIm('در حال سنجش تأخیر…');
+ setTimeout2(900,ramp(0,pTarget,900,function(v){num.textContent=v.toFixed(0);num.style.fontSize='36px';phase(0.06+0.12*v/pTarget)},finishThenDl));
+ function finishThenDl(){if(kill)return;setIm('در حال تست دانلود…');ramp(0,dTarget,2300,function(v){num.textContent=fmtSpd(v);phase(v/dTarget)},function(){if(kill)return;setIm('در حال تست آپلود…');ramp(dTarget,uTarget,1800,function(v){num.textContent=fmtSpd(v);phase(1-(uTarget-v)/dTarget)},finish)})}
+ function setTimeout2(d,f){setTimeout(f,d)}};
+ui.spStop=function(){spState.stop=true;toast('متوقف شد','warn');var btn=$('#gGo');if(btn){btn.disabled=false;btn.textContent='شروع';btn.onclick=ui.spRun}}
+</script>
+<script>
+"use strict";
+var srvQ='',pingBusy=false;
+ui.openAdd=function(){
+ aSheet('افزودن سرور',[
+  [{ic:'📋',label:'وارد کردن از کلیپ‌بورد',sub:'لینک یا کانفیگ را از کلیپ‌برد وارد کنید',cb:ui.pasteImport},
+   {ic:ICON.qr,label:'اسکن کد QR',sub:'بارکد را برای افزودن سرور اسکن کنید',cb:ui.scanQR}],
+  [{ic:'⚡',label:'افزودن دستی (Xray)',cb:function(){ui.addForm('manual')}},
+   {ic:'🧩',label:'کانفیگ سفارشی (JSON)',cb:function(){ui.addForm('json')}},
+   {ic:'📄',label:'از فایل (.ovpn، .conf، .json)',cb:ui.fileImport}],
+  [{ic:'🛡️',label:'افزودن سایفون',sub:'افزودن سرور سایفون به برنامه',cb:function(){ui.addForm('psiphon')}},
+   {ic:'🔗',label:'لینک سابسکریپشن',sub:'افزودن لینک اشتراک و دریافت خودکار سرورها',cb:function(){ui.addForm('sub')}}],
+  [{ic:'🧅',label:'تور',cb:function(){ui.addForm('tor')}},
+   {ic:'🕳️',label:'تونل DNS',cb:function(){ui.addForm('dns')}},
+   {ic:'🖥️',label:'SSH',cb:function(){ui.addForm('ssh')}},
+   {ic:'🏢',label:'OpenConnect',cb:function(){ui.addForm('openconnect')}},
+   {ic:'🔐',label:'IKEv2/IPsec',cb:function(){ui.addForm('ikev2')}}]
+ ])}
+ui.pasteImport=function(){navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText().then(function(txt){
+ if(!txt){toast('کلیپ‌بورد خالی است','warn');return}
+ tryParsePaste(txt)}).catch(function(){tryParsePrompt()}):tryParsePrompt()};
+function tryParsePrompt(){iosAlert({title:'چسباندن کانفیگ',body:'لینک یا کانفیگ را بچسبانید:',input:'',ph:'vless://… ; https://sub/…',buttons:[{label:'لغو'},{label:'وارد کن',role:'def',cb:function(v){v&&tryParsePaste(v)}}]})}
+function tryParsePaste(txt){txt=txt.trim();if(!txt){toast('کانفیگ خوانده نشد','bad');return}
+ var m=txt.match(/(vless|vmess|trojan|ss|hy2|hysteria2|wg|ssr):\/\/\S+/);
+ if(m){var proto=m[1].toUpperCase().replace('HYSTERIA2','HY2');if(txt.startsWith('vmess://')){try{var j=JSON.parse(atob(txt.slice(8)));addServer(j.ps||'VMess سرور',('VMess · '+(j.net||'tcp')).toUpperCase(),j.add+(j.port?':'+j.port:''),'🌐')}catch(e){addServer('VMess · درج‌شده','VMess',txt.slice(0,28),'🌐')}}else{addServer('کانفیگ واردشده','VLESS · WS+TLS',txt.slice(0,34),'🌐')}} else if(/^https?:\/\/|^\S+\.\S+/.test(txt)){subsAdd('سابسکریپشن تازه',txt)}else{toast('کانفیگ خوانده نشد','bad')}}
+ui.scanQR=function(){var ov=$('#scanov');ov.classList.add('show');
+ ov.innerHTML='<div class="grain"></div><div class="top" style="position:relative"><div style="font-weight:750;font-size:16px">اسکن کد QR</div><div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:6px">درمای بارکد داخل کادر بگذید</div></div><div class="frame"><i></i><i></i><i></i><i></i><div class="laser"></div></div><div style="position:relative;margin-top:34px;display:flex;gap:10px"><button class="cancl" style="background:rgba(255,255,255,.12);color:#fff;padding:11px 22px;border-radius:14px" onclick="ui.scanCancel()">لغو</button><button class="cancl" style="background:rgba(255,255,255,.12);color:#fff;padding:11px 22px;border-radius:14px" onclick="ui.scanImg()">از روی تصویر</button></div>';
+ setTimeout(function(){if(!ov.classList.contains('show'))return;ov.innerHTML='<div class="top" style="position:relative"><div style="font-weight:750;font-size:16px;margin-bottom:14px">کانفیگ پیدا شد</div><div style="background:rgba(255,255,255,.08);border-radius:16px;padding:14px 16px;text-align:left;direction:ltr;font-size:10.5px;color:#cfe3ff;word-break:break-all;line-height:1.9;font-family:monospace">vless://b7a1-4d2e-…@se1.cyad.io:443?type=ws&security=tls&sni=cdn.apple.com#<span style="color:#7ee6a2">stockholm-1</span></div><div style="margin-top:10px;color:#7ee6a2;font-size:12px">سوئد · استکهلم</div></div><div style="position:relative;margin-top:40px;display:flex;gap:10px"><button class="cancl" style="background:rgba(255,255,255,.12);color:#fff;padding:11px 22px;border-radius:14px" onclick="ui.scanCancel()">لغو</button><button class="btn" style="width:auto;padding:11px 26px" onclick="ui.scanAdd()">افزودن</button></div>'},1900)}
+ui.scanImg=function(){toast('در این نمونه، اسکن از تصویر پشتیبانی نمی‌شود')}
+ui.scanCancel=function(){$('#scanov').classList.remove('show')}
+ui.scanAdd=function(){$('#scanov').classList.remove('show');var n=addServer('سوئد · استکهلم','VLESS · WS+TLS','se1.cyad.io:443','🇸🇪');toast('کانفیگ اضافه شد','good')}
+ui.fileImport=function(){var h='<div class="shd"><h3>از فایل</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div class="note">فایل‌های ‎.ovpn‎ و ‎.conf‎ و ‎.json‎ پشتیبانی می‌شوند. (در این طرح یک فایل نمونه انتخاب می‌شود)</div><button class="btn" onclick="ui.fileAdd()">انتخاب فایل…</button><div style="height:16px"></div>';openSheet(h)}
+ui.fileAdd=function(){closeSheet();addServer('OpenVPN · سرور تست','OpenVPN','188.23.14.1:1194','🇮🇷');toast('سرور از فایل اضافه شد','good')}
+var sevSeq=20;function uid(){return ++sevSeq}
+function addServer(name,proto,addr,flag){var s=sev(uid(),name,proto,flag||'🌐',addr||'',null,'دستی');servers.unshift(s);renderServers();renderHome();return s}
+ui.addServer=addServer;
+function groupChips(){var out=[['all','همه']];out.push(['دستی','دستی'],['سایفون','سایفون']);subsList.forEach(function(sb){out.push(['sub:'+sb.id,sb.name+' ('+fd(sb.count)+')'])});out.push(['manual-more','گروه جدید']);return out}
+ui.chip=function(k){S.srvGroup=k;save();renderServers()}
+ui.srvMore=function(){aSheet('گزینه‌های بیشتر',[
+  [{ic:'⬆️',label:'به‌روزرسانی همهٔ سابسکریپشن‌ها',sub:'تازه‌سازی سرورهای همهٔ لینک‌های اشتراک',cb:ui.updateAllSubs},
+   {ic:'📊',label:'مرتب‌سازی بر پایهٔ نتیجهٔ تست',cb:ui.sortByPing},
+   {ic:'🧹',label:'حذف تکراری‌ها',sub:'حذف سرورهای با آدرس یکسان',cb:ui.delDup}],
+  [{ic:'🚫',label:'حذف نامعتبرها',sub:'سرورهایی که تست نتوانست به آن‌ها برسد',cb:ui.delInvalidConfirm},
+   {ic:'📤',label:'خروجی گرفتن از همه',sub:'کپی همهٔ کانفیگ‌ها در کلیپ‌برد',cb:ui.exportAll},
+   {ic:'♻️',label:'انتخاب چندتایی',cb:ui.startMulti}],
+  [{ic:ICON.trash,label:'حذف همه سرورها',dgr:true,sub:'کانفیگ‌های قفل‌شده باقی می‌مانند',cb:ui.delAllConfirm}]
+])}
+function subsCount(sb){return servers.filter(function(s){return s.group===sb.name}).length||sb.count}
+ui.sortByPing=function(){servers.sort(function(a,b){var x=a.ping==null?1e9:a.ping,y=b.ping==null?1e9:b.ping;return x-y});S.srvGroup='all';renderServers();toast('مرتب شد','good')}
+ui.delDup=function(){var seen={},out=[],rem=0;servers.forEach(function(s){var k=s.addr+'|'+s.proto;if(!seen[k]){seen[k]=1;out.push(s)}else{rem++}});
+ if(rem>0){servers=out;renderServers();renderHome();toast(fd(rem)+' مورد حذف شد','good')}else{toast('تکراری‌ای نیست')}}
+ui.delInvalidConfirm=function(){var cnt=servers.filter(function(s){return s.fail>=2}).length;
+ iosAlert({title:'حذف نامعتبرها',body:'این کار '+fd(cnt)+' سرور را حذف می‌کند: آن‌هایی که آخرین تست نتوانست به آن‌ها برسد و کانفیگ‌هایی که اصلاً اجرا نمی‌شوند. سرورهای تست‌نشده می‌مانند.',buttons:[{label:'لغو'},{label:'حذف',role:'dgr',cb:ui.delInvalid}]})}
+ui.delInvalid=function(){var keep=servers.filter(function(s){return s.fail<2});var rem=servers.length-keep.length;servers=keep;renderServers();renderHome();toast(fd(rem)+' مورد حذف شد','good')}
+ui.exportAll=function(){var txt=servers.map(function(s){return'narcicgeteway://import?srv=vless-to-'+encodeURIComponent(s.name)+'@'+s.addr}).join('\n');copyTxt(txt);toast('خروجی کپی شد — '+fd(servers.length)+' سرور','good')}
+ui.delAllConfirm=function(){iosAlert({title:'حذف همه سرورها',body:'همه سرورهای ذخیره‌شده حذف می‌شوند. کانفیگ‌های قفل‌شده باقی می‌مانند.',buttons:[{label:'لغو'},{label:'حذف همه',role:'dgr',cb:function(){servers=[];S.activeServer=0;renderServers();renderHome();toast('همه حذف شد','bad')}}]})}
+ui.startMulti=function(){S.multi=1;S.msel=[];renderServers()}
+ui.endMulti=function(){S.multi=0;S.msel=[];renderServers()}
+ui.msel=function(i){var s=servers[i];var ix=S.msel.indexOf(s.id);if(ix>=0)S.msel.splice(ix,1);else S.msel.push(s.id);renderServers()}
+ui.multiDelete=function(){iosAlert({title:S.msel.length+' سرور انتخاب‌شده حذف شوند؟',body:'این کار برگشت‌پذیر نیست.',buttons:[{label:'لغو'},{label:'حذف',role:'dgr',cb:function(){servers=servers.filter(function(s){return S.msel.indexOf(s.id)<0});ui.endMulti();renderServers();renderHome();toast('حذف شد','good')}}]})}
+ui.multiMove=function(){aSheet('انتقال به گروه',[groupsForMove().map(function(g){return{label:g,cb:function(){servers.forEach(function(s){if(S.msel.indexOf(s.id)>=0)s.group=g});ui.endMulti();renderServers();toast('منتقل شد','good')}}})])}
+function groupsForMove(){var g=['دستی'];subsList.forEach(function(s){g.push(s.name)});g.push('گروه جدید…');return g}
+</script>
+<script>
+"use strict";
+function pingBadge(s){if(s.fail)return '<span class="pp bad">ناکارآمد</span>';if(s.ping==null)return '<span class="pp">—</span>';
+ var cls=s.ping<150?'good':s.ping<400?'mid':'slow';return '<span class="pp '+cls+'">'+faMS(s.ping)+'<small> ms</small></span>'}
+function visibleServers(){return servers.filter(function(s){var okG=S.srvGroup==='all'||String(s.group)===S.srvGroup||(S.srvGroup.startsWith('sub:')&&false);if(S.srvGroup.startsWith('sub:')){var sb=subsList.find(function(x){return 'sub:'+x.id===S.srvGroup});okG=sb?String(s.group)===sb.name:false}
+ if(!okG)return false;if(!srvQ)return true;return s.name.indexOf(srvQ)>=0||s.addr.indexOf(srvQ)>=0||s.proto.indexOf(srvQ.toUpperCase())>=0})}
+function renderServers(){var list=visibleServers();var el=$('#srvList');if(!el)return;
+ var t=$('#srvTitle');if(t)t.textContent=S.multi?fd(S.msel.length)+' انتخاب‌شده':'سرورها';
+ var tools=$('#srvTools');if(tools)tools.innerHTML=S.multi?'<button class="tbn" onclick="ui.multiMove()">جابه‌جایی</button><button class="tbn" style="color:var(--bad)" onclick="ui.multiDelete()">حذف</button><button class="tbn" onclick="ui.endMulti()">لغو</button>':'<button class="tbn" onclick="ui.pingTCP()">پینگ TCP</button><button class="tbn" onclick="ui.pingReal()">تأخیر واقعی</button>';
+ var out='';list.forEach(function(s){var i=servers.indexOf(s);
+  out+='<div class="srv'+(s.id===S.activeServer?' act':'')+'" onclick="srvTap('+i+',event)"><div class="fl">'+s.flag+'</div><div class="nm"><div class="n">'+esc(s.name)+(s.lock?' 🔒':'')+'</div><div class="p">'+esc(s.proto)+(s.addr?' · '+esc(s.addr):'')+'</div></div>'+pingBadge(s)+(S.multi?'<div class="ck'+(S.msel.indexOf(s.id)>=0?' on':'')+'">'+(S.msel.indexOf(s.id)>=0?ICON.check:'')+'</div>':'<button class="dots" onclick="ui.srvItem(event,'+i+')">'+ICON.dots+'</button>')+'</div>'});
+ el.innerHTML=out||'<div style="text-align:center;color:var(--t3);padding:60px 0;font-size:14px">سروری نیست — از دکمهٔ <b>+</b> اضافه کن.</div>'}
+function srvTap(i){if(S.multi){ui.msel(i);return}ui.selSrv(i)}
+ui.srq=function(v){srvQ=v;renderServers()}
+ui.srvItem=function(ev,i){ev.stopPropagation();var s=servers[i];
+ aSheet(s.name,[
+  [{ic:'✅',label: s.id===S.activeServer?'انتخاب شده':'انتخاب و اتصال',cb:function(){ui.selSrv(servers.indexOf(s))}},
+   {ic:'✏️',label:'ویرایش',cb:function(){ui.editSrv(servers.indexOf(s))}},
+   {ic:'🏷️',label:'تغییر نام',cb:function(){ui.renameSrv(servers.indexOf(s))}}],
+   [{ic:'🔗',label:'کپی لینک اشتراک',cb:function(){copyTxt('narcicgeteway://import?srv='+(s.addr||'x'));toast('لینک کپی شد','good')}},
+    {ic:'🧾',label:'اشتراک با کد QR',cb:function(){ui.qrSheet('narcicgeteway://import?srv='+(s.addr||'x'),s.name)}},
+    {ic:'📦',label:'انتقال به گروه',cb:function(){ui.moveToGroup(servers.indexOf(s))}}],
+  [{ic:'📡',label:'تست این سرور',cb:function(){pingOne(servers.indexOf(s))}},
+   {ic:'ℹ️',label:'جزئیات',cb:function(){ui.srvInfo(servers.indexOf(s))}}],
+  [{ic:ICON.trash,label:'حذف',dgr:true,cb:function(){ui.delOne(servers.indexOf(s))}}]
+ ])}
+ui.renameSrv=function(i){var s=servers[i];iosAlert({title:'تغییر نام',body:'',input:s.name,ph:'نام جدید',buttons:[{label:'لغو'},{label:'ذخیره',role:'def',cb:function(v){if(!v)return;s.name=v;renderServers();toast('نام ذخیره شد','good')}}]})}
+ui.delOne=function(i){var s=servers[i];iosAlert({title:'حذف سرور',body:'«'+esc(s.name)+'» حذف شود؟ این کار قابل بازگشت نیست.',buttons:[{label:'لغو'},{label:'حذف',role:'dgr',cb:function(){var wasActive=s.id===S.activeServer;servers.splice(i,1);if(wasActive)S.activeServer=0;renderServers();renderHome();toast('حذف شد','bad')}}]})}
+ui.qrSheet=function(txt,name){openSheet('<div class="shd"><h3>'+esc(name||'کد QR')+'</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div class="qrbox"><canvas id="qrC" width="150" height="150"></canvas></div><div class="note" style="direction:ltr;text-align:left;word-break:break-all;font-size:11px">'+esc(txt)+'</div><button class="btn gray" onclick="copyTxt(\''+esc(txt).replace(/'/g,'')+'\');toast(\'کپی شد\',\'good\')">کپی لینک</button><div style="height:16px"></div>');
+ var c=$('#qrC');if(c){var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,150,150);g.fillStyle='#000';var n=21,cs=150/n;var seed=0;for(var q=0;q<txt.length;q++)seed=(seed*31+txt.charCodeAt(q))>>>0;for(var y=0;y<n;y++)for(var x=0;x<n;x++){var bit=((seed>>>((x*y+y)%31))^(x*y))%5<2||(x<7&&y<7&&(x==0||y==0||x==6||y==6))||(x<7&&y<7&&x==2&&y==2)||(x>=n-7&&y<7&&(x==n-1||y==0||x==n-7||y==6))||(x<7&&y>=n-7&&(x==0||y==n-1||x==6||y==n-7));if(bit)g.fillRect(x*cs,y*cs,cs,cs)}}}
+ui.srvInfo=function(i){var s=servers[i];openSheet('<div class="shd"><h3>'+esc(s.name)+'</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+ +kv('پروتکل',s.proto)+kv('آدرس سرویس',s.addr||'—')+kv('گروه',s.group)+kv('آخرین پینگ',s.ping!=null?faMS(s.ping)+' ms':'—')+kv('حالت قفل',s.lock?'بله':'خیر')
+ +'<div class="kv"><span>لینک</span><b style="direction:ltr;font-size:10px;word-break:break-all">'+esc(s.addr||'')+'</b></div></div>');}
+function kv(a,b){return '<div class="kv"><span>'+a+'</span><b>'+esc(String(b))+'</b></div>'}
+function mv(g){s.group=g;renderServers();renderSrvChips();toast('به «'+g+'» منتقل شد','good')}
+ui.moveToGroup=function(i){var s=servers[i];var gs=groupsForMove();var groups=[];
+ gs.forEach(function(g){groups.push([{label:g,cb:function(){if(g==='گروه جدید…'){newGroupName(function(v){if(v)applyMove(v)});return}mv(g)}}])});
+ aSheet('انتقال «'+esc(s.name)+'»',groups);
+ function newGroupName(cb){iosAlert({title:'گروه جدید',body:'نام گروه را وارد کن:',input:'',ph:'نام گروه',buttons:[{label:'لغو'},{label:'ایجاد',role:'def',cb:function(v){cb(v)}}]})}
+ function applyMove(g){mv(g)}}
+</script>
+<script>
+"use strict";
+var pingTimer=0,pingQueue=[],pingKind='';
+function pingAll(kind){if(pingBusy){toast('یک تست در جریان است','warn');return}
+ var list=visibleServers();if(!list.length){toast('سروری برای تست نیست','warn');return}
+ pingBusy=true;pingQueue=list.slice();pingKind=kind;
+ var pb=$('#pingpb');pb.style.display='block';
+ pushLog(lvl('PING'),'ping: start '+kind+' test on '+list.length+' servers');
+ nextPing()}
+function lvl(k){return k==='PING'?'i':'INFO'}
+function nextPing(){if(!pingQueue.length){pingBusy=false;$('#pingpb').style.display='none';toast('تست تمام شد','good');pushLog('INFO','ping: test finished');save();return}
+ var s=pingQueue.shift();
+ var base=s.ping==null?null:s.ping;var nx;
+ if(pingKind==='tcp'){var ok=Math.random()>.09;nx=ok?Math.round(base!=null?base+(Math.random()*140-70):90+Math.random()*390):null;if(!ok){s.fail=1}else s.fail=0}
+ else{var ok2=Math.random()>.14;nx=ok2?Math.round(base!=null?base+(Math.random()*220-90):180+Math.random()*620):null;if(!ok2){s.fail=2}else s.fail=0}
+ s.ping=nx;updatePingRow(s);pb.firstElementChild.style.width=(100*(1-pingQueue.length/6))+'%';
+ pingTimer=setTimeout(nextPing,300)}
+function updatePingRow(s){var ix=servers.indexOf(s);var rows=document.querySelectorAll('#srvList .srv');var row=rows[ix];if(!row){renderServers();return}
+ var old=row.querySelector('.pp');if(old)old.outerHTML=pingBadge(s)}
+function pingOne(i){var s=servers[i];if(pingBusy){toast('یک تست در جریان است','warn');return}
+ pingBusy=true;var old=s.ping;s.ping=null;updatePingRow(s);
+ setTimeout(function(){var ok=Math.random()>.2;s.ping=ok?Math.round(old!=null?old+(Math.random()*120-60):60+Math.random()*300):null;s.fail=ok?0:1;updatePingRow(s);pingBusy=false;toast(ok?'پینگ: '+faMS(s.ping)+' ms':'سرور پاسخ نداد',ok?'good':'bad')},700)}
+ui.pingTCP=function(){pingAll('tcp')}
+ui.pingReal=function(){pingAll('real')}
+ui.updateAllSubs=function(){if(!subsList.length){toast('سابسکریپشنی نیست','warn');return}
+ var done=0;var t=setInterval(function(){done++;if(done>=subsList.length){clearInterval(t);toast('به‌روزرسانی کامل شد','good')}},420);
+ pushLog('INFO','subs: refreshing '+subsList.length+' links')}
+</script>
+<script>
+"use strict";
+function renderSrvChips(){var el=$('#srvChips');if(!el)return;var out='';
+ out+='<span class="chip'+(S.srvGroup==='all'?' on':'')+'" onclick="ui.srvGrp(\'all\')">همه</span>';
+ out+='<span class="chip'+(S.srvGroup==='دستی'?' on':'')+'" onclick="ui.srvGrp(\'دستی\')">دستی</span>';
+ out+='<span class="chip'+(S.srvGroup==='سایفون'?' on':'')+'" onclick="ui.srvGrp(\'سایفون\')">سایفون</span>';
+ subsList.forEach(function(sb){out+='<span class="chip'+(S.srvGroup==='sub:'+sb.id?' on':'')+'" onclick="ui.srvGrp(\'sub:'+sb.id+'\')">'+esc(sb.name)+' <span style="opacity:.6">'+fd(subsCount(sb))+'</span></span>'});
+ out+='<span class="chip" onclick="ui.subsAddSheet()">+ گروه</span>';
+ el.innerHTML=out}
+ui.srvGrp=function(k){S.srvGroup=k;save();renderServers();renderSrvChips()}
+ui.subsAddSheet=function(){subAddForm()}
+function subAddForm(){openSheet('<div class="shd"><h3>لینک سابسکریپشن</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+ +'<div class="lbl">نام</div><input class="if" id="subN" placeholder="نام گروه (مثلاً سی‌کلاد)">'
+ +'<div class="lbl">نشانی سابسکریپشن</div><input class="if" style="direction:ltr" id="subU" placeholder="https://sub.example.com/token">'
+ +'<div class="lbl">هدر User-Agent (اختیاری)</div><input class="if" style="direction:ltr" id="subUA" placeholder="NarcicGateway-Android/7.2.1">'
+ +'<button class="btn" onclick="subsAdd($(\'#subN\').value||\'سابسکریپشن تازه\',$(\'#subU\').value)">افزودن و دریافت</button><div style="height:14px"></div>')}
+function subsAdd(name,url){closeSheet();if(!url||!/^https?:/.test(url)){toast('لینک معتبر نیست','bad');return}
+ var sb={id:subsSeq++,name:name,url:url,count:3,updated:nowStr()};subsList.push(sb);
+ var countries=[['🇩🇪','آلمان'],['🇹🇷','ترکیه'],['🇳🇱','هلند'],['🇸🇬','سنگاپور'],['🇦🇪','امارات'],['🇯🇵','ژاپن']];
+ var protos=['VLESS · WS+TLS','VLESS · Reality','VMess · gRPC','Trojan · gRPC','Hysteria2','Shadowsocks · 2022'];
+ for(var i=0;i<3;i++){var cc=countries[Math.floor(Math.random()*countries.length)];
+  servers.push(sev(uid(),cc[1]+'·'+(i+1),protos[Math.floor(Math.random()*protos.length)],cc[0],'sx'+(i+1)+'.'+name.replace(/\s/g,'')+'.io:443',Math.round(60+Math.random()*320),sb.name))}
+ save();renderSrvChips();renderServers();toast('سابسکریپشن افزوده شد: ۳ سرور','good');pushLog('i','subs: imported 3 configs from '+url)}
+var subsSeq=10;
+</script>
+<script>
+"use strict";
+var MF={proto:'vless',flow:'xtls-rprx-vision',trans:'ws',sec:'tls',fpr:'chrome',method:'chacha20-ietf-poly1305'};
+function tabRow(items,cur,fn){return '<div class="seg" style="flex-wrap:wrap">'+items.map(function(it){return '<button class="'+(cur===it[0]?'on':'')+'" onclick="'+fn+'(\''+it[0]+'\')">'+it[1]+'</button>'}).join('')+'</div>'}
+ui.addForm=function(kind){var tmp={};var mp=('vless vmess trojan hy2 ss wg').split(' ');
+ if(kind==='manual'){openSheet('<div class="shd"><h3>افزودن دستی (Xray)</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +'<div class="lbl">پروتکل</div>'+tabRow([['vless','VLESS'],['vmess','VMess'],['trojan','Trojan'],['hy2','Hysteria2'],['ss','Shadowsocks'],['wg','WireGuard']],'vless','ui.mpick')
+  +div('mName','نام (اختیاری)','مثلاً فرانکفورت۲ · شخصی')
+  +(MF.proto==='vless'?div('mID','UUID','.*')+''+div('mAddr','آدرس','server.example.com:443')+div('mSNI','SNI (Host)','cdn.apple.com'):'')
+  +'<div id="mExtra"></div>'
+  +'<button class="btn" onclick="ui.mSave()">ذخیره سرور</button><div style="height:14px"></div>');
+  ui.mExtra();
+  return}
+ if(kind==='json'){openSheet('<div class="shd"><h3>کانفیگ سفارشی (JSON)</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +'<textarea class="if" id="jTx" rows="9" style="direction:ltr;font-size:10.5px;line-height:2.1;font-family:monospace;text-align:left">{\n  "inbounds": [{"listen": "127.0.0.1", "port": 4434, "protocol": "socks"}],\n  "outbounds": []\n}</textarea>'
+  +'<div style="display:flex;gap:8px;margin-top:10px"><button class="tagbtn" onclick="ui.jFmt()">مرتب‌سازی</button><button class="tagbtn" onclick="ui.jMin()">فشرده</button></div>'
+  +'<button class="btn" style="margin-top:10px" onclick="ui.jSave()">بررسی و افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='psiphon'){openSheet('<div class="shd"><h3>ضفاظت از طریق سایفون</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +'<div class="lbl">کشور خروج</div>'+tabRow([['auto','خودکار'],['DE','آلمان'],['TR','ترکیه'],['US','آمریکا'],['NL','هلند'],['SE','سوئد'],['JP','ژاپن']],'auto','ui.psCtry')
+  +'<div class="lbl">حالت</div>'+tabRow([['auto','هوشمند'],['cdn','فقط CDN'],['beast','Beast'],['direct','مستقیم']],'auto','ui.psMode')
+  +'<div class="note">سرعت برای سایفون معمولاً کمتر است؛ برای انجام دادن کارهای سادهٔ وب مناسب است.</div>'
+  +'<button class="btn" onclick="ui.psSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='tor'){openSheet('<div class="shd"><h3>اتصال از طریق تور</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +'<div class="lbl">پل محرمانه</div>'+tabRow([['none','بدون پل'],['obfs4','obfs4'],['webtunnel','WebTunnel'],['snowflake','Snowflake']],'none','ui.tbPick')
+  +div('tbP','پورت محلی','9150')+'<div class="note">پل‌های سایت censoredplanet را کپی کرده یا نیاز ندارید — در طرح، مدیریت پل‌ها جداگانه است.</div>'
+  +'<button class="btn" onclick="ui.tbSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='dns'){openSheet('<div class="shd"><h3>تونل DNS</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +div('dnH','سرور DNS','dns.example.com')+'<div style="display:flex" class="lg">'
+  +'<div class="lbl">پروتکل</div>'+tabRow([['do53','Do53'],['doh','DoH'],['cdnsudd','Cloudflare WARP']],'do53','ui.dnPick')
+  +'<div class="note">سرعت تونل DNS پایین است؛ فقط برای پهنای‌باند کم.</div>'
+  +'<button class="btn" onclick="ui.dnSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='ssh'){openSheet('<div class="shd"><h3>SSH (Socks)</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +div('szH','میزبان','203.0.13.4:22')+div('szU','نام کاربری','root')+'<div class="lbl">رمز عبور</div><input class="if" type="password" id="szP" placeholder="••••••">'
+  +'<button class="btn" onclick="ui.szSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='openconnect'){openSheet('<div class="shd"><h3>OpenConnect</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +div('ocU','آدرس VPN','vpn.example.org')+'<div class="lbl">گروه ورود</div><input class="if" id="ocG" placeholder="0">​<div class="lbl">نام کاربری</div><input class="if" id="ocUsr" placeholder="user">'
+  +'<button class="btn" onclick="ui.ocSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='ikev2'){openSheet('<div class="shd"><h3>IKEv2/IPsec</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px">'
+  +div('ikU','نشانی سرور','vpn.example.org')+div('ikUsr','نام کاربری','user')+'<div class="lbl">رمز عبور</div><input class="if" type="password" id="ikP" placeholder="••••••">'
+  +'<button class="btn" onclick="ui.ikSave()">افزودن</button><div style="height:14px"></div>');return}
+ if(kind==='sub'){subAddForm();return}
+}
+ui.mpick=function(p){MF.proto=p;ui.addForm('manual')}
+function div(id,label,ph){return '<div class="lbl">'+label+'</div><input class="if" id="'+id+'" placeholder="'+esc(ph||'')+'">'}
+ui.mExtra=function(){var e=$('#mExtra');if(!e)return;var p=MF.proto;var h='';
+ if(p==='ss')h+=div('mP','رمز','')+'<div class="lbl">رمزنگاری</div>'+tabRow([['chacha20-ietf-poly1305','ChaCha20-IETF-Poly1305'],['aes-256-gcm','AES-256-GCM'],['2022-blake3-aes-256-gcm','2022-blake3-AES-256-GCM']],MF.method,'ui.mMth');
+ if(p==='hy2')h+=div('mP','رمز عبور و auth','')+'<div class="lbl">Mbps آپلود</div><input class="if" id="mUp" placeholder="100"><div class="lbl">Mbps دانلود</div><input class="if" id="mDm" placeholder="200">';
+ if(p==='wg')h+=div('mPr','کلید خصوصی (KeyPair)','')+'<div class="lbl">کلید عمومی سرور</div><input class="if" id="mPu" placeholder="">';
+ if(p==='vless'||p==='vmess'||p==='trojan'){h+='<div class="lbl">انتقال</div>'+tabRow([['ws','WebSocket'],['tcp','TCP'],['grpc','gRPC'],['http-upgrade','HTTPUpgrade'],['split','SplitHttp']],MF.trans,'ui.mTran')
+  +'<div class="lbl">امنیت</div>'+tabRow([['tls','TLS'],['reality','Reality'],['none','بدون']],'tls','ui.mSec')
+  +(MF.sec==='reality'?div('mPbk','PublicKey','')+div('mSid','ShortID','')+'<div class="lbl">اثر انگشت</div>'+tabRow([['chrome','Chrome'],['firefox','Firefox'],['safari','Safari'],['ios','iOS'],['edge','Edge'],['random','تصادفی']],MF.fpr,'ui.mFpr'):'')
+  +(MF.sec==='tls'?div('mFpx','Fingerprint (اختیاری)','chrome'):'')}
+ e.innerHTML=h}
+ui.mMth=function(v){MF.method=v;ui.mExtra()}
+ui.mTran=function(v){MF.trans=v;ui.mExtra()}
+ui.mSec=function(v){MF.sec=v;ui.mExtra()}
+ui.mFpr=function(v){MF.fpr=v;ui.mExtra()}
+var PB={ctry:'auto',mode:'auto'},TB={pl:'none'},DN={ptc:'do53'};
+ui.psCtry=function(v){PB.ctry=v}
+ui.psMode=function(v){PB.mode=v}
+ui.tbPick=function(v){TB.pl=v}
+ui.dnPick=function(v){DN.ptc=v}
+var flMap={'DE':'🇩🇪','TR':'🇹🇷','US':'🇺🇸','NL':'🇳🇱','SE':'🇸🇪','JP':'🇯🇵','auto':'🌍'};
+flagOf=function(c){return flMap[c]||'🌐'}
+ui.psSave=function(){closeSheet();var c=PB.ctry,flag=flagOf(c);
+ addServer('سایفون'+(c==='auto'?' · هوشمند':' · '+c),'Psiphon'+(PB.mode==='auto'?' · هوشمند':' · '+PB.mode),(c==='auto'?'':'auto.srv.'+c.toLowerCase()+'.psiphon.io:443'),flag);toast('سایفون افزوده شد','good')}
+ui.tbSave=function(){closeSheet();addServer('تور'+(TB.pl==='none'?' · بدون پل':' · '+TB.pl),'Tor · Socks5','127.0.0.1:9050','🧅');toast('تور افزوده شد','good')}
+ui.dnSave=function(){var h=$('#dnH').value;closeSheet();addServer('تونل DNS · '+h,'DNS · '+DN.ptc,h||'dns.example.com','🕳️');toast('کنفیگ DNS افزوده شد','good')}
+ui.szSave=function(){var h=$('#szH').value;if(!h.includes(':'))h=h+':22';closeSheet();addServer('SSH · '+$('#szU').value||'ssh','SSH · Socks',h,'🖥️');toast('SSH افزوده شد','good')}
+ui.ocSave=function(){var u=$('#ocU').value;closeSheet();addServer('OpenConnect · '+u,'VPN · SSL/TLS',u,'🏢');toast('OpenConnect افزوده شد','good')}
+ui.ikSave=function(){var u=$('#ikU').value;closeSheet();addServer('IKEv2 · '+u,'VPN · IKEv2/IPsec',u,'🔐');toast('IKEv2 افزوده شد','good')}
+var JSKinds={};
+ui.jFmt=function(){try{var o=JSON.parse($('#jTx').value);$('#jTx').value=JSON.stringify(o,null,2);toast('مرتب شد','good')}catch(e){toast('JSON نامعتبر: '+e.message,'bad')}}
+ui.jMin=function(){try{var o=JSON.parse($('#jTx').value);$('#jTx').value=JSON.stringify(o);toast('فشرده شد','good')}catch(e){toast('JSON نامعتبر','bad')}}
+ui.jSave=function(){try{var o=JSON.parse($('#jTx').value);JSON.stringify(o);closeSheet();addServer('کانفیگ JSON ('+fd(JSON.stringify(o).length)+' کاراکتر)','JSON Custom','local.json','🧩');toast('اعتبارسنجی قبول شد؛ کانفیگ ذخیره شد','good')}catch(e){toast('JSON نامعتبر: '+e.message,'bad')}}
+ui.mSave=function(){var a=$('#mAddr').value;if(!a){toast('آدرس را وارد کنید','bad');return}
+ var nm=$('#mName').value;
+ var flags={'vless':'VLESS · '+(MF.sec.toUpperCase()=='NONE'?(MF.trans.toUpperCase()):MF.sec.toUpperCase()+'+'+MF.trans.toUpperCase()),'vmess':'VMess · '+MF.trans.toUpperCase(),'trojan':'Trojan · '+MF.trans.toUpperCase(),'hy2':'Hysteria2','ss':'Shadowsocks · '+MF.method.split('-')[0].toUpperCase(),'wg':'WireGuard'};
+ closeSheet();addServer(nm||'سرور دستی',flags[MF.proto]||'VLESS',a,'🌐');toast('سرور ذخیره شد','good')}
+ui.editSrv=function(i){var s=servers[i];iosAlert({title:'ویرایش در نمونهٔ فعال نیست',body:'«'+s.name+'» را با تغییر نام یا حذف و ساخت جدید تنظیم کنید.',buttons:[{label:'باشه',role:'def'},{label:'تغییر نام',cb:function(){ui.renameSrv(i)}}]})}
+</script>
+<script>
+"use strict";
+var vaultUnlocked=false;
+function renderVault(){var el=$('#vaultBody');if(!el)return;var b=vaultUnlocked?'':'<div class="lockbar">🔒 قفل است</div>';
+ if(!vaultUnlocked){el.innerHTML='<div class="vault-hero"><div class="vh-ic">'+ICON.lock+'</div><div class="vh-t">قفل کانفیگ‌ها با 4 رقم</div><div class="vh-s">کد را بزن تا کانفیگ‌های مخفی باز شود (طرح: ۱۲۳۴)</div></div>'
+  +'<div class="pinpad" id="pinpad"></div>'
+  +'<div style="padding:0 18px"><button class="btn gray" onclick="toast()">هررفی کد را فراموش کردم… (نمونه)</button></div>';
+  buildPinpad();return}
+ var out='<div class="sectttl" style="padding:4px 18px">کانفیگ قفل‌شده</div><div style="padding:0 16px">'
+ +vaultZsx.map(function(z,i){return '<div class="srv" onclick="ui.vzTap('+i+')"><div class="fl">'+(z.flag||'🔒')+'</div><div class="nm"><div class="n">'+esc(z.name)+'</div><div class="p">'+esc(z.proto)+' · '+z.total+' کد · '+z.left+' مانده</div></div><span class="chev"></span></div>'}).join('')
+ +'</div><div style="padding:0 18px"><button class="btn" onclick="ui.vzNew()" style="margin-bottom:16px">آفرودن نوشتهٔ جدید</button><button class="btn gray" onclick="ui.vaultLock()" style="margin-bottom:20px">قفل کن</button></div>';
+ el.innerHTML=out}
+function buildPinpad(){var p=$('#pinpad');if(!p)return;var pin='';var w='<div class="pd-dots" id="pdDots">'+[0,1,2,3].map(function(o){return '<i></i>'}).join('')+'</div><div class="pd-keys">'
+ +'۱۲۳۴۵۶۷۸۹'.split('').map(function(ch){return '<button onclick="ui.pin(\''+ch+'\')">'+ch+'</button>'}).join('')
+ +'<button class="blank"></button><button onclick="ui.pin(\'۰\')">۰</button><button onclick="ui.pinDel()">⌫</button></div>';
+ p.innerHTML=w}
+ui.pin=function(ch){S.pin=S.pin||'';if(S.pin.length>=4)return;S.pin+=ch;updDots();
+ if(S.pin.length===4){var ok=S.pin==='۱۲۳۴';setTimeout(function(){S.pin='';
+  if(ok){vaultUnlocked=true;updDots();renderVault();toast('باز شد','good')}else{updDots();toast('کد اشتباه است','bad')}},160)}}
+ui.pinDel=function(){S.pin=S.pin||'';S.pin=S.pin.slice(0,-1);updDots()}
+function updDots(){var el=$('#pdDots');if(!el)return;var n=(S.pin||'').length;
+ el.querySelectorAll('i').forEach(function(d,i){d.classList.toggle('on',i<n)})}
+ui.vaultLock=function(){vaultUnlocked=false;S.pin='';renderVault();toast('گاوصندوق قفل شد')}
+ui.vzTap=function(i){var z=vaultZsx[i];aSheet(z.name,[
+  [{ic:'⬆️',label:'افزودن به بالا + '+fd(z.total-1)+' کاراکتر',sub:'کروستر دارد',cb:function(){toast('افزوده شد','good')}}],
+  [{ic:ICON.trash,label:'حذف',dgr:true,sub:'می‌ماند در حافظه',cb:function(){vaultZsx.splice(i,1);toast('حذف شد','bad');renderVault()}}]
+ ])}
+ui.vzNew=function(){closeSheet();iosAlert({title:'یادداشت قفل‌شده',body:'اسم سرور و متن را بده:',input:'',ph:'متن کانفیگ',secure:false,buttons:[{label:'لغو'},{label:'ذخیره',role:'def',cb:function(v){v&&vaultZsx.unshift({name:'شخصی',proto:'VLESS · WS+TLS',total:v.length,left:v.length,flag:'🔒'});renderVault();toast('ذخیره شد','good')}}]})}
+</script>
+<script>
+"use strict";
+function rowLabelT(t){return '<div class="sectttl">'+t+'</div>'}
+function walkT(prefix){return ''}
+function rowToggle(label,desc,key,cbKey){var val=cbKey?S[cbKey][key]:S[key];return '<div class="rt clickable" onclick="ui.rowSw(this,\''+key+'\','+(cbKey?"'"+cbKey+"'":'null')+','+(cbKey?"'"+key+"'":'null')+')" data-key="'+key+'"><div class="rt-left"><div class="t">'+label+'</div>'+(desc?'<div class="s">'+desc+'</div>':'')+'</div><div class="sw'+(val?' on':'')+'"><i></i></div></div>'}
+ui.rowSw=function(el,key,cbKey){
+ var obj=cbKey?S[cbKey]:S;obj[key]=!obj[key];save();
+ var sw=el.querySelector('.sw');sw.classList.toggle('on',obj[key]);
+ if(key==='fakeDns'||key==='blockAds'||key==='bypassLanIPv6')toast((obj[key]?'فعال شد':'خاموش شد'));
+ applyTheme()}
+function rowNav(label,sub,fn,ic,dgr){return '<div class="rt clickable'+(dgr?' dgr':'')+'" onclick="'+fn+'"><div class="rt-left">'+(ic?'<div class="ric">'+ic+'</div>':'')+'<div class="t">'+label+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div><span class="chev"></span></div>'}
+function rowPicker(label,cur,fn){return '<div class="rt clickable" onclick="'+fn+'"><div class="rt-left"><div class="t">'+label+'</div></div><span class="pval" id="pv-'+label+'">'+cur+'</span><span class="chev"></span></div>'}
+function renderSettingsRoot(){var el=$('#setRoot');if(!el)return;
+ el.innerHTML=
+  rowLabelT('شخصی‌سازی')
+  +'<div class="list">'
+  +rowNav('ظاهر','تم، رنگ، انیمیشن و سبک‌های صفحهٔ خانه',"ui.tN('ui-appearance')")
+  +rowNav('نقش‌ها','پیش‌فرض‌های سریع شخصی‌سازی',"ui.tN('ui-profile')")
+  +rowNav('زبان','متن رابط کاربری',"ui.tN('ui-lang')")
+  +rowNav('اندازهٔ فونت',fsLabel(S.fs),"ui.tN('ui-fontsize')")
+  +rowNav('شکل گوشه‌ها',S.corner==='squared'?'مربع':S.corner==='pill'?'خیلی گرد':'گرد',"ui.tN('ui-corner')")
+  +rowNav('سبک نوار تب',navLabel(S.navStyle),"ui.tN('ui-tabbar')")
+  +'</div>'
+  +rowLabelT('شبکه و اتصال')
+  +'<div class="list">'
+  +rowNav('پروکسی و انتقال','مالتی‌پلکسینگ، TLS fragment، پروکسی محلی',"ui.tN('net-link')")
+  +rowNav('مسیریابی و قوانین','مسیرها، ساب‌ها، دامنه‌ها، IP ایرانی / خارجی',"ui.tN('routing')")
+  +rowNav('پروکسی هر اپ','روشن/خاموش کردن VPN برای تک‌تک اپ‌ها',"ui.tN('perapp')")
+  +rowNav('فایل‌های دادهٔ جئو','geoip.dat · geosite.dat · مسیرها · امضاها',"ui.tN('geo-assets')")
+  +rowNav('تور','پل‌ها، پورت محلی',"ui.tN('tor')")
+  +rowNav('تونل DNS','تونل از طریق پورت ۵۳',"ui.tN('dnstunnel')")
+  +rowNav('SSH','تونل از طریق SSH',"ui.tN('ssh')")
+  +rowNav('سایفون','مقداردهی کشوری و حالت',"ui.tN('psiphon-pg')")
+  +'</div>'
+  +rowLabelT('هوشمند و پایش')
+  +'<div class="list">'
+  +rowNav('هوش مصنوعی','چت با دستیار اتصال',"ui.tN('ai')")
+  +rowNav('مانیتور زنده','نمودار سرعت لحظه‌ای و نشست‌ها',"ui.tN('monitor')")
+  +rowNav('لاگ‌ها','گزارش کامل هسته','ui.openLogs()')
+  +'</div>'
+  +rowLabelT('درباره و پشتیبانی')
+  +'<div class="list">'
+  +rowNav('به‌روزرسانی نرم‌افزار','آخرین بررسی: امروز · نسخهٔ ۷.۲.۱',"ui.updateCheck()")
+  +rowNav('دربارهٔ نرسیس گیت‌وی','برند نرسیس · موتورهای Xray، sing-box، سایفون، تور و wg',"ui.tN('about')")
+  +rowNav('پشتیبانی','تلگرام: ‎@Narcic_team‎',"ui.support()")
+  +rowNav('حریم خصوصی','مصرف داده و گزارش',"ui.privacy()")
+  +rowNav('راهنمای سریع','مظاهر و ترمینال‌های اصلی','ui.tour()')
+  +'</div>';
+ pushLog('i','mock: settings page rendered')}
+</script>
+<script>
+"use strict";
+function subStackInit(){}
+function rowLabelT(t){return '<div class="sectttl">'+t+'</div>'}
+function rowToggle(label,desc,key,cbKey){var val=cbKey?S[cbKey][key]:S[key];
+ return '<div class="rt clickable" onclick="ui.rowSw(this,\''+key+'\','+(cbKey?"'"+cbKey+"'":'null')+')">'
+ +'<div class="rt-left"><div class="t">'+label+'</div>'+(desc?'<div class="s">'+desc+'</div>':'')+'</div>'
+ +'<div class="sw'+(val?' on':'')+'"><i></i></div></div>'}
+ui.rowSw=function(el,key,cbKey){
+ var obj=cbKey?S[cbKey]:S;obj[key]=!obj[key];save();
+ var sw=el.querySelector('.sw');if(sw)sw.classList.toggle('on',obj[key]);
+ applyTheme();if(S.runPhase==='connected')toast('پیکربندی دوباره اعمال شد','good')}
+function rowNav(label,sub,fn,ic,dgr){return '<div class="rt clickable'+(dgr?' dgr':'')+'" onclick="'+fn+'"><div class="rt-left">'+(ic?'<div class="ric">'+ic+'</div>':'')+'<div class="t">'+label+'</div>'+(sub?'<div class="s">'+esc(sub)+'</div>':'')+'</div><span class="chev"></span></div>'}
+function rowPicker(label,cur,fn){return '<div class="rt clickable" onclick="'+fn+'"><div class="rt-left"><div class="t">'+label+'</div></div><span class="pval">'+esc(cur)+'</span><span class="chev"></span></div>'}
+function rowText(label,cur,fn){return '<div class="rt clickable" onclick="'+fn+'"><div class="rt-left"><div class="t">'+label+'</div><div class="s" style="direction:ltr;text-align:'+document.dir+'">'+esc(cur)+'</div></div><span class="chev"></span></div>'}
+function fsLabel(k){var m={smallest:'کوچک‌ترین',smaller:'کوچک‌تر',default:'پیش‌فرض',larger:'بزرگ‌تر',largest:'بزرگ‌ترین'};return m[k]||'پیش‌فرض'}
+function transLabel(k){var t=TRANSITIONS.find(function(x){return x[0]===k});return t?t[1]:k}
+function navLabel(k){var t=NAVSTYLES.find(function(x){return x[0]===k});return t?t[1]:k}
+function connLabel(k){var t=CONNSTYLES.find(function(x){return x[0]===k});return t?t[1]:k}
+function tileLabel(k){var t=TILESTYLES.find(function(x){return x[0]===k});return t?t[1]:k}
+var subStack=[];
+function openSub(title,build){var sp=$('#subpage');subStack.push({title:title,build:build});sp.classList.add('show');sp.innerHTML='<div class="spb-h"><button class="backbtn" onclick="ui.subBack()">'+ICON.chev+'<span>تنظیمات</span></button><div class="st">'+esc(title)+'</div></div><div class="spb-b" id="subbody"></div>';var b=$('#subbody');b.innerHTML=build();b.scrollTop=0}
+ui.subBack=function(){$('#subpage').classList.remove('show');subStack.pop()}
+ui.tN=function(k){
+ if(k==='ui-appearance')openSub('ظاهر و تم',function(){var h='';
+  h+="<div class='sectttl'>تم سیستم</div><div class='list'>"+rowPicker(S.theme==='auto'?'تنظیم خودکار':S.theme==='dark'?'تاریک':'روشن','<span class="pill">'+(S.theme==='dark'&&S.amoled?'AMOLED':(S.theme==='auto'?'خودکار':S.theme==='dark'?'تاریک':'روشن'))+'</span>',"ui.tPick()")+'</div>'
+  +"<div class='sectttl'>رنگ اصلی</div><div style='display:flex;gap:10px;flex-wrap:wrap;padding:2px 18px'>"+ACCENTS.map(function(a){return '<div class="accdot'+(S.accent===a[0]?' on':'')+'" style="background:'+a[1]+'" onclick="ui.aPick(\''+a[0]+'\')"></div>'}).join('')+'</div>'
+  +"<div class='sectttl'>انیمیشن تغییر صفحه</div><div class='list'>"+rowPicker(transLabel(S.transition),'',"ui.trPick()")+'</div>'
+  +"<div class='sectttl'>سبک دکمهٔ اتصال</div><div class='list'>"+rowPicker(connLabel(S.connStyle),'',"ui.csPick()")+'</div>'
+  +"<div class='sectttl'>سبک کاشی ترافیک</div><div class='list'>"+rowPicker(tileLabel(S.tileStyle==='cards'?'کارت‌های دوتایی':tileLabel(S.tileStyle)),"ui.tsPick()")+'</div>'
+  +'<div class="note">با کاشی گرافیکی، زندهٔ نمودار نشان داده می‌شود. (طراحی مثل iOS)</div>';
+  return h});
+ if(k==='ui-profile')openSub('تم‌های آماده',function(){return "<div class='sectttl'>قالب‌های آمادهٔ اپ</div>"+'<div class="list">'+PROFILES.map(function(p){return '<div class="rt clickable" onclick="ui.pApply(\''+p.id+'\')"><div class="rt-left"><span class="ric" style="background:'+p.conn+'">'+p.emoji+'</span><div class="t">'+p.name+'</div><div class="s">'+p.desc+'</div><div style="display:flex;gap:4px">'+[p.conn,p.dl,p.ul].map(function(c){return '<span class="swd" style="background:'+c+'"></span>'}).join('')+'</div></div>'+(S.profile===p.id?'<span style="color:var(--acc);font-weight:700">✓</span>':'<span class="chev"></span>')+'</div>'}).join('')+'</div><div class="note">قالب‌ها رنگ دکمهٔ اتصال، کاشی‌های ترافیک، کارت کانفیگ، کارت سرور و درحال‌اتصال را یک‌جا اعمال می‌کنند.</div>'});
+ if(k==='ui-lang')openSub('زبان',function(){return '<div class="list">'+[['fa','فارسی (پیش‌فرض)'],['en','English']].map(function(x){return '<div class="rt clickable" onclick="ui.lPick(\''+x[0]+'\')"><div class="rt-left"><div class="t">'+x[1]+'</div></div>'+(S.lang===x[0]?'<span class="rr">'+ICON.check+'</span>':'')+'</div>'}).join('')+'</div>'});
+ if(k==='ui-fontsize')openSub('اندازهٔ فونت',function(){return '<div class="list">'+FONTSIZES.map(function(f){return '<div class="rt clickable" onclick="ui.fsPick(\''+f[0]+'\')"><div class="rt-left"><div class="t">'+f[1]+'</div></div>'+(S.fs===f[0]?'<span class="rr">'+ICON.check+'</span>':'')+'</div>'}).join('')+'</div><div class="note">همهٔ نوشته‌ها با نسبت مقیاس تغییر اندازه پیدا می‌کنند.</div>'});
+ if(k==='ui-corner')openSub('گوشه‌ها',function(){return '<div class="list">'+[['rounded','گرد (iOS)'],['squared','مربع'],['pill','خیلی گرد']].map(function(x){return '<div class="rt clickable" onclick="ui.cPick(\''+x[0]+'\')"><div class="rt-left"><div class="t">'+x[1]+'</div></div>'+(S.corner===x[0]?'<span class="rr">'+ICON.check+'</span>':'')+'</div>'}).join('')+'</div>'});
+ if(k==='ui-tabbar')openSub('سبک نوار تب',function(){return '<div class="list">'+NAVSTYLES.map(function(n){return '<div class="rt clickable" onclick="ui.nsPick(\''+n[0]+'\')"><div class="rt-left"><div class="t">'+n[1]+'</div></div>'+(S.navStyle===n[0]?'<span class="rr">'+ICON.check+'</span>':'')+'</div>'}).join('')+'</div>'});
+ if(k==='net-link')openSub('پروکسی و اتصال',function(){var h='<div class="list">'
+  +'<div class="kv"><span>اندازهٔ MTU</span><b>'+fd(S.mtu)+'</b></div>'
+  +'<div class="rt clickable" onclick="ui.mtuPick()"><div class="rt-left"><div class="t">تغییر اندازهٔ MTU</div></div><span class="chev"></span></div>'
+  +'</div><div class="sectttl">اشتراک اتصال (Tether)</div><div class="list">'
+  +rowToggle('VPN برای همهٔ دستگاه‌ها','کل شبکهٔ گوشی داخل تونل قرار می‌گیرد','vpn2All')
+  +rowToggle('IPv6','پشتیبانی از تونل دوگانه','v6')
+  +rowToggle('مسیرهای LAN بای‌پس شود','برای NAS، چاپگر و سرورهای محلی','bypassLan')+'</div>'
+  +'<div class="sectttl">پروکسی محلی</div><div class="list">'
+  +'<div class="kv"><span>پورت SOCKS5</span><b>'+fd(S.localProxy.socksPort)+'</b></div>'
+  +'<div class="kv"><span>پورت HTTP</span><b>'+fd(S.localProxy.httpPort)+'</b></div>'
+  +rowToggle('اتصال از LAN مجاز است','دستگاه‌های دیگر روی شبکه به پروکسی وصل می‌شوند','allowLan')+'</div>'
+  +'<div class="sectttl">مالتی‌پلکسینگ (Mux)</div><div class="list">'+rowToggle('فعال','همهٔ جلسات از یکی از پورت‌ها','mux')+rowPicker('پروتکل',S.mux.protocol.toUpperCase(),"ui.muxPick()")+rowPicker('کنکس',fd(S.mux.connections),"ui.muxConns()")+'</div>'
+  +'<div class="sectttl">TLS Fragment</div><div class="list">'+rowToggle('فعال، شکستن پکت TLS برای عبور از بازرسی','برای عبور از بازرسی','frg')+rowPicker('اندازهٔ fragment',S.frg.value,"ui.frgPick()")+'</div>';
+  return h});
+ if(k==='routing')openSub('مسیریابی و قوانین',routingPage);
+ if(k==='geo-assets')openSub('فایل‌های جئو',geoPage);
+ if(k==='tor')openSub('تور',torPage);
+ if(k==='dnstunnel')openSub('تونل DNS',function(){var h='<div class="note">تونل DNS برای مواقعی که UDP/53 باز است و بقیه بسته.</div><div class="list">'
+  +rowText('سرور DNS',S.dns.host,"ui.tN('dnstunnel')")
+  +rowPicker('کدگذاری',S.dns.proto.toUpperCase().replace('DO53','Do53'),"ui.dnProtoPick()")+'</div>'
+  +'<div style="padding:14px 18px"><button class="btn" onclick="ui.dnSave()">افزودن و آزمایش</button></div>';return h});
+ if(k==='ssh')openSub('SSH',function(){return '<div class="note">ایجاد تونل با SSH.</div><div class="list">'+rowText('میزبان',S.ssh.host,"ui.tN('ssh')")+rowText('کاربر',S.ssh.user,"ui.tN('ssh')")+'</div><div style="padding:14px 18px"><button class="btn" onclick="ui.szSave()">افزودن و آزمایش</button></div>'});
+ if(k==='logs')openSub('لاگ‌ها',logsPage);
+ if(k==='monitor')openSub('مانیتور زنده',monitorPage);
+ if(k==='about')aboutOpen();
+ if(k==='none')toast('در نمونه این بخش ساده است');
+}
+ ui.pApply=function(id){var p=PROFILES.find(function(x){return x.id===id});if(!p)return;
+  S.profile=id;S.theme='dark';S.amoled=p.amoled?1:0;S.accent=p.acc;S.cac=p.conn;S.conned=p.conned;S.dlColor=p.dl;S.ulColor=p.ul;S.dlTile=p.dlT;S.ulTile=p.ulT;S.srvCard=p.srvCard;S.srvAct=p.srvAct;S.cfgBg=p.cfgBg;S.cfgTxt=p.cfgTxt;
+  save();applyTheme();renderHome();renderServers();renderSettingsRoot();ui.subBack();toast('قالب «'+p.name+'» اعمال شد','good')}
+ui.lPick=function(l){S.lang=l;applyTheme();ui.subBack();renderTabbar();renderHome();toast(l==='fa'?'زبان عوض شد':'Switched language','good')}
+ui.fsPick=function(k){S.fs=k;applyTheme();ui.subBack();toast('فونت: '+fsLabel(k),'good')}
+ui.cPick=function(c){S.corner=c;applyTheme();ui.subBack();toast('گوشه‌ها: '+(c==='rounded'?'گرد':c==='squared'?'مربع':'خیلی گرد'),'good')}
+ui.nsPick=function(s){S.navStyle=s;applyTheme();renderTabbar();ui.subBack();toast('تب‌بار: '+navLabel(s),'good')}
+ renderSettingsRoot();
+</script>
+<script>
+"use strict";
+function routingPage(){var h='<div class="sectttl">حالت مسیریابی</div><div class="list">'+ROUTINGMODES.map(function(r){return '<div class="rt clickable" onclick="ui.rmode(\''+r[0]+'\')"><div class="rt-left"><div class="t">'+esc(r[1])+'</div><div class="s">'+esc(r[2])+'</div></div>'+(S.routingMode===r[0]?'<span class="rr">'+ICON.check+'</span>':'<span class="chev"></span>')+'</div>'}).join('')+'</div>'
+ +'<div class="sectttl">دامنه‌های مستقیم / بلاک</div><div style="padding:2px 16px">'
+ +rules.map(function(r,i){return '<div class="rt clickable" onclick="ui.ruleM('+i+')""><div class="rt-left"><div class="t">'+esc(r.name)+'</div><div class="s">'+(r.type==='direct'?'مستقیم':r.type==='block'?'بلاک':'پروکسی')+' · '+(r.domains?fd(r.domains.split('，').length):fd(r.ips||0))+' '+esc(r.kind||'')+'</div></div><span class="chev"></span></div>'}).join('')
+ +'<div class="rt clickable" onclick="ui.ruleAdd()"><div class="rt-left"><div class="t">+ افزودن قانون</div></div></div></div>'
+ +'<div class="sectttl">استراتژی حل دامنه</div><div class="list">'+rowPicker('استراتژی دامنه',S.domStrat,"ui.dstrat()")+'</div>'
+ +'<div class="sectttl">لیست‌های سیو‌شده</div><div class="list">'
+ +S.customLists.map(function(l,i){return '<div class="rt clickable" onclick="ui.listM('+i+')"><div class="rt-left"><div class="t">'+esc(l.name)+'</div><div class="s">'+esc(l.url)+'</div></div><span class="chev"></span></div>'}).join('')
+ +'<div class="rt clickable" onclick="ui.listAdd()"><div class="rt-left"><div class="t">+ افزودن لیست</div></div></div></div>'
+ +'<div class="note">قوانین سیاسی پیش‌فرض قفل‌اند و حذف نمی‌شوند.</div>'
+ +'<div style="padding:0 18px 12px"><button class="btn gray" onclick="ui.routingReset()">دور کردن به پیش‌فرض</button></div>';
+ return h}
+ui.rmode=function(k){S.routingMode=k;save();openSub('مسیریابی و قوانین',routingPage);toast('حالت: '+ROUTINGMODES.find(function(x){return x[0]===k})[1])}
+ui.dstrat=function(){aSheet('استراتژی دامنه',[['ir-domains-large','فا مسیرهای ایران + آیای (پیش فرض) 비'],['AsIs','As Is — همان‌طور که هست'],['useIPv4','یک درخواست سوییچ به IPv4'],['useIPv6','ترجیح IPv6']].map(function(x){return [ {label:x[0],sub:x[1],cb:function(){S.domStrat=x[0];save();toast('استراتژی: '+x[0],'good')}}] }))}
+ui.ruleM=function(i){var r=rules[i];var delFn=function(){rules.splice(i,1);openSub('مسیریابی و قوانین',routingPage);toast('قانون حذف شد','good')};
+ var typeFn=function(){var tg=[{label:'مستقیم',cb:function(){r.type='direct';openSub('مسیریابی و قوانین',routingPage);toast('نوع: مستقیم','good')}},{label:'بلاک',cb:function(){r.type='block';openSub('مسیریابی و قوانین',routingPage);toast('نوع: بلاک','good')}},{label:'پروکسی',cb:function(){r.type='proxy';openSub('مسیریابی و قوانین',routingPage);toast('نوع: پروکسی','good')}}];aSheet('نوع قانون',[tg])};
+ aSheet(esc(r.name),[[{label:'حذف قانون',dgr:true,cb:delFn},{label:'تغییر نوع',cb:typeFn}]])}
+ui.ruleAdd=function(){iosAlert({title:'قانون جدید',input:'',ph:'eg. okefenokee.com'},'buttons');
+ iosAlert({title:'قانون جدید',body:'دامنه یا IP را بده:',input:'',ph:'ads.com'+'،'+'cnn.com',buttons:[{label:'لغو'},{label:'افزودن',role:'def',cb:function(v){if(!v)return;rules.push({name:v,id:'ru'+Date.now(),type:'block',kind:'دامنه',domains:v});openSub('مسیریابی و قوانین',routingPage);toast('قانون اضافه شد','good')}}]})}
+ui.listM=function(i){var l=S.customLists[i];aSheet(esc(l.name),[[{label:'حذف',dgr:true,cb:function(){S.customLists.splice(i,1);save();openSub('مسیریابی و قوانين',routingPage)}},{label:'به‌روزرسانی',cb:function(){toast('لیست تازه شد','good')}}]])}
+ui.listAdd=function(){iosAlert({title:'لیست جدید',body:'نشانی لیست (غالباً .dat یا .mrs):',input:'',ph:'https://example.com/ads.mrs',buttons:[{label:'لغو'},{label:'افزودن',role:'def',cb:function(v){if(!v)return;S.customLists.unshift({name:'لیست محلي ' + fd(S.customLists.length+1),url:v});save();openSub('مسیریابی و قوانین',routingPage);toast('لیست اضافه شد','good')}}]})}
+ui.routingReset=function(){S.customLists=[];S.domStrat='ir-domains-large';save();openSub('مسیریابی و قوانین',routingPage);toast('به پیش‌فرض رفت')}
+var LOC={};
+function geoPage(){var h='<div class="sectttl">فایل‌های جئو</div><div style="padding:2px 16px">';
+ ['#geoip','#geosite','#country-mmdb','#apple-tld'].forEach(function(id,i){var nm=id.replace('#','');var size=['۱۱.۹ مگابایت','۱۶.۷ مگابایت','۵.۹ مگابایت','۰.۸ مگابایت'][i];
+ h+='<div class="rt clickable" onclick="ui.geoUpd(\''+nm+'\')"><div class="rt-left"><div class="t">'+nm+'</div><div class="s">'+esc(size)+' · به‌روزرسانی:last: در3 روز پیش</div></div><button class="minibtn" onclick="event.stopPropagation();ui.geoUpd(\''+nm+'\')">به‌روزرسانی</button></div>'});
+ h+='</div><div class="sectttl">منبع جئو (fanashed)</div><div class="list">'+rowPicker('مسیر دانلود',S.geoSrc,"ui.geoSrcPick()")+'</div>'
+ +'<div class="note">شاخص‌های جئو برای جستوجوهای مسیریابی کاربرد دارند. تاریخ حذف تاریخچه: هرگز</div><div style="padding:0 18px 12px"><button class="btn gray" style="color:var(--bad)" onclick="ui.geoDel()">حذف همه</button></div>';
+ return h}
+var geoUpdade='';
+ui.geoUpd=function(nm){toast('در حال به‌روزرسانی '+nm+'…');setTimeout(function(){toast(nm+' به‌روزرسانی شد','good');pushLog('i','assets: '+nm+' updated')},1300)}
+ui.geoSrcPick=function(){aSheet('منبع جئو',[['narcis','سرور خودِ نرسیس'],['rather','emies list'],['custom','نشانی سفارشی']].map(function(x){return [{label:x[0],cb:function(){S.geoSrc=x[0];save();toast('منبع: '+x[0],'good')}}]}))}
+ui.geoDel=function(){iosAlert({title:'حذف فایل‌های جئو',body:'این فایل‌ها دوباره دانلود می‌شوند. انجام شود؟',buttons:[{label:'لغو'},{label:'حذف',role:'dgr',cb:function(){toast('حذف شد','bad')}}]})}
+function torPage(){var h='<div class="note">اتصال به شبکهٔ تور برای دور زدن سایت بسته یا پنهان‌کاری.</div><div class="list">'
+ +rowPicker('پل‌ها',S.tor.plug==='none'?'بدون پل':S.tor.plug,"ui.tbPick2()")
+ +'<div class="kv"><span>پورت محلی</span><b>'+fd(9150)+'</b></div>'
+ +rowToggle('ورود خودکار',false,'tor')+'</div>'
+ +'<div style="padding:0 18px 12px"><button class="btn" onclick="ui.tbSaveParam()">آزمایش اتصال</button></div>';
+ return h}
+ui.tbPick2=function(){aSheet('انتخاب پل',[['none','بدون پل'],['obfs4','obfs4'],['snowflake','Snowflake'],['webtunnel','WebTunnel']].map(function(x){return [{label:x[1],cb:function(){S.tor.plug=x[0];save();openSub('تور',torPage);toast('پل: '+x[1])}}]}))}
+ui.tbSaveParam=function(){toast('در حال اتصال آزمایشی…');setTimeout(function(){var ok=Math.random()>.25;toast(ok?'تور پاسخ داد — آماده':'اتصال برقرار نشد؛ پل دیگری امتحان کن',ok?'good':'bad')},1600)}
+ui.paMode=function(k){S.paMode=k;save();openSub('پروکسی هر اپ',perAppPage)}
+function perAppPage(){var h='<div class="sectttl">حالت</div><div class="list">'
+ +[['allow','همه اپ‌ها VPN — فقط اپ‌های منتخب بلاک'],['deny','هیچ‌کدام VPN — فقط اپ‌های منتخب وصل']]
+ .map(function(x){return '<div class="rt clickable" onclick="ui.paMode(\''+x[0]+'\')"><div class="rt-left"><div class="t">'+esc(x[1])+'</div></div>'+(S.paMode===x[0]?'<span class="rr">'+ICON.check+'</span>':'<span class="chev"></span>')+'</div>'}).join('')
+ +'</div><div class="sectttl">اپلیکیشن‌ها</div><div class="list">'
+ +APPS.map(function(a,i){return '<div class="rt clickable" onclick="ui.apSw('+i+')"><div class="rt-left"><div class="t">'+(a.system?'⚙️ ':'')+esc(a.name)+'</div>'+(a.system?'<div class="s">سیستمی</div>':'')+'</div><div class="sw'+(S.apps[i]?' on':'')+'"><i></i></div></div>'}).join('')+'</div>';
+ return h}
+ui.apSw=function(idx){S.apps[idx]=!S.apps[idx];save();openSub('پروکسی هر اپ',perAppPage);toast(APPS[idx].name+' — '+(S.apps[idx]?'از طریق VPN':'مستقیم'))}
+</script>
+<script>
+"use strict";
+function monitorPage(){var con=S.runPhase==='connected';var h='<div class="sectttl">نمایش زنده</div><div class="monwrap">'
+ +'<canvas id="monC" width="340" height="120"></canvas>'
+ +'<div class="monrow"><span class="mlab">↓ <b id="monDl">'+(con?fmtSpd(lastDlV):'0.00')+' MB/s</b></span><span class="mlab">↑ <b id="monUl">'+(con?fmtSpd(lastUlV):'0.00')+' MB/s</b></span></div>'
+ +(con?'':'<div class="note">برای دیدن جریان زنده، اتصال را برقرار کن.</div>')
+ +'</div><div class="sectttl">زنجیرهٔ پروکسی</div><div class="list">'+chainList()+'</div><div style="height:16px"></div>';
+ return h}
+function chainList(){var a=activeServer(),con=S.runPhase==='connected';var nodes=con?['دستگاه تو','Xray هسته','TUN/TAP',a?a.flag+' '+a.name:'—','اینترنت آزاد']:['دستگاه تو','ISP','اینترنت (بدون تونل)'];
+ return nodes.map(function(n,i){return '<div class="chainrow"><div class="cdot">'+(i===0?'📱':i===nodes.length-1?'🌐':con?'⚡':'☁️')+'</div><span>'+esc(n)+'</span>'+(i<nodes.length-1?'<div class="cline'+(con?' on':'')+'"></div>':'')+'</div>'}).join('')}
+var monIds=[];function monitorStart(){var c=$('#monC');if(!c)return;var ctx=c.getContext('2d');var pts=[];
+ monIds.push(setInterval(function(){
+  var co=S.runPhase==='connected';
+  pts.push([co?lastDlV:0,co?lastUlV:0]);while(pts.length>60)pts.shift();
+  ctx.clearRect(0,0,340,120);ctx.strokeStyle=dlC();ctx.lineWidth=1.5;ctx.beginPath();
+  pts.forEach(function(p,i){var x=340-(60-i)*5.6,y=118-Math.min(1,p[0]/10)*110;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+  ctx.stroke();ctx.strokeStyle=ulC();ctx.beginPath();
+  pts.forEach(function(p,i){var x=340-(60-i)*5.6,y=118-Math.min(1,p[1]/10)*110;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+  ctx.stroke();
+  var dl=$('#monDl'),ul=$('#monUl');if(dl)dl.textContent=fmtSpd(lastDlV)+' MB/s';if(ul)ul.textContent=fmtSpd(lastUlV)+' MB/s';
+  },500))}
+function monitorStop(){monIds.forEach(clearInterval);monIds=[]}
+ui.tN('monitor');
+ui.openAi=function(){openSub('دستیار هوشمند',function(){return aiChatHtml()});aiFocus()}
+function aiChatHtml(){return '<div class="aichat" id="aiChat">'+aiMsgs().join('')+'</div><div style="position:sticky;bottom:0;background:transparent"><div class="airow"><input class="if" id="aiTx" placeholder="سوالت دربارهٔ اتصال…"><button class="btn ai" style="width:44px;padding:0" onclick="ui.aiSend()">↗</button></div><div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 16px" id="aiQs">'+aiChips().map(function(q){return '<span class="chip" onclick="ui.aiAsk(\''+esc(q)+'\')">'+esc(q)+'</span>'}).join('')+'</div></div>'}
+function aiMsgs(){return (S.ai.chat&&S.ai.chat.length?S.ai.chat:DEFAULTAI).map(function(m){return '<div class="aim '+(m.role==='u'?'u':'')+'"><div class="b">'+esc(m.text)+'</div></div>'})}
+function aiChips(){return ['چرا وصل نمی‌شه؟','_TLS fragment چه کاری می‌کنه؟','بهترین پروتکل برای سرعت فوف؟']}
+function aiFocus(){setTimeout(function(){var t=$('#aiTx');t&&t.focus()},350)}
+ui.aiAsk=function(q){var t=$('#aiTx');if(t){t.value=q;ui.aiSend()}};
+ui.aiSend=function(){var t=$('#aiTx');var v=t.value.trim();if(!v)return;
+ S.ai.chat=S.ai.chat.length?S.ai.chat:DEFAULTAI.slice();S.ai.chat.push({role:'u',text:v});
+ var rep=aiReply(v);S.ai.chat.push({role:'a',text:rep});save();
+ $('#aiChat').innerHTML=aiMsgs().join('');t.value='';var c=$('#aiChat');c.scrollTop=c.scrollHeight;
+ pushLog('i','AI: user asked «'+v.slice(0,24)+'…»')}
+function aiReply(q){q=q.toLowerCase();
+ if(q.includes('وصل')||q.includes('قطع'))return 'اول ادامه؛ اگر سرور خیلی شلوغه از دکمهٔ ⁋ تأخیر واقعی سرورها را تست کن و یک سرور با پینگ زیر ۱۰۰ انتخاب کن. اگر باز هم نشد، حالت «TLS Fragment» را روشن کن — معمولاً همان لحظه حیت می‌شود.';
+ if(q.includes('fragment'))return 'TLS Fragment پکت‌های TLS را تکه‌تکه می‌کند تا بازرسی‌ها نتوانند آنها را بخوانند. برای جلوگیری از شناسایی، این گزینه را روشن بگذار.';
+ if(q.includes('پروتکل')||q.includes('vless')||q.includes('ریلاتی'))return 'برای سرعت: VLESS + Reality + Mux خاموش، کانکس تا ۸؛ برای ضد فیلترینگ: Reality + fragment روشن با گروهی پکت ۱۰-۳۰‌۰.';
+ if(q.includes('mux')||q.includes('مالتی'))return 'Mux همهٔ جلسات را روی یک مسیر می‌گذارد؛ برای بازی‌های آنلاین خاموش‌تر به‌خاطر تداخل.';
+ return 'متوجه نشدم! بپرس دربارهٔ اتصال، پروتکل‌ها، fragment، mux یا مسیریابی.'}
+var DEFAULTAI=[{role:'a',text:'ســلام 👋 من دستیار نرسیس‌م. در مورد اتصال، protocol یا routing چیزی بخوای بگو، کمکت می‌کنم.'}];
+</script>
+<style id="latecss">
+.swd{width:13px;height:13px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.phone .tiles.g2 .tile:first-child{background:var(--dltile,var(--card))}
+.phone .tiles.g2 .tile:last-child{background:var(--ultile,var(--card))}
+.phone .srv{background:var(--srvcard,var(--card))}
+.phone .srv.act{border-color:var(--srvact,var(--acc))}
+.phone .cfgcard{background:var(--cfgbg,var(--card))}
+.rt{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:var(--rp) 16px;border-bottom:1px solid var(--sep);min-height:46px}
+.rt-left{display:flex;align-items:center;gap:11px;min-width:0}
+.rt .t{font-size:14.5px}
+.rt .s{font-size:11.5px;color:var(--t2);margin-top:3px}
+.rt .ric{width:30px;height:30px;border-radius:8px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none}
+.rt .pval{color:var(--t2);font-size:13px}
+.rt .rr{color:var(--acc)}
+.rt.dgr .t{color:var(--bad)}
+.rt.clickable{cursor:pointer;color:inherit;text-decoration:none}
+.list{margin:6px 14px 12px;background:var(--card);border-radius:var(--cr);overflow:hidden;box-shadow:inset 0 0 0 1px var(--sep)}
+.sectttl{padding:12px 20px 8px;font-size:12px;font-weight:750;color:var(--t2)}
+.note{margin:8px 16px;padding:10px 14px;border-radius:13px;background:color-mix(in srgb,var(--acc) 9%,var(--card));font-size:12.2px;color:var(--t2);line-height:1.9}
+.minibtn{border:none;background:var(--fill);color:var(--acc);border-radius:11px;padding:7px 12px;font-size:11.5px;font-weight:700;cursor:pointer;flex:none}
+.spb-h{padding:14px 16px 10px;display:flex;flex-direction:column;gap:6px}
+.backbtn{display:inline-flex;align-items:center;gap:2px;background:none;border:none;color:var(--acc);font-size:15px;font-weight:600;cursor:pointer;padding:0}
+.backbtn svg{width:20px;height:20px;transform:none}
+.spb-h .st{font-size:26px;font-weight:800}
+.spb-b{flex:1;overflow-y:auto;max-height:calc(100% - 84px);padding-bottom:26px}
+.monwrap{margin:4px 16px 10px;background:var(--card);border-radius:var(--cr);padding:12px;box-shadow:inset 0 0 0 1px var(--sep)}
+.monwrap canvas{width:100%;height:110px;display:block}
+.monrow{display:flex;justify-content:space-between;padding:8px 6px 2px}
+.mlab{font-size:12.5px;color:var(--t2)}.monrow b{color:var(--t)}
+.chainrow{display:flex;align-items:center;gap:10px;padding:7px 18px;font-size:13px}
+.cdot{width:26px;height:26px;background:var(--fill);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.cline{flex:1;border-top:2px dashed var(--sep);opacity:.6}
+.cline.on{border-top-color:var(--acc);opacity:1;background-image:none}
+.aichat{display:flex;flex-direction:column;gap:8px;padding:8px 16px 10px;max-height:340px;overflow-y:auto}
+.aim{display:flex}
+.aim .b{background:var(--fill);border-radius:16px;padding:9px 12px;font-size:13.2px;line-height:1.9;max-width:82%}
+.aim.u{justify-content:flex-start}
+.aim.u .b{background:var(--acc);color:#fff}
+.airow{display:flex;gap:8px;padding:4px 16px}
+.aichat .btn.ai{font-size:19px;border-radius:12px}
+.pinpad{display:flex;flex-direction:column;align-items:center;padding:8px 26px 6px}
+.pd-dots{display:flex;gap:13px;margin:6px 0 18px}
+.pd-dots i{width:13px;height:13px;border-radius:50%;background:var(--fill);transition:.2s}
+.pd-dots i.on{background:var(--acc)}
+.pd-keys{display:grid;grid-template-columns:repeat(3,64px);gap:12px;justify-content:center}
+.pd-keys button{width:64px;height:64px;border-radius:50%;border:none;background:var(--fill);color:var(--t);font-size:24px;cursor:pointer}
+.pd-keys button:active{background:var(--acc);color:#fff}
+.pd-keys .blank{visibility:hidden}
+.vault-hero{text-align:center;padding:30px 30px 14px}
+.vh-ic{width:64px;height:64px;border-radius:18px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.vh-ic svg{width:32px;height:32px}
+.vh-t{font-size:17px;font-weight:800}
+.vh-s{font-size:12px;color:var(--t2);margin-top:6px;line-height:2}
+.lockbar{text-align:center;color:var(--warn);font-size:12px}
+.qrbox{display:flex;justify-content:center;padding:18px}
+.qrbox canvas{width:170px;height:170px;border-radius:12px}
+.gaugebox{text-align:center;margin:8px 18px 4px;padding:16px;background:var(--card);border-radius:var(--cr);box-shadow:inset 0 0 0 1px var(--sep)}
+.gaugebox svg{width:210px;height:130px}
+.gauge-num{font-size:42px;font-weight:800;margin-top:-44px;letter-spacing:-1px}
+.gauge-unit{font-size:12px;color:var(--t2);font-weight:600}
+.phase{margin:10px 0 4px;color:var(--t2);font-size:12.5px;min-height:18px}
+.spgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 18px}
+.spbox{background:var(--card);border-radius:14px;padding:12px;box-shadow:inset 0 0 0 1px var(--sep)}
+.spbox .sv{font-size:19px;font-weight:750}
+.spbox .sk{font-size:10.5px;color:var(--t2);margin-top:3px}
+.mapwrap{margin:10px 18px;background:#111725;border-radius:var(--cr);padding:4px;overflow:hidden}
+.mapwrap svg{width:100%;display:block}
+.logwrap{max-height:300px;overflow-y:auto;margin:4px 14px 8px;background:#0a0e16;border-radius:13px;padding:10px 12px;direction:ltr;text-align:left}
+.logline{font-family:ui-monospace,Consolas,monospace;font-size:10.3px;line-height:2;color:#9fb1c9;white-space:pre-wrap;word-break:break-all}
+.logline .lt{color:#5d7495}
+.logline.w{color:#f0b840}.logline.e{color:#ff6b60}.logline.g{color:#4cd776}
+.pp{font-size:10.2px;font-weight:700;border-radius:8px;padding:3px 8px;background:var(--fill);color:var(--t2);flex:none}
+.pp.mid{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.pp.slow{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)}
+.pp.good{background:color-mix(in srgb,#30D158 22%,transparent);color:#30D158}
+.pp.no{color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,transparent)!important}
+.pingpb{height:6px;border-radius:4px;background:var(--fill);overflow:hidden}
+.pingpb i{display:block;height:100%;width:4%;border-radius:4px;background:var(--acc);transition:width .28s}
+.srv-toolsbar{position:absolute;bottom:96px;right:0;left:0;display:flex;justify-content:center;gap:8px;z-index:8}
+.tbn{background:var(--card);color:var(--acc);border:none;box-shadow:0 8px 22px rgba(0,0,0,.28),inset 0 0 0 1px var(--sep);padding:9px 16px;border-radius:17px;font-size:12.2px;font-weight:750;cursor:pointer;backdrop-filter:blur(12px)}
+.srv .dots{margin-inline-start:auto;background:none;border:none;color:var(--t2);cursor:pointer;padding:4px}
+.srv .dots svg{width:16px;height:16px;transform:none}
+.srch{display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:12px;padding:8px 12px}
+.tabbar{text-align:center}
+.if{width:100%;box-sizing:border-box;background:var(--fill);border:none;border-radius:12px;padding:12px 14px;color:var(--t);font-size:14.5px;font-family:inherit;margin-top:2px;outline:none}
+.if:focus{box-shadow:0 0 0 2px var(--acc)}
+textarea.if{resize:vertical}
+.lbl{font-size:12px;color:var(--t2);font-weight:650;margin:12px 0 4px}
+.tagbtn{background:var(--fill);color:var(--acc);border:none;border-radius:12px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer}
+.accdot{width:30px;height:30px;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(255,255,255,.25)}
+.accdot.on{box-shadow:0 0 0 2.5px var(--card),0 0 0 4.5px var(--acc)}
+</style>
+<script>
+"use strict";
+function boot(){
+ if(!S.profile){S.profile='narcis';S.accent='#0F9D6C';S.cac='#0F9D6C';S.conned='#0A6E4E';S.dlColor='#3FD898';S.ulColor='#FFCE54';S.dlTile='#0A2E22';S.ulTile='#332705';S.srvCard='#0B2A20';S.srvAct='#0F9D6C';S.cfgBg='#0D2F24';S.cfgTxt='#E2FFF2';S.amoled=0;save()}
+ if(!S.apps||S.apps.length!==APPS.length)S.apps=APPS.map(function(){return false});
+ if(!S.customLists)S.customLists=[];
+ if(!S.tor)S.tor={plug:'none'};
+ if(!S.dns)S.dns={host:'dns.example.com',proto:'do53'};
+ if(!S.ssh)S.ssh={host:'',user:''};
+ if(!S.ai)S.ai={chat:[]};
+ applyTheme();
+ TABS.forEach(function(t){var p=document.getElementById('p-'+t[0]);if(p)p.style.display='none'});
+ var hp=document.getElementById('p-home');if(hp)hp.style.display='flex';
+ curTab='home';renderTabbar();
+ renderSrvChips();renderServers();renderHome();renderVault();renderSettingsRoot();
+ iv('clock',20000,updClock);updClock();
+ fit();
+ pushLog('i','xray-core: v1.8.4 · '+servers.length+' کانفیگ بارگذاری شد');
+ pushLog('w','dns: 45.33.44.11 دوباره کوئری شد(w)');
+ pushLog('i','DeepLink: narcicgeteway:// ثبت شد');
+ save();
+}
+function updClock(){var c=$('#clocktime');if(!c)return;var d=new Date();var h=d.getHours(),m=d.getMinutes();
+ c.textContent=(clockH())+':'+String(m).padStart(2,'0')}
+setTimeout(boot,60);
+</script>
+<script>
+"use strict";
+ui.closeTop=function(){var w=$('#alertwrap');if(w.classList.contains('show')){w.classList.remove('show');return}
+ if($('#scanov').classList.contains('show')){$('#scanov').classList.remove('show');return}
+ if($('#subpage').classList.contains('show')){ui.subBack();return}
+ closeSheet()}
+ui.tPick=function(){aSheet('تم نمایش',[['auto','هماهنگ با سیستم'],['dark','تاریک'],['light','روشن']].map(function(x){return [{label:x[1],cb:function(){S.theme=x[0];S.amoled=false;save();applyTheme();ui.tN('ui-appearance');toast('تم: '+x[1],'good')}}]}).concat([[{label:'AMOLED تاریک (بدون خاکستری)',dgr:false,cb:function(){S.theme='dark';S.amoled=true;save();applyTheme();ui.tN('ui-appearance');toast('AMOLED فعال','good')}}]]))}
+ui.aPick=function(name){S.accent=name;save();applyTheme();ui.tN('ui-appearance');toast('رنگ: '+name,'good')}
+ui.trPick=function(){aSheet('انیمیشن',TRANSITIONS.map(function(x){return [{label:x[1],cb:function(){S.transition=x[0];save();toast('انیمیشن: '+x[1],'good')}}]}))}
+ui.csPick=function(){aSheet('سبک دکمهٔ اتصال',CONNSTYLES.map(function(x){return [{label:x[1],cb:function(){S.connStyle=x[0];save();switchTabIdKeep(x[0]);renderHome();toast('دکمه: '+x[1],'good')}}]}))}
+function switchTabIdKeep(){}
+ui.tsPick=function(){aSheet('سبک کاشی‌ها',TILESTYLES.map(function(x){return [{label:x[1],cb:function(){S.tileStyle=x[0];save();renderHome();toast('کاشی: '+x[1],'good')}}]}))}
+ui.mtuPick=function(){iosAlert({title:'اندازهٔ MTU',body:'مقدار ۱۲۸۰ تا ۹۰۰۰:',input:String(S.mtu),ph:'1420',buttons:[{label:'لغو'},{label:'ذخیره',role:'def',cb:function(v){var n=parseInt(v);if(!n||n<1280||n>9000){toast('خارج از بازه','bad');return}S.mtu=n;save();toast('MTU: '+fd(n),'good')}}]})}
+ui.muxPick=function(){aSheet('پروتکل Mux',[['h2mux','h2mux'],['smux','smux'],['yamux','yamux']].map(function(x){return [{label:x[1],cb:function(){S.mux.protocol=x[0];save();toast('پروتکل: '+x[1],'good')}}]}))}
+ui.muxConns=function(){iosAlert({title:'تعداد=session',body:'۱ تا ۱۲۸:',input:String(S.mux.connections),ph:'8',buttons:[{label:'لغو'},{label:'ذخیره',role:'def',cb:function(v){var n=parseInt(v);if(!n||n<1||n>128){toast('خارج از بازه','bad');return}S.mux.connections=n;save();toast('sessions: '+fd(n),'good')}}]})}
+ui.frgPick=function(){aSheet('اندازهٔ Fragment',[['10-30','کوچک (۱۰-۳۰)'],['30-50','متغم (۳۰-۵۰)'],['100-200','بزرک (۱۰۰-۲۰۰)']].map(function(x){return [{label:x[1],cb:function(){S.frg.value=x[0];toast('fragment: '+x[0],'good')}}]}))}
+ui.dnProtoPick=function(){aSheet('پروتکل DNS',[['do53','Do53 (UDP 53)'],['doh','DoH']].map(function(x){return [{label:x[1],cb:function(){S.dns.proto=x[0];toast('DNS: '+x[1],'good')}}]}))}
+"use strict";
+var _tN=ui.tN;
+ui.tN=function(k){
+ if(k==='perapp'){openSub('پروکسی هر اپ',perAppPage);return}
+ if(k==='psiphon-pg'){openSub('سایفون',function(){return '<div class="note">از شبکهٔ سایفون برای دور زدن فیلتر استفاده کن؛ برای انجام کارهای سنگین مناسب نیست.</div><div class="list">'
+  +rowPicker('کشور خروج',PB.ctry==='auto'?'هوشمند':PB.ctry,"ui.psCtryPick()")
+  +rowPicker('حالت',PB.mode==='auto'?'هوشمند':PB.mode,"ui.psModePick()")+'</div>'
+  +'<div style="padding:0 18px 12px"><button class="btn" onclick="ui.psSave()">ذخیره و آزمایش</button></div>'});return}
+ if(k==='ai'){ui.openAi();return}
+ if(k==='monitor'){openSub('مانیتور زنده',monitorPage);setTimeout(monitorStart,80);return}
+ if(k==='about'){aboutOpen();return}
+ _tN(k)};
+ui.psCtryPick=function(){aSheet('کشور خروج',[[{label:'هوشمند',sub:'زودترین مسیر',cb:function(){PB.ctry='auto';save();toast('کشور: هوشمند')}},{label:'آلمان 🇩🇪',cb:function(){PB.ctry='DE';save();toast('کشور: آلمان')}},{label:'ترکیه 🇹🇷',cb:function(){PB.ctry='TR';save();toast('کشور: ترکیه')}},{label:'آمریکا 🇺🇸',cb:function(){PB.ctry='US';save();toast('کشور: آمریکا')}},{label:'سوئد 🇸🇪',cb:function(){PB.ctry='SE';save();toast('کشور: سوئد')}}]])}
+function aboutOpen(){openSheet('<div class="shd"><h3>دربارهٔ نرسیس گیت‌وی</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="text-align:center;padding:8px 24px 14px"><div class="vh-ic" style="display:inline-flex">'+ICON.shieldSmall2.replace('<svg','<svg width="30" height="30"')+'</div><div class="vh-t">Narcic Gateway ۷.۲.۱</div><div style="margin-top:10px;color:var(--t2);font-size:12.2px;line-height:2.1">نرسیس گیت‌وی یک جای جایگاه است. این تصوِیر به فایل "docs/mockup/index.html" در همان ریپو ساخته شده — RTL تماماً شبیه آیفون.</div>'
+ +'<div class="note">ساختار رابط واقعی کامپوز از فایل‌های TopDestination/NavConfig و رشته‌های فارسی الهام شده است.</div>'
+ +'<div class="list">'+kv('لایسنس','GPL-3.0')+kv('کانال تلگرام','@Narcic_team')+kv('منبع کد','github.com/valid7996/Narcic-Getway')+kv('لینک‌های عمیق','narcicgeteway://')+'</div>'
+ +'<button class="btn gray" onclick="closeSheet();toast()">دستگاه</button><div style="height:16px"></div>')}
+ui.about=aboutOpen;
+ui.support=function(){openSheet('<div class="shd"><h3>پشتیبانی</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px"><div class="note">برای پشتیبانی مشکلات یا اشکال به کانال نرسیس پیام بده؛ ۱٫د۲ سوی از پاسخ سریع تیم باکس.</div>'
+ +'<button class="btn" onclick="closeSheet();copyTxt(\'@Narcic_team\');toast(\'آی‌دی کپی شد\',\'good\')">کپی آی‌دی تلگرام</button>'
+ +'<button class="btn gray" style="margin-top:8px" onclick="ui.reportBug()">گزارش اشکال (لاگ)</button><div style="height:16px"></div>')}
+ui.reportBug=function(){closeSheet();ui.openLogs();toast('لاگ‌ها را کپی کن و به تلگرام بفرست')}
+ui.privacy=function(){openSheet('<div class="shd"><h3>حریم خصوصی</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 20px"><div class="note">هفته‌اٍ‌م هیچ داده‌ای جمع نمی‌شود؛ فقط لات کرانش برقراری اتصال از جها landmarks. این طرح تاریخ بست خود را زمان انداختن است.</div>'
+ +'<div class="list">'+rowToggle('اشتراک‌گذاری آمار گزارش تصادم','بدون هیچ شناسهٔ شخصی','crashShare')+rowToggle('دسترسی محل را نپذیر','میتوان باشد','noGeo')+'</div>'
+ +'<button class="btn gray" onclick="closeSheet()">بستن</button><div style="height:16px"></div>')}
+ui.tour=function(){openSheet('<div class="shd"><h3>راهنمای سریع</h3><button class="x" onclick="closeSheet()">'+ICON.x+'</button></div><div style="padding:0 18px 22px"><div class="note">۱) باز کن، ۲) سرور انتخاب کن، ۳) وصل شوی؛ اگر گذاشتی، صفحهٔ لاگ‌ها یا "تأخیر واقعی" برای صفحهٔ نخست سرورها را ببین، یا fragment را روشن کن.</div><div class="note">این طرح iOS-style است؛ docs/mockup/index.html به یک ریپو نرسیس جهانی ست برای نسخهٔ کامپوز.</div><button class="btn" onclick="closeSheet();ui.tab(2)">رفتن به سرورها</button><div style="height:16px"></div>')}
+ui.updateCheck=function(){toast('در حال بررسی…');setTimeout(function(){toast('شما به‌روزترین نسخه را داری (۷.۲.۱)','good')},1300)}
+ui.psModePick=function(){aSheet('حالت سایفون',[[{label:'هوشمند',cb:function(){PB.mode='auto';save();toast('حالت: هوشمند')}},{label:'فقط CDN',cb:function(){PB.mode='cdn';save();toast('حالت: CDN')}},{label:'Beast',cb:function(){PB.mode='beast';save();toast('حالت: Beast')}},{label:'مستقیم',cb:function(){PB.mode='direct';save();toast('حالت: مستقیم')}}]])}
+var ROUTINGMODES=[['default','پیش‌فرض · خارج','ترافیک خارجی از تونل؛ داخلی مستقیم'],['byip','بر پایهٔ IP ایران','آی‌ پی‌های ایران مستقیم می‌مانند'],['common',"فروشگاه‌ها و بانک‌ها"],['manual','فقط قانون‌ها','چیزهایی که خودم انتخاب کردم']]
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rsta_title">SNI spoof (بدون روت)</string>
+    <string name="rsta_sub">IP و پورت اتصال، SNI جعلی و روش برای کانفیگ‌هایی که به 127.0.0.1:40443 اشاره می‌کنند</string>
+    <string name="rsta_note">مثل RstaNG کار می‌کند. کانفیگی را وارد یا بسازید که سرورش 127.0.0.1 و پورتش 40443 است (نام سرور TLS و host آن همان واقعی‌ها هستند)؛ این کانفیگ از موتور داخلی رد می‌شود. موتور به IP زیر وصل می‌شود و چند بسته‌ی اول را با SNI جعلی پنهان می‌کند. تغییرات روی اتصال یا تست بعدی اعمال می‌شود.</string>
+    <string name="rsta_connect_ip">IP اتصال</string>
+    <string name="rsta_connect_ip_hint">یک IP تمیز از CDN که سرور پشت آن است</string>
+    <string name="rsta_connect_port">پورت اتصال</string>
+    <string name="rsta_fake_sni">SNI جعلی</string>
+    <string name="rsta_fake_sni_hint">نام سروری که فیلتر عبور می‌دهد، مثل cdnjs.cloudflare.com</string>
+    <string name="rsta_method">روش عبور</string>
+    <string name="rsta_status">وضعیت موتور</string>
+    <string name="rsta_status_hint">با یک اتصال یا تست شروع می‌شود و با پایان آن‌ها متوقف می‌شود.</string>
+    <string name="rsta_view_log">مشاهده‌ی لاگ</string>
+    <string name="rsta_log_empty">هنوز خطی در لاگ نیست.</string>
+</resources>

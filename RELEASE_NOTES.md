@@ -1,3 +1,18 @@
+# 🔥 Hellboy VPN v5.0.0 — موتور Narcic Gateway با پوسته‌ی Hellboy
+
+## 🇮🇷 فارسی
+- **موتور کامل Narcic Gateway**: Xray، sing-box، Psiphon، Aether، Tor، DNS tunnels (DNSTT / VayDNS / MasterDNS)، WireGuard/AWG، IKEv2، SSH، OpenConnect، SNI spoof، لینک‌های `narcicgeteway://`، مسیریابی و انتخاب خودکار.
+- **پوسته‌ی Hellboy**: پیش‌فرض، چهره‌ی هلبوی روی صفحه‌ی اصلی، دیوار بتنی، خون و آتش، رنگ‌بندی نارنجی.
+- **شناسه‌ی اپ** همان `com.helboy.vpnclub` است؛ روی نسخه‌های قبلی با همان کلید به‌روزرسانی می‌شود.
+- ۶۲۰ تست واحد پاس شد.
+
+## 🇬🇧 English
+- **Full Narcic Gateway engine**: Xray, sing-box, Psiphon, Aether, Tor, DNS tunnels, WireGuard/AWG, IKEv2, SSH, OpenConnect, SNI spoof, `narcicgeteway://` links, routing and auto-select.
+- **Hellboy skin**: default theme, Hellboy face hero, concrete wall, blood and fire backdrop, orange palette.
+- **Application ID** is still `com.helboy.vpnclub`; it updates over earlier installs signed with the same key.
+- 620 unit tests pass.
+
+
 # 🔥 Hellboy VPN v4.2.2 — تست‌های E2E و تگ‌های تست
 
 ## 🇮🇷 فارسی
