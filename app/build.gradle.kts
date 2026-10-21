@@ -25,7 +25,7 @@ android {
 
     defaultConfig {
         applicationId = "com.helboy.vpnclub"
-        minSdk = 24
+        minSdk = 29
         targetSdk = 36
         versionCode = (project.property("narcicgeteway.versionCode") as String).toInt()
         versionName = project.property("narcicgeteway.versionName") as String
