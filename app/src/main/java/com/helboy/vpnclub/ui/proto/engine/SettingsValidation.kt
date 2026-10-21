@@ -86,3 +86,17 @@ enum class TunEngine(val label: String) {
         Zep -> s.copy(useHevTun = true, useZepTun = true)
     }
 }
+
+/** What to show a person who wants another device to use the shared LAN proxy. */
+object LanShare {
+    fun lines(addresses: List<String>, port: Int, withHttp: Boolean, username: String): List<String> {
+        if (addresses.isEmpty()) return emptyList()
+        return buildList {
+            addresses.forEach { ip ->
+                add("SOCKS5  $ip:$port")
+                if (withHttp) add("HTTP  $ip:${port + 1}")
+            }
+            add("نام کاربری: $username")
+        }
+    }
+}

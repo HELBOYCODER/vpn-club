@@ -67,6 +67,9 @@ object FormText {
     /** The non-blank, trimmed lines or comma separated items of [raw]. */
     fun items(raw: String): List<String> = raw.split('\n', ',', ';').map { it.trim() }.filter { it.isNotEmpty() }
 
+    /** Items separated by spaces, tabs, new lines, commas or semicolons. */
+    fun tokens(raw: String): List<String> = raw.split(' ', '\t', '\n', '\r', ',', ';').map { it.trim() }.filter { it.isNotEmpty() }
+
     fun hasWhitespace(text: String): Boolean = text.trim().any { it.isWhitespace() }
 
     /** True for `host:port` where the port is valid and the host has no spaces (IPv6 in brackets is accepted). */
