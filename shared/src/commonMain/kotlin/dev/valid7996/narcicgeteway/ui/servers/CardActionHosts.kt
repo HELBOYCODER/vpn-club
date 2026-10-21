@@ -154,6 +154,18 @@ internal fun CardActionHosts(
                     },
                 )
             }
+            target.isMhrvRelay -> {
+                MhrvRelaySheet(
+                    initial = target.mhrvRelaySettings(),
+                    initialName = target.name,
+                    onDismiss = onDismissEdit,
+                    onSave = { name, settings ->
+                        repository.addMhrvRelay(settings, name, id = target.id)
+                        toastSaved()
+                        onDismissEdit()
+                    },
+                )
+            }
             target.isOpenConnect -> {
                 OpenConnectSheet(
                     initial = target.openConnectSettings(),

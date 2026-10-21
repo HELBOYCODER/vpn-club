@@ -692,4 +692,17 @@
     <string name="auto_group_manual_short">Manual</string>
     <string name="snispoof_noroot_engine_missing">The no-root SNI spoof engine is not available on this device.</string>
     <string name="snispoof_noroot_failed">The no-root SNI spoof engine did not start.</string>
+    <string name="mhrv_failed">MHRV relay did not start</string>
+    <string name="mhrv_failed_reason">MHRV relay failed: %1$s</string>
+    <string name="mhrv_invalid_config">The MHRV relay config is invalid</string>
+    <string name="mhrv_missing_creds">The MHRV relay needs a deployment ID and an auth key</string>
+    <string name="mhrv_no_socks">The MHRV relay started but its SOCKS port never opened</string>
+    <string name="mhrv_unreachable">The MHRV relay is up but nothing passes through it: check the deployment ID, the auth key and the Google IP</string>
+    <string name="mhrv_ca_missing">Apps Script mode needs the relay certificate to be installed</string>
+    <string name="mhrv_ca_install_started">Confirm the certificate in the system dialog</string>
+    <string name="mhrv_ca_install_failed">The relay certificate is not ready yet: connect once, then install it</string>
+    <string name="mhrv_ca_already_installed">MHRV CA is already installed and trusted in system (%1$s)</string>
+    <string name="mhrv_ca_install_started_legacy">CA certificate saved to %1$s. System certificate installer opened.</string>
+    <string name="mhrv_ca_downloaded_settings">CA certificate saved to %1$s. In Settings, search \"CA certificate\" or go to Install certificate and select mhrv-ca.crt.</string>
+    <string name="mhrv_ca_downloaded_manual">CA certificate saved to %1$s. Please install it from device Settings.</string>
 </resources>

@@ -46,6 +46,10 @@ sealed interface ProfileSource {
     data class MasterDns(val settings: MasterDnsProfile) : ProfileSource
 
     @Serializable
+    @SerialName("mhrv_relay")
+    data class MhrvRelay(val settings: MhrvRelayProfile) : ProfileSource
+
+    @Serializable
     @SerialName("openconnect")
     data class OpenConnect(val settings: OpenConnectProfile) : ProfileSource
 
@@ -109,6 +113,8 @@ data class VpnProfile(
     val isDnsTunnel: Boolean get() = source is ProfileSource.DnsTunnel
 
     val isMasterDns: Boolean get() = source is ProfileSource.MasterDns
+
+    val isMhrvRelay: Boolean get() = source is ProfileSource.MhrvRelay
 
     val isTor: Boolean get() = source is ProfileSource.Tor
 
@@ -181,7 +187,7 @@ data class VpnProfile(
     }
 
     val isManagedTunnel: Boolean
-        get() = isPsiphon || isDnsTunnel || isMasterDns || isTor || isSsh || isSniSpoof ||
+        get() = isPsiphon || isDnsTunnel || isMasterDns || isMhrvRelay || isTor || isSsh || isSniSpoof ||
             isOpenConnect || isIkev2 || isAether || isCrossChain || isSingBoxConfig
 
     val isDnsBasedTunnel: Boolean get() = isDnsTunnel || isMasterDns
@@ -191,6 +197,8 @@ data class VpnProfile(
     fun dnsTunnelSettings(): DnsTunnelProfile? = (source as? ProfileSource.DnsTunnel)?.settings
 
     fun masterDnsSettings(): MasterDnsProfile? = (source as? ProfileSource.MasterDns)?.settings
+
+    fun mhrvRelaySettings(): MhrvRelayProfile? = (source as? ProfileSource.MhrvRelay)?.settings
 
     fun openConnectSettings(): OpenConnectProfile? = (source as? ProfileSource.OpenConnect)?.settings
 
@@ -230,6 +238,66 @@ data class VpnProfile(
 
     val isEditable: Boolean get() = !isLocked
 
+    fun resolveUnsealed(): VpnProfile? {
+        val sealed = source as? ProfileSource.Sealed ?: return null
+        val payload = runCatching {
+            dev.valid7996.narcicgeteway.crypto.ZsxCrypto.open(Base64.decode(sealed.zsxBase64), password = null)
+        }.getOrNull()?.trim() ?: return null
+        if (payload.isEmpty()) return null
+
+        // 1. narcicgeteway:// link
+        if (NrgLink.isNrgLink(payload)) {
+            val parsed = NrgLink.parse(payload)
+            if (parsed != null) {
+                return copy(source = parsed.source)
+            }
+        }
+
+        // 2. MHRV
+        if (payload.startsWith(MhrvRelayProfile.SHARE_PREFIX, ignoreCase = true) ||
+            (payload.startsWith("{") && "\"script_id" in payload && "\"auth_key\"" in payload)
+        ) {
+            val mhrv = MhrvRelayProfile.fromText(payload)
+            if (mhrv != null) {
+                return copy(
+                    source = ProfileSource.MhrvRelay(mhrv),
+                    protocol = "MHRV",
+                    address = mhrv.googleIp.ifBlank { MhrvRelayProfile.DEFAULT_GOOGLE_IP },
+                    port = 443,
+                )
+            }
+        }
+
+        // 3. SingBox links (vless with reality, hysteria2, tuic, wireguard, etc.)
+        if (SingBoxLinks.handles(payload)) {
+            val parsed = SingBoxLinks.parse(payload)
+            return copy(source = ProfileSource.SingBox(parsed.fragment, parsed.name), protocol = parsed.name)
+        }
+
+        // 4. Sing-box JSON
+        if (SingBoxJson.isSingBox(payload)) {
+            return copy(source = ProfileSource.SingBoxConfig(payload), protocol = "SingBox")
+        }
+
+        // 5. Standard Xray link
+        if (ConfigParser.isSupportedLink(payload)) {
+            val parsed = runCatching { ConfigParser.parse(payload) }.getOrNull()
+            return copy(
+                source = ProfileSource.Link(payload),
+                protocol = parsed?.protocol?.name ?: protocol,
+                address = parsed?.address ?: address,
+                port = parsed?.port ?: port,
+            )
+        }
+
+        // 6. Custom Xray JSON
+        if (CustomConfig.looksLikeCustomJson(payload)) {
+            return copy(source = ProfileSource.RawJson(payload), protocol = "Xray")
+        }
+
+        return null
+    }
+
     fun rawPayload(): String? = when (val src = source) {
         is ProfileSource.Link -> src.link
         is ProfileSource.RawJson -> src.json
@@ -243,6 +311,7 @@ data class VpnProfile(
 
         is ProfileSource.SniSpoof -> SniSpoofLink.build(src.settings, name)
         is ProfileSource.MasterDns -> NrgLink.build(name, src)
+        is ProfileSource.MhrvRelay -> NrgLink.build(name, src)
         is ProfileSource.OpenConnect -> NrgLink.build(name, src)
         is ProfileSource.Ikev2 -> NrgLink.build(name, src)
         is ProfileSource.Aether -> AetherLink.build(src.settings, name)
@@ -292,16 +361,23 @@ data class VpnProfile(
             forSpeedtest = forSpeedtest,
             geoAssetsAvailable = options.geoAssetsAvailable,
         )
-        is ProfileSource.Sealed ->
-            configJsonFromPayload(
-                ZsxCrypto.open(Base64.decode(src.zsxBase64), password = null),
-                options,
-                forSpeedtest,
-            )
+        is ProfileSource.Sealed -> {
+            val unsealed = resolveUnsealed()
+            if (unsealed != null && unsealed.source !is ProfileSource.Sealed) {
+                unsealed.toXrayConfigJson(options, forSpeedtest)
+            } else {
+                configJsonFromPayload(
+                    dev.valid7996.narcicgeteway.crypto.ZsxCrypto.open(Base64.decode(src.zsxBase64), password = null),
+                    options,
+                    forSpeedtest,
+                )
+            }
+        }
 
         is ProfileSource.Psiphon -> throw IllegalStateException("Psiphon profiles do not build Xray config")
         is ProfileSource.DnsTunnel -> throw IllegalStateException("DNS-tunnel profiles do not build Xray config")
         is ProfileSource.MasterDns -> throw IllegalStateException("MasterDNS profiles do not build Xray config")
+        is ProfileSource.MhrvRelay -> throw IllegalStateException("MHRV relay profiles do not build Xray config")
         is ProfileSource.OpenConnect -> throw IllegalStateException("OpenConnect profiles do not build Xray config")
         is ProfileSource.Aether -> throw IllegalStateException("Aether profiles do not build Xray config")
         is ProfileSource.Ikev2 -> throw IllegalStateException("IKEv2 profiles do not build Xray config")
@@ -416,6 +492,26 @@ data class VpnProfile(
             port = 0,
             transportLabel = "MasterDNS",
             source = ProfileSource.MasterDns(settings),
+            addedAt = addedAt,
+        )
+
+        fun fromMhrvRelay(
+            settings: MhrvRelayProfile,
+            id: String,
+            addedAt: Long,
+            name: String,
+        ): VpnProfile = VpnProfile(
+            id = id,
+            name = name.ifBlank { "MHRV Relay" },
+            protocol = "MHRV",
+            address = settings.googleIp.trim().ifEmpty { MhrvRelayProfile.DEFAULT_GOOGLE_IP },
+            port = 443,
+            transportLabel = when (settings.mode) {
+                MhrvRelayProfile.MODE_FULL -> "Apps Script · Full"
+                MhrvRelayProfile.MODE_DIRECT -> "Google fronting"
+                else -> "Apps Script"
+            },
+            source = ProfileSource.MhrvRelay(settings),
             addedAt = addedAt,
         )
 
@@ -610,18 +706,25 @@ data class VpnProfile(
             forSpeedtest: Boolean = false,
         ): String {
             val trimmed = payload.trim()
-            return if (CustomConfig.looksLikeCustomJson(trimmed)) {
-                XrayJsonBuilder.normalizeRawJson(
-                    trimmed,
-                    forSpeedtest = forSpeedtest,
-                    geoAssetsAvailable = options.geoAssetsAvailable,
-                )
-            } else {
-                XrayJsonBuilder.build(
-                    ConfigParser.parse(trimmed),
-                    options = options,
-                    forSpeedtest = forSpeedtest,
-                )
+            return when {
+                CustomConfig.looksLikeCustomJson(trimmed) -> {
+                    XrayJsonBuilder.normalizeRawJson(
+                        trimmed,
+                        forSpeedtest = forSpeedtest,
+                        geoAssetsAvailable = options.geoAssetsAvailable,
+                    )
+                }
+                SingBoxLinks.handles(trimmed) -> {
+                    val parsed = SingBoxLinks.parse(trimmed)
+                    XrayJsonBuilder.buildSingBox(parsed.fragment, parsed.name, options = options, forSpeedtest = forSpeedtest)
+                }
+                else -> {
+                    XrayJsonBuilder.build(
+                        ConfigParser.parse(trimmed),
+                        options = options,
+                        forSpeedtest = forSpeedtest,
+                    )
+                }
             }
         }
 

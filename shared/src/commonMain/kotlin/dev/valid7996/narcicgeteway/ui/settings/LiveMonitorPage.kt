@@ -437,6 +437,7 @@ private fun CoreCard(
         VpnManager.KIND_AETHER -> "Aether Engine"
         VpnManager.KIND_DNS_TUNNEL -> "DNS Tunnel"
         VpnManager.KIND_MASTERDNS -> "MasterDNS"
+        VpnManager.KIND_MHRV -> "MHRV Relay"
         VpnManager.KIND_CROSS_CHAIN -> "Cross-Chain Tunnel"
         else -> if (vpnStatus.state.isActive) "VPN Core" else stringResource(Res.string.state_idle)
     }

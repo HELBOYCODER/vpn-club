@@ -56,11 +56,15 @@ class StartPlanner(context: Context) {
         if (profile.isLocked && exp != null && System.currentTimeMillis() >= exp) {
             return Plan.Failure(appContext.getString(R.string.zsx_expired))
         }
-        profile.ikev2Settings()?.let { return Plan.Ikev2(profile.name, it) }
-        val kind = engineKindOf(profile)
+        val effective = profile.resolveUnsealed() ?: profile
+        effective.ikev2Settings()?.let { return Plan.Ikev2(profile.name, it) }
+        effective.mhrvRelaySettings()?.let {
+            if (!it.isValid) return Plan.Failure(appContext.getString(R.string.mhrv_missing_creds))
+        }
+        val kind = engineKindOf(effective)
         val configJson = try {
-            if (kind == VpnManager.KIND_CROSS_CHAIN) buildCrossChainWrapper(profile)
-            else engineConfigOf(profile, resolveServers = kind == VpnManager.KIND_XRAY)
+            if (kind == VpnManager.KIND_CROSS_CHAIN) buildCrossChainWrapper(effective)
+            else engineConfigOf(effective, resolveServers = kind == VpnManager.KIND_XRAY)
         } catch (e: Exception) {
             return Plan.Failure(messageFor(e))
         }
@@ -122,6 +126,7 @@ class StartPlanner(context: Context) {
         profile.psiphonSettings() != null -> VpnManager.KIND_PSIPHON
         profile.dnsTunnelSettings() != null -> VpnManager.KIND_DNS_TUNNEL
         profile.masterDnsSettings() != null -> VpnManager.KIND_MASTERDNS
+        profile.mhrvRelaySettings() != null -> VpnManager.KIND_MHRV
         profile.openConnectSettings() != null -> VpnManager.KIND_OPENCONNECT
         profile.aetherSettings() != null -> VpnManager.KIND_AETHER
         profile.ikev2Settings() != null -> VpnManager.KIND_IKEV2
@@ -180,6 +185,11 @@ class StartPlanner(context: Context) {
         profile.masterDnsSettings()?.let {
             return kotlinx.serialization.json.Json.encodeToString(
                 dev.valid7996.narcicgeteway.domain.config.MasterDnsProfile.serializer(), it,
+            )
+        }
+        profile.mhrvRelaySettings()?.let {
+            return kotlinx.serialization.json.Json.encodeToString(
+                dev.valid7996.narcicgeteway.domain.config.MhrvRelayProfile.serializer(), it,
             )
         }
         profile.openConnectSettings()?.let {
@@ -281,6 +291,7 @@ class StartPlanner(context: Context) {
             carrier = carrier,
             ruleOutbounds = ruleOutbounds,
             resolvedServerHosts = hosts,
+            useXrayTun = !useHevTun && !carrier && runMode == dev.valid7996.narcicgeteway.domain.model.RunMode.Vpn,
         )
     }
 

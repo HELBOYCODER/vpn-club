@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.valid7996.narcicgeteway.shared.resources.Res
 import dev.valid7996.narcicgeteway.shared.resources.*
 import dev.valid7996.narcicgeteway.domain.config.AwgConfig
+import dev.valid7996.narcicgeteway.domain.config.EchOutbound
 import dev.valid7996.narcicgeteway.domain.config.Protocol
 import dev.valid7996.narcicgeteway.domain.config.SecurityConfig
 import dev.valid7996.narcicgeteway.domain.config.ServerConfig
@@ -153,6 +154,8 @@ fun ManualConfigSheet(
     var shortId by remember { mutableStateOf(initial?.tls?.shortId ?: "") }
     var spiderX by remember { mutableStateOf(initial?.tls?.spiderX ?: "") }
     var echConfigList by remember { mutableStateOf(initial?.tls?.echConfigList ?: "") }
+    var echOutbound by remember { mutableStateOf(initial?.tls?.echOutbound ?: "") }
+    var echError by remember { mutableStateOf<String?>(null) }
     var cipherSuites by remember { mutableStateOf(initial?.tls?.cipherSuites ?: "") }
 
     var finalMask by remember { mutableStateOf(initial?.transport?.finalMask ?: "") }
@@ -412,7 +415,21 @@ fun ManualConfigSheet(
                         selected = alpn,
                         onSelect = { alpn = it },
                     )
-                    Field(echConfigList, { echConfigList = it }, Res.string.manual_ech)
+                    Field(echConfigList, { echConfigList = it; echError = null }, Res.string.manual_ech)
+                    Field(
+                        value = echOutbound,
+                        onValueChange = { echOutbound = it; echError = null },
+                        labelRes = Res.string.server_lab_ech_outbound,
+                        singleLine = false,
+                    )
+                    echError?.let { err ->
+                        Text(
+                            err,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
+                    }
 
                     Field(cipherSuites, { cipherSuites = it }, Res.string.manual_cipher_suites)
 
@@ -444,6 +461,17 @@ fun ManualConfigSheet(
 
             Button(
                 onClick = {
+                    if ((security == "tls" || protocol == Protocol.HYSTERIA) && echOutbound.isNotBlank()) {
+                        val err = EchOutbound.validate(echOutbound.trim(), echConfigList.trim())
+                        if (err != null) {
+                            echError = when (err) {
+                                EchOutbound.Error.INVALID_JSON -> "Invalid JSON for echOutbound: format must be { OutboundObject }"
+                                EchOutbound.Error.NEEDS_ECH_CONFIG_LIST -> "echOutbound requires echConfigList"
+                                EchOutbound.Error.INVALID_TAG -> "echOutbound needs a \"tag\" that is not empty, not direct or block, and does not start with proxy"
+                            }
+                            return@Button
+                        }
+                    }
                     val config = ServerConfig(
                         protocol = protocol,
                         remark = remark.ifBlank { address },
@@ -499,6 +527,7 @@ fun ManualConfigSheet(
                             shortId = shortId.ifBlank { null },
                             spiderX = spiderX.ifBlank { null },
                             echConfigList = echConfigList.ifBlank { null },
+                            echOutbound = echOutbound.ifBlank { null },
                             cipherSuites = cipherSuites.ifBlank { null },
                             verifyPeerCertByName = verifyCertName.ifBlank { null },
                             mldsa65Verify = mldsa65Verify.ifBlank { null },
@@ -589,13 +618,14 @@ private fun Field(
     onValueChange: (String) -> Unit,
     labelRes: StringResource,
     number: Boolean = false,
+    singleLine: Boolean = true,
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(stringResource(labelRes)) },
-        singleLine = true,
+        singleLine = singleLine,
         shape = RoundedCornerShape(12.dp),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color(0xFF007AFF),

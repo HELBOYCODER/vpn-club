@@ -287,7 +287,7 @@ data class AppSettings(
 
     val runMode: RunMode = RunMode.Vpn,
 
-    val enableIpv6: Boolean = false,
+    val enableIpv6: Boolean = true,
     val preferIpv6: Boolean = false,
     val localDnsEnabled: Boolean = false,
     val fakeDnsEnabled: Boolean = false,
@@ -297,6 +297,7 @@ data class AppSettings(
     val vpnInterfaceAddress: VpnInterfaceAddress = VpnInterfaceAddress.Option2,
     val vpnMtu: Int = 1500,
 
+    val useHevTun: Boolean = false,
     val useZepTun: Boolean = false,
     val hevTunLogLevel: HevLogLevel = HevLogLevel.Warn,
 
@@ -472,8 +473,6 @@ data class AppSettings(
     val torFakeSniEnabled: Boolean = false,
     val torFakeSniHosts: String = "",
 ) {
-    val useHevTun: Boolean get() = true
-
     val localProxyForced: Boolean get() = runMode == RunMode.Vpn && useHevTun
 
     val effectiveLocalProxy: Boolean get() = enableLocalProxy || localProxyForced

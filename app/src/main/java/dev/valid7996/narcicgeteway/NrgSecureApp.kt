@@ -41,6 +41,16 @@ class NrgSecureApp : Application(), SingletonImageLoader.Factory {
         XrayController.warmUp(this)
         PingService.rstaSpoofLease = { RstaSpoofClient.lease(this, SettingsRepository(this).settings.value) }
         PingService.aetherTunnel = { profile, measure -> AetherDelayProbe.run(this, profile, measure) }
+        PingService.sniProbe = { ip, sni ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val res = runCatching { com.therealaleph.mhrv.Native.testSni(ip, sni) }.getOrNull()
+                if (res != null && res.contains("\"ok\":true")) {
+                    runCatching { org.json.JSONObject(res).optLong("latencyMs", -1L) }.getOrDefault(-1L)
+                } else {
+                    -1L
+                }
+            }
+        }
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

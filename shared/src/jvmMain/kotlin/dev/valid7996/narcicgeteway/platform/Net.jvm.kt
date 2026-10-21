@@ -10,6 +10,37 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.Socket
 import java.net.URL
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+
+private val permissiveTrustManager = arrayOf<TrustManager>(
+    object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+    }
+)
+
+private val permissiveSslSocketFactory: SSLSocketFactory by lazy {
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(null, permissiveTrustManager, SecureRandom())
+    sslContext.socketFactory
+}
+
+private val permissiveHostnameVerifier = HostnameVerifier { _, _ -> true }
+
+internal fun applySocksSslIfNeeded(connection: HttpURLConnection, socksPort: Int?) {
+    if (connection is HttpsURLConnection && socksPort != null) {
+        connection.sslSocketFactory = permissiveSslSocketFactory
+        connection.hostnameVerifier = permissiveHostnameVerifier
+    }
+}
 
 internal actual suspend fun httpGetViaSocks(
     url: String,
@@ -25,6 +56,7 @@ internal actual suspend fun httpGetViaSocks(
     } else {
         URL(url).openConnection() as HttpURLConnection
     }
+    applySocksSslIfNeeded(connection, socksPort)
     connection.apply {
         connectTimeout = connectTimeoutMs
         readTimeout = readTimeoutMs
@@ -58,6 +90,7 @@ internal actual suspend fun httpTimedTransfer(
     } else {
         URL(url).openConnection() as HttpURLConnection
     }
+    applySocksSslIfNeeded(connection, socksPort)
     connection.apply {
         connectTimeout = connectTimeoutMs
         readTimeout = readTimeoutMs
@@ -149,6 +182,7 @@ internal actual suspend fun httpStreamTransfer(
     } else {
         URL(url).openConnection() as HttpURLConnection
     }
+    applySocksSslIfNeeded(connection, socksPort)
     connection.apply {
         connectTimeout = connectTimeoutMs
         readTimeout = readTimeoutMs

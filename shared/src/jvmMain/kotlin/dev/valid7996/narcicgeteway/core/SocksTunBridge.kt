@@ -1,13 +1,18 @@
 package dev.valid7996.narcicgeteway.core
 
+import dev.valid7996.narcicgeteway.platform.applySocksSslIfNeeded
 import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,6 +26,7 @@ class SocksTunBridge(
     private val upstreamPort: Int,
     private val dnsHost: String = "8.8.8.8",
     private val dnsPort: Int = 53,
+    private val useDoh: Boolean = false,
 ) {
     private val running = AtomicBoolean(false)
     private var server: ServerSocket? = null
@@ -280,7 +286,78 @@ class SocksTunBridge(
             for (slot in links.indices) release(slot)
         }
 
+        private val dohUrls = listOf(
+            "https://dns.google/dns-query",
+            "https://cloudflare-dns.com/dns-query",
+        )
+        private val dnsCache = ConcurrentHashMap<String, Pair<Long, ByteArray>>()
+        private val DNS_CACHE_TTL_MS = 60_000L
+
         fun lookup(query: ByteArray): ByteArray? {
+            if (useDoh) {
+                return lookupDoh(query)
+            }
+            val tcpAnswer = lookupTcp(query)
+            if (tcpAnswer != null && !isPoisoned(tcpAnswer)) {
+                return tcpAnswer
+            }
+            return lookupDoh(query) ?: tcpAnswer
+        }
+
+        private fun isPoisoned(answer: ByteArray): Boolean {
+            if (answer.size < 16) return false
+            // Check for Iranian DNS poisoning IPs: 10.10.34.x (0x0A, 0x0A, 0x22)
+            for (i in 0 until answer.size - 3) {
+                if (answer[i] == 0x0A.toByte() && answer[i + 1] == 0x0A.toByte() && answer[i + 2] == 0x22.toByte()) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        fun lookupDoh(query: ByteArray): ByteArray? {
+            if (query.size < 12) return null
+            val key = query.copyOfRange(2, query.size).contentToString()
+            val now = System.currentTimeMillis()
+            val cached = dnsCache[key]
+            if (cached != null && (now - cached.first) < DNS_CACHE_TTL_MS) {
+                val answer = cached.second.copyOf()
+                answer[0] = query[0]
+                answer[1] = query[1]
+                return answer
+            }
+
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress.createUnresolved(upstreamHost, upstreamPort))
+            for (dohUrl in dohUrls) {
+                try {
+                    val url = URL(dohUrl)
+                    val connection = url.openConnection(proxy) as HttpURLConnection
+                    applySocksSslIfNeeded(connection, upstreamPort)
+                    connection.apply {
+                        requestMethod = "POST"
+                        connectTimeout = 3_500
+                        readTimeout = 3_500
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/dns-message")
+                        setRequestProperty("Accept", "application/dns-message")
+                        setRequestProperty("User-Agent", "NarcicGeteway-DNS")
+                    }
+                    connection.outputStream.use { it.write(query) }
+                    if (connection.responseCode in 200..299) {
+                        val answer = connection.inputStream.use { it.readBytes() }
+                        if (answer.size >= 12 && !isPoisoned(answer)) {
+                            dnsCache[key] = now to answer
+                            return answer
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Try next DoH endpoint
+                }
+            }
+            return null
+        }
+
+        fun lookupTcp(query: ByteArray): ByteArray? {
             val slot = (turn.getAndIncrement() and Int.MAX_VALUE) % POOL_SIZE
             val guard = guards[slot]
             guard.lock()

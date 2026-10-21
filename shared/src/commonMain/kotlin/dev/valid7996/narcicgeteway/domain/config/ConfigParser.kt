@@ -121,6 +121,7 @@ object ConfigParser {
                 shortId = str("sid")?.takeIf { it.isNotBlank() },
                 spiderX = str("spx")?.takeIf { it.isNotBlank() },
                 echConfigList = str("ech")?.takeIf { it.isNotBlank() },
+                echOutbound = (str("echOutbound") ?: str("ech_outbound"))?.takeIf { it.isNotBlank() },
                 allowInsecure = str("allowInsecure") == "1" || str("allowInsecure")?.lowercase() == "true",
             ),
         )
@@ -470,6 +471,7 @@ object ConfigParser {
         spiderX = q["spx"],
 
         echConfigList = (q["ech"] ?: q["echConfigList"])?.takeIf { it.isNotBlank() },
+        echOutbound = (q["echOutbound"] ?: q["ech_outbound"])?.takeIf { it.isNotBlank() },
 
         cipherSuites = q["cs"]?.takeIf { it.isNotBlank() },
 

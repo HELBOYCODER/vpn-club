@@ -70,6 +70,7 @@ private enum class LogCategory(val tags: Set<String>) {
     Tor(setOf("Tor", "TorController", "Snowflake", "Obfs4", "Conjure")),
     Dns(setOf("DnsTunnel", "DnsProbe", "DnsScanner", "DnsTunnelController", "Dnstt", "VayDns")),
     MasterDns(setOf("MasterDns", "MasterDnsController", "masterdns")),
+    Mhrv(setOf("mhrv_rs", "MhrvRelay", "MhrvRelayController", "mhrv")),
     Psiphon(setOf("Psiphon")),
     Ssh(setOf("Ssh", "SshController", "JSch")),
 }
@@ -80,6 +81,7 @@ private fun categoriesFor(kind: String?): Set<LogCategory> = when (kind) {
     VpnManager.KIND_TOR -> setOf(LogCategory.Tor)
     VpnManager.KIND_DNS_TUNNEL -> setOf(LogCategory.Dns)
     VpnManager.KIND_MASTERDNS -> setOf(LogCategory.MasterDns)
+    VpnManager.KIND_MHRV -> setOf(LogCategory.Mhrv)
     VpnManager.KIND_SSH -> setOf(LogCategory.Ssh, LogCategory.Xray)
 
     VpnManager.KIND_CROSS_CHAIN -> LogCategory.entries.toSet()
@@ -117,6 +119,7 @@ private fun categoryLabel(category: LogCategory): String = when (category) {
     LogCategory.Tor -> "Tor"
     LogCategory.Dns -> "DNS"
     LogCategory.MasterDns -> "MasterDNS"
+    LogCategory.Mhrv -> "MHRV Relay"
     LogCategory.Psiphon -> "Psiphon"
     LogCategory.Ssh -> "SSH"
 }

@@ -81,6 +81,7 @@ object ShareLink {
             s.tls.shortId?.takeIf { it.isNotBlank() }?.let { put("sid", it) }
             s.tls.spiderX?.takeIf { it.isNotBlank() }?.let { put("spx", it) }
             s.tls.echConfigList?.takeIf { it.isNotBlank() }?.let { put("ech", it) }
+            s.tls.echOutbound?.takeIf { it.isNotBlank() }?.let { put("echOutbound", it) }
             if (s.tls.allowInsecure) put("allowInsecure", "1")
         }
         val payload = Json.encodeToString(JsonObject.serializer(), obj)
@@ -106,6 +107,7 @@ object ShareLink {
         s.tls.shortId?.takeIf { it.isNotBlank() }?.let { add("sid" to it) }
         s.tls.spiderX?.takeIf { it.isNotBlank() }?.let { add("spx" to it) }
         s.tls.echConfigList?.takeIf { it.isNotBlank() }?.let { add("ech" to it) }
+        s.tls.echOutbound?.takeIf { it.isNotBlank() }?.let { add("echOutbound" to it) }
         s.tls.cipherSuites?.takeIf { it.isNotBlank() }?.let { add("cs" to it) }
         s.transport.finalMask?.takeIf { it.isNotBlank() }?.let { add("fm" to it) }
 

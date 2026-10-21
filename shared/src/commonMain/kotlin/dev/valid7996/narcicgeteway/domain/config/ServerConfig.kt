@@ -70,6 +70,7 @@ data class SecurityConfig(
     val spiderX: String? = null,
 
     val echConfigList: String? = null,
+    val echOutbound: String? = null,
 
     val cipherSuites: String? = null,
 

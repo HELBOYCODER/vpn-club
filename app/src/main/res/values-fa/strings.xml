@@ -680,4 +680,17 @@
     <string name="auto_group_manual_short">دستی</string>
     <string name="snispoof_noroot_engine_missing">موتور SNI spoof بدون روت روی این دستگاه در دسترس نیست.</string>
     <string name="snispoof_noroot_failed">موتور SNI spoof بدون روت راه نیفتاد.</string>
+    <string name="mhrv_failed">ریلی MHRV بالا نیامد</string>
+    <string name="mhrv_failed_reason">ریلی MHRV ناموفق بود: %1$s</string>
+    <string name="mhrv_invalid_config">پیکربندی ریلی MHRV نامعتبر است</string>
+    <string name="mhrv_missing_creds">ریلی MHRV به شناسه‌ی دیپلوی و کلید احراز هویت نیاز دارد</string>
+    <string name="mhrv_no_socks">ریلی MHRV بالا آمد اما پورت SOCKS آن باز نشد</string>
+    <string name="mhrv_unreachable">ریلی MHRV بالاست ولی چیزی از آن عبور نمی‌کند: شناسه‌ی دیپلوی، کلید و IP گوگل را بررسی کنید</string>
+    <string name="mhrv_ca_missing">حالت Apps Script به نصب گواهی ریلی نیاز دارد</string>
+    <string name="mhrv_ca_install_started">گواهی را در پنجره‌ی سیستم تأیید کنید</string>
+    <string name="mhrv_ca_install_failed">گواهی ریلی هنوز آماده نیست: یک‌بار وصل شوید، بعد نصبش کنید</string>
+    <string name="mhrv_ca_already_installed">گواهی CA قبلاً روی دستگاه نصب شده و معتبر است (%1$s)</string>
+    <string name="mhrv_ca_install_started_legacy">گواهی در %1$s ذخیره شد. پنجره نصب گواهی باز شد.</string>
+    <string name="mhrv_ca_downloaded_settings">گواهی در %1$s ذخیره شد. در صفحه تنظیمات به بخش Install certificate → CA certificate رفته و mhrv-ca.crt را انتخاب کنید.</string>
+    <string name="mhrv_ca_downloaded_manual">گواهی در %1$s ذخیره شد. لطفاً از بخش امنیت تنظیمات دستگاه آن را نصب کنید.</string>
 </resources>

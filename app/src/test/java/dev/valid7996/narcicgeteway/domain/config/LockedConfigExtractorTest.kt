@@ -31,6 +31,18 @@ class LockedConfigExtractorTest {
     }
 
     @Test
+    fun linkWrappedInsideTelegramMessageIsJoined() {
+        val msg = """
+            🔒 کانفیگ اختصاصی
+            🔗 لینک:
+            nrg://AbCdEfGh12345678_-
+            AbCdEfGh12345678
+            پایان
+        """.trimIndent()
+        assertEquals(link, LockedConfigExtractor.extractLink(msg))
+    }
+
+    @Test
     fun trailingSentencePunctuationIsNotPartOfTheLink() {
         assertEquals(link, LockedConfigExtractor.extractLink("لینک: $link."))
     }

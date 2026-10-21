@@ -422,6 +422,7 @@ fun ServersScreen(
     var showPsiphon by remember { mutableStateOf(false) }
     var showDnsTunnel by remember { mutableStateOf(false) }
     var showMasterDns by remember { mutableStateOf(false) }
+    var showMhrv by remember { mutableStateOf(false) }
     var showOpenConnect by remember { mutableStateOf(false) }
     var showIkev2 by remember { mutableStateOf(false) }
     var showSsh by remember { mutableStateOf(false) }
@@ -458,9 +459,9 @@ fun ServersScreen(
             else -> profiles.firstOrNull { it.id == activeId }?.subscriptionId.orEmpty()
         }
         when {
-            active.isEmpty() -> if (showAllGroup) 0 else 1
-            else -> subscriptions.indexOfFirst { it.id == active }.takeIf { it >= 0 }?.plus(2)
-                ?: if (showAllGroup) 0 else 1
+            active.isEmpty() -> if (showAllGroup) 1 else 0
+            else -> subscriptions.indexOfFirst { it.id == active }.takeIf { it >= 0 }?.plus(if (showAllGroup) 2 else 1)
+                ?: if (showAllGroup) 0 else 0
         }
     }
 
@@ -471,6 +472,7 @@ fun ServersScreen(
 
     fun doExecuteImport(text: String, subId: String) {
         scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            if (tryHandleLocked(text)) return@launch
             var outcome: Result<dev.valid7996.narcicgeteway.data.config.ConfigRepository.PastedImport>? = null
             offerObfuscationAfter { outcome = repository.importPasted(text, subId) }
             outcome?.onSuccess { r ->
@@ -538,8 +540,11 @@ fun ServersScreen(
         requestImport(text)
     }
 
-    androidx.compose.runtime.LaunchedEffect(activeId, subscriptions.size, showAllGroup) {
-        groupIndex = activeGroupIndex()
+    androidx.compose.runtime.LaunchedEffect(subscriptions.size, showAllGroup) {
+        val maxIndex = if (subscriptions.isEmpty()) 0 else (if (showAllGroup) 1 else 0) + subscriptions.size
+        if (groupIndex > maxIndex) {
+            groupIndex = 0
+        }
     }
 
     val shown = when {
@@ -1130,7 +1135,8 @@ fun ServersScreen(
                                 repository.clearPings(listOf(profile.id), persist = false)
                                 val isSpoof = profile.isAether || profile.isNoRootSniSpoof || profile.isSniSpoof
                                 val isSealed = profile.isLocked || profile.source is dev.valid7996.narcicgeteway.domain.config.ProfileSource.Sealed
-                                val ms = if (isSpoof || isSealed) {
+                                val isMhrv = profile.isMhrvRelay
+                                val ms = if (isSpoof || isSealed || isMhrv) {
                                     PingService.realDelay(
                                         profile,
                                         url = delayTestUrl.ifBlank { dev.valid7996.narcicgeteway.data.net.NetworkInfoRepository.DELAY_TEST_URL },
@@ -1423,6 +1429,10 @@ fun ServersScreen(
                 showAddSheet = false
                 showMasterDns = true
             },
+            onMhrv = {
+                showAddSheet = false
+                showMhrv = true
+            },
             onOpenConnect = {
                 showAddSheet = false
                 showOpenConnect = true
@@ -1676,6 +1686,17 @@ fun ServersScreen(
             onSave = { name, settings ->
                 showMasterDns = false
                 repository.addMasterDns(settings, name)
+                onServerActivated()
+            },
+        )
+    }
+
+    if (showMhrv) {
+        MhrvRelaySheet(
+            onDismiss = { showMhrv = false },
+            onSave = { name, settings ->
+                showMhrv = false
+                repository.addMhrvRelay(settings, name)
                 onServerActivated()
             },
         )
@@ -2223,6 +2244,7 @@ internal fun AddServerSheet(
     onPsiphon: () -> Unit,
     onDnsTunnel: () -> Unit,
     onMasterDns: () -> Unit,
+    onMhrv: () -> Unit,
     onOpenConnect: () -> Unit,
     onIkev2: () -> Unit,
     onTor: () -> Unit,
@@ -2397,6 +2419,16 @@ internal fun AddServerSheet(
                     gradientStart = Color(0xFF0F2B38).copy(alpha = 0.90f),
                     gradientEnd = Color(0xFF0B1B2C).copy(alpha = 0.75f),
                     onClick = onMasterDns,
+                )
+                GlassOptionCard(
+                    title = stringResource(Res.string.mhrv_add_title),
+                    subtitle = stringResource(Res.string.mhrv_add_title_sub),
+                    icon = Res.drawable.ic_public,
+                    accentColor = Color(0xFF34C759),
+                    iconTint = Color(0xFF7BE495),
+                    gradientStart = Color(0xFF10301E).copy(alpha = 0.90f),
+                    gradientEnd = Color(0xFF0B2016).copy(alpha = 0.75f),
+                    onClick = onMhrv,
                 )
 
                 OptionGroup(Res.string.add_group_vpn)

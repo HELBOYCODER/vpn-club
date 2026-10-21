@@ -41,6 +41,9 @@ object PingService {
     @Volatile
     var aetherTunnel: (suspend (AetherProfile, suspend (Int) -> Long) -> Long)? = null
 
+    @Volatile
+    var sniProbe: (suspend (String, String) -> Long)? = null
+
     private const val REAL_PING_CONCURRENCY = 16
 
     private const val GEO_CONCURRENCY = 8
@@ -104,14 +107,12 @@ object PingService {
     suspend fun realDelayOfActiveConnection(
         url: String = NetworkInfoRepository.DELAY_TEST_URL,
     ): Long = withContext(Dispatchers.IO) {
-        val viaCore = runCatching { CoreProbe.measureDelay(url) }.getOrDefault(-1L)
-        if (viaCore > 0) return@withContext viaCore
+        val first = probeActiveConnection(url)
+        if (first.ok) return@withContext first.ms
 
         if (url != NetworkInfoRepository.DELAY_TEST_URL2) {
-            val viaSecond =
-                runCatching { CoreProbe.measureDelay(NetworkInfoRepository.DELAY_TEST_URL2) }
-                    .getOrDefault(-1L)
-            if (viaSecond > 0) return@withContext viaSecond
+            val second = probeActiveConnection(NetworkInfoRepository.DELAY_TEST_URL2)
+            if (second.ok) return@withContext second.ms
         }
 
         if (VpnManager.activeSocksPort != null) return@withContext -1L
@@ -140,7 +141,7 @@ object PingService {
         val customPermits = Semaphore(minOf(realPermits, CUSTOM_PROBE_CONCURRENCY))
         val geoPermits = Semaphore(GEO_CONCURRENCY)
 
-        val targets = profiles.filterNot { ((it.isManagedTunnel && !it.isSingBoxConfig && !it.isSniSpoof && !it.isNoRootSniSpoof) || it.isDnsBasedTunnel) }
+        val targets = profiles.filterNot { ((it.isManagedTunnel && !it.isSingBoxConfig && !it.isSniSpoof && !it.isNoRootSniSpoof && !it.isMhrvRelay) || it.isDnsBasedTunnel) }
         val aetherTargets = if (aetherTunnel != null) profiles.filter { it.isAether } else emptyList()
         val aetherPermits = Semaphore(1)
         val total = targets.size + aetherTargets.size
@@ -162,8 +163,9 @@ object PingService {
             launch(Dispatchers.IO) {
                 val isSpoof = profile.isSniSpoof || profile.isNoRootSniSpoof || SniSpoofConfig.isSpoofTarget(profile.address, profile.port)
                 val isSealed = profile.isLocked || profile.source is dev.valid7996.narcicgeteway.domain.config.ProfileSource.Sealed
-                val heavy = useRealDelay || profile.isProxyChain || isSpoof || isSealed
-                val pool = if (heavy && (profile.isCustom || isSealed)) customPermits else permits
+                val isMhrv = profile.isMhrvRelay || (isSealed && profile.resolveUnsealed()?.isMhrvRelay == true)
+                val heavy = useRealDelay || profile.isProxyChain || isSpoof || isSealed || isMhrv
+                val pool = if (heavy && (profile.isCustom || isSealed || isMhrv)) customPermits else permits
                 val ms = pool.withPermit {
                     if (heavy) measureProfile(profile, url, chainConfig)
                     else tcpPing(profile.address, profile.port)
@@ -209,33 +211,48 @@ object PingService {
         url: String,
         chainConfig: (VpnProfile) -> String? = { null },
     ): Long {
-        if (profile.isAether) return aetherDelay(profile, url)
-        val config = if (profile.isProxyChain) {
-            chainConfig(profile) ?: return -1L
+        val effective = profile.resolveUnsealed() ?: profile
+        if (effective.isAether) return aetherDelay(effective, url)
+        if (effective.isMhrvRelay) {
+            val mhrv = effective.mhrvRelaySettings()
+            if (mhrv != null) {
+                val ip = mhrv.googleIp.trim().ifEmpty { dev.valid7996.narcicgeteway.domain.config.MhrvRelayProfile.DEFAULT_GOOGLE_IP }
+                val sni = mhrv.sniList().firstOrNull()?.trim()?.ifEmpty { null }
+                    ?: mhrv.frontDomain.trim().ifEmpty { dev.valid7996.narcicgeteway.domain.config.MhrvRelayProfile.DEFAULT_FRONT_DOMAIN }
+                val probe = sniProbe?.invoke(ip, sni)
+                if (probe != null && probe > 0) return probe
+                val tcp = tcpPing(ip, 443)
+                return if (tcp > 0) tcp else -1L
+            }
+        }
+        val config = if (effective.isProxyChain) {
+            chainConfig(effective) ?: return -1L
         } else {
-            runCatching { profile.toXrayConfigJson(forSpeedtest = true) }
-                .onFailure { LogBus.append("W/PingService build config failed for ${profile.name}: ${it.message}") }
+            runCatching { effective.toXrayConfigJson(forSpeedtest = true) }
+                .onFailure { LogBus.append("W/PingService build config failed for ${effective.name}: ${it.message}") }
                 .getOrElse { return -1L }
         }
-        return probeWithTimeout(profile, config, url)
+        return probeWithTimeout(effective, config, url)
     }
 
     fun shouldPrecheck(profile: VpnProfile): Boolean {
-        if (profile.isSniSpoof || profile.isNoRootSniSpoof || SniSpoofConfig.isSpoofTarget(profile.address, profile.port)) return false
-        if (profile.address.isBlank() || profile.address == "-") return false
-        if (profile.port !in 1..65535) return false
-        if (profile.isCustom) {
-            val raw = profile.rawPayload() ?: return false
+        val effective = profile.resolveUnsealed() ?: profile
+        if (effective.isMhrvRelay) return true
+        if (effective.isSniSpoof || effective.isNoRootSniSpoof || SniSpoofConfig.isSpoofTarget(effective.address, effective.port)) return false
+        if (effective.address.isBlank() || effective.address == "-") return false
+        if (effective.port !in 1..65535) return false
+        if (effective.isCustom) {
+            val raw = effective.rawPayload() ?: return false
             return CustomConfig.tcpProbeable(raw)
         }
 
-        (profile.source as? dev.valid7996.narcicgeteway.domain.config.ProfileSource.SingBox)?.let { src ->
+        (effective.source as? dev.valid7996.narcicgeteway.domain.config.ProfileSource.SingBox)?.let { src ->
             val servers = dev.valid7996.narcicgeteway.domain.config.SingBoxJson.servers(src.json)
             val server = servers.firstOrNull() ?: return false
             return !server.udp && !src.json.contains("\"detour\"")
         }
-        if (profile.isSingBoxConfig) return false
-        return profile.protocol !in UDP_OUTBOUND_PROTOCOLS
+        if (effective.isSingBoxConfig) return false
+        return effective.protocol !in UDP_OUTBOUND_PROTOCOLS
     }
 
     private val UDP_OUTBOUND_PROTOCOLS = setOf("WIREGUARD", "AMNEZIAWG", "HYSTERIA")

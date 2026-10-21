@@ -72,6 +72,7 @@ import dev.valid7996.narcicgeteway.ui.servers.ManualConfigSheet
 import dev.valid7996.narcicgeteway.ui.servers.RawJsonSheet
 import dev.valid7996.narcicgeteway.ui.servers.DnsTunnelSheet
 import dev.valid7996.narcicgeteway.ui.servers.MasterDnsSheet
+import dev.valid7996.narcicgeteway.ui.servers.MhrvRelaySheet
 import dev.valid7996.narcicgeteway.ui.servers.OpenConnectSheet
 import dev.valid7996.narcicgeteway.ui.servers.Ikev2Sheet
 import dev.valid7996.narcicgeteway.ui.servers.SshSheet
@@ -142,6 +143,7 @@ internal fun HomeServerSection(
     var showCustomJson by remember { mutableStateOf(false) }
     var showDnsTunnel by remember { mutableStateOf(false) }
     var showMasterDns by remember { mutableStateOf(false) }
+    var showMhrv by remember { mutableStateOf(false) }
     var showOpenConnect by remember { mutableStateOf(false) }
     var showIkev2 by remember { mutableStateOf(false) }
     var showSsh by remember { mutableStateOf(false) }
@@ -769,6 +771,10 @@ internal fun HomeServerSection(
                 showAdd = false
                 showMasterDns = true
             },
+            onMhrv = {
+                showAdd = false
+                showMhrv = true
+            },
             onOpenConnect = {
                 showAdd = false
                 showOpenConnect = true
@@ -923,6 +929,16 @@ internal fun HomeServerSection(
             onSave = { name, s ->
                 showMasterDns = false
                 repository.addMasterDns(s, name)
+            },
+        )
+    }
+
+    if (showMhrv) {
+        MhrvRelaySheet(
+            onDismiss = { showMhrv = false },
+            onSave = { name, s ->
+                showMhrv = false
+                repository.addMhrvRelay(s, name)
             },
         )
     }
@@ -1277,7 +1293,8 @@ private suspend fun pingOne(
     repository.clearPings(listOf(profile.id), persist = false)
     val isSpoof = profile.isAether || profile.isNoRootSniSpoof || profile.isSniSpoof
     val isSealed = profile.isLocked || profile.source is dev.valid7996.narcicgeteway.domain.config.ProfileSource.Sealed
-    val ms = if (real || isSpoof || isSealed) {
+    val isMhrv = profile.isMhrvRelay
+    val ms = if (real || isSpoof || isSealed || isMhrv) {
         PingService.realDelay(
             profile,
             url = delayTestUrl.ifBlank { dev.valid7996.narcicgeteway.data.net.NetworkInfoRepository.DELAY_TEST_URL },

@@ -207,6 +207,7 @@ data class DeepLinkPreview(
             is ProfileSource.Tor -> "Tor"
             is ProfileSource.Ssh -> "SSH"
             is ProfileSource.MasterDns -> "MasterDNS"
+            is ProfileSource.MhrvRelay -> "MHRV Relay"
             is ProfileSource.OpenConnect -> "OpenConnect"
             is ProfileSource.Ikev2 -> "IKEv2"
             is ProfileSource.Aether -> "Aether"
@@ -238,9 +239,36 @@ object LockedConfigExtractor {
      */
     fun extractLink(text: String): String? {
         val t = text.trim()
+        if (t.isEmpty()) return null
         val whole = if (LINK_ALPHABET_ONLY.matches(t)) t.filterNot { it.isWhitespace() || it == '\u200E' || it == '\u200F' || it == '\u200B' } else t
-        val raw = LINK_REGEX.find(whole)?.value ?: return null
-        return raw.trimEnd('.', ':')
+        val raw = LINK_REGEX.find(whole)?.value
+        if (raw != null) {
+            val idx = text.indexOf(raw)
+            if (idx >= 0) {
+                val after = text.substring(idx + raw.length)
+                val extra = StringBuilder()
+                var seenNewline = false
+                for (c in after) {
+                    if (c == '\r' || c == '\n') {
+                        if (seenNewline) break
+                        seenNewline = true
+                        continue
+                    }
+                    if (c == '\u200E' || c == '\u200F' || c == '\u200B' || c == ' ') continue
+                    if (c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/' || c == '_' || c == '-' || c == '=') {
+                        extra.append(c)
+                        seenNewline = false
+                    } else {
+                        break
+                    }
+                }
+                if (extra.isNotEmpty()) {
+                    return (raw + extra.toString()).trimEnd('.', ':')
+                }
+            }
+            return raw.trimEnd('.', ':')
+        }
+        return null
     }
 
     fun extractKey(text: String): String? {

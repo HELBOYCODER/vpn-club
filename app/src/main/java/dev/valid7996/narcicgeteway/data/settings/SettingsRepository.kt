@@ -32,7 +32,7 @@ class SettingsRepository(context: Context) {
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private fun read(): AppSettings {
-        val d = AppSettings(useZepTun = true)
+        val d = AppSettings(useZepTun = true, useHevTun = false, enableIpv6 = true)
         return AppSettings(
 
             themeMode = prefs.enum("theme_mode", d.themeMode),
@@ -95,6 +95,7 @@ class SettingsRepository(context: Context) {
             vpnBypassLan = prefs.enum("vpn_bypass_lan", d.vpnBypassLan),
             vpnInterfaceAddress = prefs.enum("vpn_iface_addr", d.vpnInterfaceAddress),
             vpnMtu = prefs.getInt("vpn_mtu", d.vpnMtu),
+            useHevTun = prefs.getBoolean("pref_use_hev_tunnel", d.useHevTun),
             useZepTun = prefs.getBoolean("use_zeptun", d.useZepTun),
             hevTunLogLevel = prefs.enum("hev_log_level", d.hevTunLogLevel),
             hevTunRwTimeout = prefs.str("hev_rw_timeout", d.hevTunRwTimeout),
@@ -311,6 +312,7 @@ class SettingsRepository(context: Context) {
             putString("vpn_bypass_lan", s.vpnBypassLan.name)
             putString("vpn_iface_addr", s.vpnInterfaceAddress.name)
             putInt("vpn_mtu", s.vpnMtu)
+            putBoolean("pref_use_hev_tunnel", s.useHevTun)
             putBoolean("use_zeptun", s.useZepTun)
             putString("hev_log_level", s.hevTunLogLevel.name)
             putString("hev_rw_timeout", s.hevTunRwTimeout)

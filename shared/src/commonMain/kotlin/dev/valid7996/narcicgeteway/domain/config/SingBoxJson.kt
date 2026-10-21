@@ -69,6 +69,8 @@ object SingBoxJson {
 
     fun isSingBox(text: String): Boolean = shapeOf(text) != Shape.None
 
+    fun isSingBoxJson(text: String): Boolean = isSingBox(text)
+
     private fun isSingBoxConfig(root: JsonObject): Boolean {
         val entries = listOfNotNull(root["outbounds"] as? JsonArray, root["endpoints"] as? JsonArray)
             .flatten()

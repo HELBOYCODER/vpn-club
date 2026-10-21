@@ -59,6 +59,8 @@ object VpnManager {
 
     const val KIND_MASTERDNS = "master_dns"
 
+    const val KIND_MHRV = "mhrv_relay"
+
     const val KIND_TOR = "tor"
 
     const val KIND_SSH = "ssh"

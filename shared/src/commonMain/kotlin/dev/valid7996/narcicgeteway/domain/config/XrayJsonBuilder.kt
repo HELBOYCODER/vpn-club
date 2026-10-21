@@ -391,6 +391,25 @@ object XrayJsonBuilder {
             }
             if (!forSpeedtest) {
                 putJsonArray("inbounds") {
+                    if (options.useXrayTun) {
+                        addJsonObject {
+                            put("tag", "tun")
+                            put("protocol", "tun")
+                            putJsonObject("settings") {
+                                put("name", "xray0")
+                                put("MTU", options.vpnMtu)
+                            }
+                            putJsonObject("sniffing") {
+                                put("enabled", options.sniffing)
+                                putJsonArray("destOverride") {
+                                    add("http")
+                                    add("tls")
+                                    add("quic")
+                                    if (fakeDnsActive(options)) add("fakedns")
+                                }
+                            }
+                        }
+                    }
                     add(socksInbound(socksPort, options))
                     if (options.appendHttpProxy) add(httpInbound(socksPort + 1, options))
 
@@ -418,7 +437,7 @@ object XrayJsonBuilder {
                 add(directOutbound())
                 add(blockOutbound())
 
-                if (!forSpeedtest && localDnsActive(options)) add(dnsOutbound())
+                if (!forSpeedtest && (localDnsActive(options) || options.useXrayTun)) add(dnsOutbound())
 
                 if (options.fragmentEnabled && options.dialerSocksPort == null) {
                     add(fragmentOutbound(options))
@@ -441,6 +460,15 @@ object XrayJsonBuilder {
                         addJsonObject {
                             put("type", "field")
                             putJsonArray("inboundTag") { add(TAG_SOCKS_IN) }
+                            put("port", "53")
+                            put("outboundTag", TAG_DNS_OUT)
+                        }
+                    }
+
+                    if (options.useXrayTun) {
+                        addJsonObject {
+                            put("type", "field")
+                            putJsonArray("inboundTag") { add("tun") }
                             put("port", "53")
                             put("outboundTag", TAG_DNS_OUT)
                         }
@@ -505,7 +533,12 @@ object XrayJsonBuilder {
                 putJsonObject("stats") {}
             }
         }
-        return prettyJson.encodeToString(JsonObject.serializer(), config)
+        val raw = prettyJson.encodeToString(JsonObject.serializer(), config)
+        return when (val res = EchOutbound.serialize(raw)) {
+            is EchOutbound.Result.Done -> res.content
+            is EchOutbound.Result.Invalid -> raw
+            is EchOutbound.Result.TagConflict -> raw
+        }
     }
 
     data class BuildOptions(
@@ -560,6 +593,10 @@ object XrayJsonBuilder {
 
         val muxXudpConcurrency: Int = 16,
         val muxXudpQuic: String = "reject",
+
+        val useXrayTun: Boolean = false,
+        val vpnMtu: Int = 1500,
+        val enableLocalProxy: Boolean = true,
 
         val dialerSocksPort: Int? = null,
     )
@@ -1580,6 +1617,7 @@ private fun statsPolicy() = buildJsonObject {
                     }
 
                     s.tls.echConfigList?.takeIf { it.isNotBlank() }?.let { put("echConfigList", it) }
+                    s.tls.echOutbound?.takeIf { it.isNotBlank() }?.let { put("echOutbound", it) }
                 } else {
                     s.tls.publicKey?.takeIf { it.isNotBlank() }?.let { put("publicKey", it) }
                     s.tls.shortId?.takeIf { it.isNotBlank() }?.let { put("shortId", it) }

@@ -1130,42 +1130,47 @@ private fun VpnPage(
 
         if (LocalPlatform.current.choosesTunEngine) {
             SettingsGroup {
-                SettingsInfoRow(
-                    stringResource(Res.string.title_pref_use_hev_tunnel),
-                    stringResource(Res.string.summary_pref_hev_tunnel_always_on),
-                )
-                SettingsDivider(hasIcon = false)
-                SettingsListRow(
-                    title = stringResource(Res.string.tun_engine_title),
-                    options = listOf(
-                        true to stringResource(Res.string.tun_engine_zeptun),
-                        false to stringResource(Res.string.tun_engine_hev),
-                    ),
-                    selected = s.useZepTun,
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.title_pref_use_hev_tunnel),
+                    summary = stringResource(Res.string.summary_pref_use_hev_tunnel),
+                    checked = s.useHevTun,
                     enabled = hevOn,
-                    onSelected = { v -> onUpdate { it.copy(useZepTun = v) } },
+                    onCheckedChange = { v -> onUpdate { it.copy(useHevTun = v) } },
                 )
-                SettingsDivider(hasIcon = false)
-                SettingsInfoRow(
-                    stringResource(Res.string.tun_engine_title),
-                    stringResource(Res.string.tun_engine_sub),
-                )
-                SettingsDivider(hasIcon = false)
-                SettingsListRow(
-                    title = stringResource(Res.string.title_pref_hev_tunnel_loglevel),
-                    options = HevLogLevel.entries.map { it to it.value },
-                    selected = s.hevTunLogLevel,
-                    enabled = hevOn,
-                    onSelected = { v -> onUpdate { it.copy(hevTunLogLevel = v) } },
-                )
-                SettingsDivider(hasIcon = false)
-                SettingsEditRow(
-                    title = stringResource(Res.string.title_pref_hev_tunnel_rw_timeout),
-                    value = s.hevTunRwTimeout,
-                    enabled = hevOn,
-                    placeholder = stringResource(Res.string.summary_pref_hev_tunnel_rw_timeout),
-                    onValueChanged = { v -> onUpdate { it.copy(hevTunRwTimeout = v) } },
-                )
+                if (s.useHevTun) {
+                    SettingsDivider(hasIcon = false)
+                    SettingsListRow(
+                        title = stringResource(Res.string.tun_engine_title),
+                        options = listOf(
+                            true to stringResource(Res.string.tun_engine_zeptun),
+                            false to stringResource(Res.string.tun_engine_hev),
+                        ),
+                        selected = s.useZepTun,
+                        enabled = hevOn,
+                        onSelected = { v -> onUpdate { it.copy(useZepTun = v) } },
+                    )
+                    SettingsDivider(hasIcon = false)
+                    SettingsInfoRow(
+                        stringResource(Res.string.tun_engine_title),
+                        stringResource(Res.string.tun_engine_sub),
+                    )
+                    SettingsDivider(hasIcon = false)
+                    SettingsListRow(
+                        title = stringResource(Res.string.title_pref_hev_tunnel_loglevel),
+                        options = HevLogLevel.entries.map { it to it.value },
+                        selected = s.hevTunLogLevel,
+                        enabled = hevOn,
+                        onSelected = { v -> onUpdate { it.copy(hevTunLogLevel = v) } },
+                    )
+                    SettingsDivider(hasIcon = false)
+                    SettingsEditRow(
+                        title = stringResource(Res.string.title_pref_hev_tunnel_rw_timeout),
+                        value = s.hevTunRwTimeout,
+                        enabled = hevOn,
+                        placeholder = stringResource(Res.string.summary_pref_hev_tunnel_rw_timeout),
+                        onValueChanged = { v -> onUpdate { it.copy(hevTunRwTimeout = v) } },
+                    )
+                }
             }
         }
     }

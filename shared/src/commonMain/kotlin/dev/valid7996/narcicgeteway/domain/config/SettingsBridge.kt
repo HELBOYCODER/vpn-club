@@ -12,6 +12,7 @@ fun AppSettings.toBuildOptions(
     carrier: Boolean = false,
 
     resolvedServerHosts: Map<String, List<String>> = emptyMap(),
+    useXrayTun: Boolean = false,
 ): XrayJsonBuilder.BuildOptions = XrayJsonBuilder.BuildOptions(
     singBox = singBoxTuning(),
     logLevel = logLevel.value,
@@ -46,6 +47,9 @@ fun AppSettings.toBuildOptions(
     muxXudpQuic = muxXudpQuic.value,
     localDns = localDnsEnabled,
     fakeDns = localDnsEnabled && fakeDnsEnabled,
+    useXrayTun = useXrayTun,
+    vpnMtu = vpnMtu,
+    enableLocalProxy = effectiveLocalProxy,
     outboundDomainResolve = outboundDomainResolve.value,
     resolvedServerHosts = resolvedServerHosts,
 )

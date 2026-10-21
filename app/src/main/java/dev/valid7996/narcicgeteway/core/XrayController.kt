@@ -63,12 +63,12 @@ object XrayController {
     val isRunning: Boolean
         get() = controller?.isRunning ?: false
 
-    fun start(configJson: String): Boolean {
+    fun start(configJson: String, tunFd: Int = 0): Boolean {
         val c = ready() ?: return false
         if (c.isRunning) runCatching { c.stopLoop() }
         lastError = null
         return try {
-            c.startLoop(configJson, 0)
+            c.startLoop(configJson, tunFd)
             c.isRunning
         } catch (e: Exception) {
             Log.e(TAG, "startLoop failed", e)

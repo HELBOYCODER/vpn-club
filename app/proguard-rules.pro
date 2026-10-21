@@ -67,3 +67,5 @@
 -keepclasseswithmembers,includedescriptorclasses class com.rstagit.androidasdd.core.protocol.GoNativeBridge {
     native <methods>;
 }
+
+-keep class com.therealaleph.mhrv.Native { *; }
