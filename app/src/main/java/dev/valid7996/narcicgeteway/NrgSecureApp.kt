@@ -32,6 +32,7 @@ class NrgSecureApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
 
         container = AppContainer(this)
+        com.helboy.vpnclub.ui.proto.ProtoEnv.install(container.configRepository, container.settingsRepository)
 
         // One app, two engines: init the Hellboy engine and tie both tunnels together before any UI exists,
         // so the tile, widget and boot receiver also stop the other engine's tunnel correctly.
