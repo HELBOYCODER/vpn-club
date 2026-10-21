@@ -53,3 +53,45 @@ Status legend: **H** = present in Hellboy 7c41864 (partly or fully), **M** = mis
 - Engines in Narcic that Hellboy does not ship: sing-box, Tor, DNSTT, VayDNS, MasterDNS, OpenConnect, IKEv2, SSH, SNI spoof, AI. These need native libraries (`app/src/main/jniLibs`, `libs/nrgcore.aar`). `nrgcore.aar` (119 MB) is built locally with `tools/build-nrgcore.sh` and is not in git.
 - Features present only in Hellboy (rows 38–40) must survive the merge; the current merged tree lost them from the navigation.
 - Current merged tree: Narcic UI with Hellboy skin (theme, face hero, concrete wall). Rows marked N need Hellboy UI, not the Narcic one.
+
+
+## Port status (final for this branch)
+
+"Native" = Hellboy code. "Embedded" = Narcic's own screen shown inside the Hellboy shell under Hellboy's theme. "Not ported" = not reachable. Nothing below has been run on a device; see "Verified" at the end.
+
+| # | Feature | Where it lives now |
+|---|---|---|
+| 1 | Connect / disconnect | Native: Home button (HellboyFace), one state for both engines |
+| 2 | Server card, route map | Native card with name and duration. **Route map and country not ported** |
+| 3 | Failure message | Native: Home shows the failure of either engine |
+| 4 | Servers list | Native list for the Hellboy engine; Narcic list embedded in "Protocols" |
+| 5 | Import (deep link, clipboard, QR, file) | Embedded (Protocols tab, `DeepLinkImportHost` always composed); Hellboy's own import dialog stays |
+| 6 | Manual config editor | Native (Hellboy servers) and embedded (Narcic profiles) |
+| 7 | Subscriptions | Native (Hellboy "my subscriptions") and embedded |
+| 8 | Auto-select | Embedded |
+| 9 | Cyber radar | **Not ported** (decoration); latency lives in the embedded list |
+| 10 | Psiphon | Native free Psiphon (Hellboy engine) and embedded Narcic Psiphon sheet |
+| 11-20 | Aether, SNI spoof, IKEv2, OpenConnect, SSH, DNS tunnels, MasterDNS, Tor, chains, certificates | Embedded (Protocols tab and Advanced page) |
+| 21 | Lock, share, encrypted export | Embedded |
+| 22 | Routing rules | Native rules dialog (Hellboy engine) and embedded RoutingScreen (Narcic engine) |
+| 23 | Per-app proxy | Native bypass list (Hellboy engine) and embedded (Narcic engine) |
+| 24 | Live monitor | Embedded (Advanced) |
+| 25 | IP scanner | Native Cloudflare scanner; Narcic scanner embedded (Advanced) |
+| 26 | MTU optimizer | Embedded (Advanced) |
+| 27 | Telegram proxy | Embedded (Advanced) |
+| 28 | AI assistant | Embedded (Advanced) |
+| 29 | Geo assets | Embedded (Advanced) |
+| 30 | Backup and restore | Embedded (Advanced) |
+| 31 | Appearance | Native (theme, effects, button style) |
+| 32 | Onboarding | Native, new (three cards) |
+| 33 | Easter egg | **Not ported** (optional) |
+| 34 | Logs | Native export and embedded Narcic log sheet |
+| 35 | Update check | Embedded nudge pointing at this repo, plus Hellboy's own check |
+| 36 | Tile, widget, boot receiver | Kept as system components; they control the Narcic engine and stop Hellboy's tunnel first |
+| 37 | Relay | Embedded/internal |
+| 38-40 | Free Psiphon/WARP, serverless, panel deploy | Native, unchanged |
+
+### Verified
+- JVM unit tests: Narcic suite, Hellboy `corex` suite (61), `EngineBridge` (7) and a Robolectric walk of the Hellboy shell (5): navigation, advanced page, import jump, onboarding, connect button.
+- Release build for arm64-v8a, armeabi-v7a and x86_64; a local signing run with a throw-away key confirmed the signing path, v2 signature, package, versionCode and native libraries.
+- **Not verified:** any behaviour on a device or emulator (VPN permission, tunnels, engine switching, the embedded pages' look), the GitHub Actions workflow (never run), the real release key.
