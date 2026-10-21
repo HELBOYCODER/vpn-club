@@ -45,54 +45,67 @@ class HellboyShellTest {
         ThemeState.effects = false
     }
 
-    private fun show(onboarding: Boolean = false) = rule.setContent {
-        HellboyTheme {
-            AppRoot(
-                onToggle = { toggles++ },
-                onConnect = {},
-                pages = pages,
-                showOnboarding = onboarding,
-                onOnboardingDone = { onboardingDone++ },
-            )
+    // The Hellboy face and the particle orb run frame loops forever, so the test clock must not auto-advance
+    // (it would never be idle); time is moved by hand after each interaction instead.
+    private fun settle() = rule.mainClock.advanceTimeBy(600)
+
+    private fun click(tag: String) {
+        rule.onNodeWithTag(tag).performClick()
+        settle()
+    }
+
+    private fun show(onboarding: Boolean = false) {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            HellboyTheme {
+                AppRoot(
+                    onToggle = { toggles++ },
+                    onConnect = {},
+                    pages = pages,
+                    showOnboarding = onboarding,
+                    onOnboardingDone = { onboardingDone++ },
+                )
+            }
         }
+        settle()
     }
 
     @Test
     fun homeIsTheFirstTabAndTheButtonStartsAConnection() {
         show()
         rule.onNodeWithTag("connect_button").assertIsDisplayed()
-        rule.onNodeWithTag("connect_button").performClick()
-        rule.waitForIdle()
+        click("connect_button")
         assertEquals(1, toggles)
     }
 
     @Test
     fun everyTabRenders() {
         show()
-        rule.onNodeWithTag("nav_servers").performClick()
-        rule.onNodeWithTag("nav_protocols").performClick()
+        click("nav_servers")
+        click("nav_protocols")
         rule.onNodeWithText("PROTOCOLS_STUB").assertIsDisplayed()
-        rule.onNodeWithTag("nav_scanner").performClick()
-        rule.onNodeWithTag("nav_settings").performClick()
+        click("nav_scanner")
+        click("nav_settings")
         rule.onNodeWithTag("screen_settings").assertIsDisplayed()
-        rule.onNodeWithTag("nav_home").performClick()
+        click("nav_home")
         rule.onNodeWithTag("connect_button").assertIsDisplayed()
     }
 
     @Test
     fun advancedPageOpensFromSettingsAndGoesBack() {
         show()
-        rule.onNodeWithTag("nav_settings").performClick()
-        rule.onNodeWithTag("open_advanced").performClick()
+        click("nav_settings")
+        click("open_advanced")
         rule.onNodeWithText("ADVANCED_STUB").assertIsDisplayed()
-        rule.onNodeWithTag("advanced_back").performClick()
+        click("advanced_back")
         rule.onNodeWithTag("screen_settings").assertIsDisplayed()
     }
 
     @Test
     fun anImportedLinkJumpsToTheProtocolsTab() {
         show()
-        rule.runOnIdle { importedCallback!!.invoke() }
+        rule.runOnUiThread { importedCallback!!.invoke() }
+        settle()
         rule.onNodeWithText("PROTOCOLS_STUB").assertIsDisplayed()
     }
 
@@ -100,7 +113,7 @@ class HellboyShellTest {
     fun onboardingShowsFirstAndStartDismissesIt() {
         show(onboarding = true)
         rule.onNodeWithTag("onboarding").assertIsDisplayed()
-        rule.onNodeWithTag("onboarding_start").performClick()
+        click("onboarding_start")
         assertEquals(1, onboardingDone)
     }
 }
