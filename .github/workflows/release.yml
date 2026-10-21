@@ -1,0 +1,261 @@
+name: Build and release Hellboy VPN
+
+# Pull requests and branch pushes only build and test (no secrets, unsigned APK as an artifact).
+# A version tag (v*) or a manual run with "publish" builds the SIGNED release APKs and publishes them
+# to a GitHub Release together with a SHA-256 checksum file, then downloads them back and verifies.
+
+on:
+  push:
+    branches: [ main, 'migration/**' ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Sign and publish a GitHub Release for the version in gradle.properties'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: '1.26.3'
+  NDK_VERSION: '29.0.14206865'
+
+jobs:
+  # The 119 MB protocol core (Xray, sing-box, Psiphon, DNS tunnels) is built from pinned sources and cached
+  # by the hash of everything that influences it, so normal runs reuse it.
+  core:
+    name: Protocol core (nrgcore.aar)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache key
+        id: key
+        run: echo "hash=${{ hashFiles('tools/core-sources.txt', 'tools/build-nrgcore.sh', 'tools/singbox-tags.txt') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore nrgcore.aar
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: app/libs/nrgcore.aar
+          key: nrgcore-${{ steps.key.outputs.hash }}
+
+      - uses: actions/setup-java@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Android SDK and NDK
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" "platforms;android-37.0" >/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build nrgcore.aar
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH="$HOME/go/bin:$PATH"
+          gomobile init
+          bash tools/fetch-cores.sh
+          bash tools/build-nrgcore.sh
+
+      - name: Check the core is there
+        run: |
+          test -s app/libs/nrgcore.aar
+          unzip -l app/libs/nrgcore.aar | grep -E 'jni/arm64-v8a/.*\.so' | head -3
+
+  build:
+    name: Test and build
+    needs: core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      code: ${{ steps.ver.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore nrgcore.aar
+        uses: actions/cache/restore@v4
+        with:
+          path: app/libs/nrgcore.aar
+          key: nrgcore-${{ hashFiles('tools/core-sources.txt', 'tools/build-nrgcore.sh', 'tools/singbox-tags.txt') }}
+          fail-on-cache-miss: true
+
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Version
+        id: ver
+        run: |
+          V=$(grep -oP '^narcicgeteway\.versionName=\K.*' gradle.properties)
+          C=$(grep -oP '^narcicgeteway\.versionCode=\K.*' gradle.properties)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "code=$C" >> "$GITHUB_OUTPUT"
+          echo "Hellboy VPN $V (versionCode $C)"
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Build release APKs (unsigned)
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests
+          retention-days: 14
+
+      - name: Upload unsigned APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-unsigned
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+  release:
+    name: Sign and publish
+    needs: build
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore nrgcore.aar
+        uses: actions/cache/restore@v4
+        with:
+          path: app/libs/nrgcore.aar
+          key: nrgcore-${{ hashFiles('tools/core-sources.txt', 'tools/build-nrgcore.sh', 'tools/singbox-tags.txt') }}
+          fail-on-cache-miss: true
+
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Tag must match gradle.properties
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match versionName ${VERSION} in gradle.properties"
+            exit 1
+          fi
+
+      # The key only ever comes from the secret store. Without it the job stops: an APK signed with another
+      # key cannot be installed over a previous Hellboy release, and a random key must never be generated here.
+      - name: Restore the release key
+        env:
+          HELLBOY_KEYSTORE_B64: ${{ secrets.HELLBOY_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$HELLBOY_KEYSTORE_B64" ]; then
+            echo "::error::secret HELLBOY_KEYSTORE_B64 is not set; refusing to publish an APK with a different key"
+            exit 1
+          fi
+          umask 077
+          echo "$HELLBOY_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hellboy-release.jks"
+          echo "HELLBOY_KEYSTORE=$RUNNER_TEMP/hellboy-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed release APKs
+        env:
+          HELLBOY_KEYSTORE_PASSWORD: ${{ secrets.HELLBOY_KEYSTORE_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Verify signature, package and versionCode
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          CODE: ${{ needs.build.outputs.code }}
+        run: |
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          mkdir -p dist
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          [ ${#apks[@]} -gt 0 ] || { echo "::error::no APK was produced"; exit 1; }
+          for apk in "${apks[@]}"; do
+            "$APKSIGNER" verify --verbose --print-certs "$apk" | tee "$RUNNER_TEMP/cert.txt"
+            grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" "$RUNNER_TEMP/cert.txt" \
+              || { echo "::error::$apk is not v2-signed"; exit 1; }
+            "$AAPT2" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+            grep -q "^package: name='com.helboy.vpnclub' versionCode='${CODE}' versionName='${VERSION}'" "$RUNNER_TEMP/badging.txt" \
+              || { echo "::error::unexpected package/version in $apk"; head -1 "$RUNNER_TEMP/badging.txt"; exit 1; }
+            abi=$(echo "$apk" | grep -oE 'arm64-v8a|armeabi-v7a|x86_64' | head -1)
+            [ -n "$abi" ] || abi=universal
+            unzip -l "$apk" | grep -q "lib/${abi}/" || [ "$abi" = universal ] \
+              || { echo "::error::$apk has no native libraries for $abi"; exit 1; }
+            cp "$apk" "dist/HellboyVPN-${VERSION}-${abi}.apk"
+          done
+          (cd dist && sha256sum HellboyVPN-*.apk | tee SHA256SUMS.txt)
+          ls -la dist
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --target "$GITHUB_SHA" \
+              --title "Hellboy VPN ${TAG}" --notes-file RELEASE_NOTES.md
+          fi
+
+      # Download what was published and check it against the checksum file, so a broken upload fails the run.
+      - name: Verify the published download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/verify"
+          gh release download "v${VERSION}" --dir "$RUNNER_TEMP/verify" --clobber
+          cd "$RUNNER_TEMP/verify"
+          sha256sum -c SHA256SUMS.txt
+          for f in HellboyVPN-*.apk; do
+            cmp "$f" "$GITHUB_WORKSPACE/dist/$f"
+          done
+          echo "published files match the signed build"
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/hellboy-release.jks"
