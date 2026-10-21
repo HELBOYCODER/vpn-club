@@ -14,7 +14,10 @@ val keystoreProperties = Properties().apply {
         FileInputStream(keystorePropertiesFile).use { load(it) }
     }
 }
-val hasReleaseKeystore = keystorePropertiesFile.exists()
+// CI passes the permanent Hellboy key through the environment (HELLBOY_KEYSTORE = path of the decoded keystore);
+// a local build can use keystore.properties instead. With neither, the release APK stays unsigned on purpose.
+val envKeystore = System.getenv("HELLBOY_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+val hasReleaseKeystore = envKeystore != null || keystorePropertiesFile.exists()
 
 android {
     namespace = "dev.valid7996.narcicgeteway"
@@ -40,11 +43,18 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                (keystoreProperties["storeType"] as String?)?.let { storeType = it }
+                if (envKeystore != null) {
+                    storeFile = envKeystore
+                    storePassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("HELLBOY_KEY_ALIAS") ?: "hellboyvpn"
+                    keyPassword = System.getenv("HELLBOY_KEYSTORE_PASSWORD")
+                } else {
+                    storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                    storePassword = keystoreProperties["storePassword"] as String
+                    keyAlias = keystoreProperties["keyAlias"] as String
+                    keyPassword = keystoreProperties["keyPassword"] as String
+                    (keystoreProperties["storeType"] as String?)?.let { storeType = it }
+                }
             }
         }
     }
