@@ -47,7 +47,11 @@ class HellboyShellTest {
 
     // The Hellboy face and the particle orb run frame loops forever, so the test clock must not auto-advance
     // (it would never be idle); time is moved by hand after each interaction instead.
-    private fun settle() = rule.mainClock.advanceTimeBy(600)
+    private fun settle() {
+        rule.waitForIdle() // applies pending state writes; does not wait for the frame loops while autoAdvance is off
+        rule.mainClock.advanceTimeBy(600)
+        rule.waitForIdle()
+    }
 
     private fun click(tag: String) {
         rule.onNodeWithTag(tag).performClick()
