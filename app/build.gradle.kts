@@ -160,6 +160,7 @@ dependencies {
     implementation(libs.bouncycastle)
 
     implementation(files("libs/nrgcore.aar"))
+    implementation(files("libs/hev-htproxy.aar"))
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

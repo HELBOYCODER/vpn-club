@@ -1,0 +1,145 @@
+package com.helboy.vpnclub.corex
+
+import java.net.URI
+import java.net.URLDecoder
+import java.util.Base64
+import org.json.JSONObject
+
+/**
+ * پارسر لینک‌های اشتراک به مدل [ProxyConfig].
+ * پشتیبانی: vless, trojan, hysteria2/hy2, vmess, ss (SIP002 + legacy), socks.
+ *
+ * اصل پونی‌تِیل: رشته‌ها را دستی باز و بسته می‌کنیم — بدون وابستگی خارجی.
+ * هر فرمتی که نشناختیم، بی‌سروصدا رد می‌شود (null).
+ */
+object LinkParser {
+
+    private val schemes = setOf("vless", "trojan", "hysteria2", "hy2", "vmess", "ss", "socks", "socks5", "wireguard", "wg", "aether")
+
+    fun parse(link: String): ProxyConfig? {
+        val trimmed = link.trim()
+        if (trimmed.isEmpty()) return null
+        val scheme = trimmed.substringBefore("://").lowercase()
+        if (scheme !in schemes) return null
+        return try {
+            when (scheme) {
+                "vmess" -> parseVmess(trimmed)
+                "ss" -> parseSs(trimmed)
+                "socks", "socks5" -> parseSocks(trimmed, scheme)
+                "wg" -> parseQueryStyle("wireguard" + trimmed.substring(2), "wireguard")
+                "aether" -> parseAether(trimmed)
+                else -> parseQueryStyle(trimmed, scheme)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** vless://uuid@host:port?k=v&k2=v2#tag — همچنین trojan و hysteria2 */
+    private fun parseQueryStyle(link: String, scheme: String): ProxyConfig? {
+        val uri = URI(link)
+        val host = cleanHost(uri.host) ?: return null
+        val port = uri.port.takeIf { it > 0 } ?: return null
+        val uuid = uri.userInfo ?: "" // URI.userInfo از قبل decode شده؛ decode دوباره + را به فاصله تبدیل می‌کرد
+        val q = uri.rawQuery.orEmpty().split("&")
+            .filter { it.contains('=') }
+            .map { p ->
+                val i = p.indexOf('=')
+                URLDecoder.decode(p.take(i), "UTF-8") to URLDecoder.decode(p.substring(i + 1), "UTF-8")
+            }
+        val tag = uri.fragment?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+        return ProxyConfig(
+            scheme = scheme, host = host, port = port, uuidOrUser = uuid,
+            query = q, tag = tag, raw = link
+        )
+    }
+
+    /** vmess://base64(json) */
+    private fun parseVmess(link: String): ProxyConfig? {
+        val payloadB64 = link.removePrefix("vmess://")
+        val json = String(Base64.getMimeDecoder().decode(payloadB64))
+        val o = JSONObject(json)
+        val host = cleanHost(o.optString("add")) ?: return null
+        val port = o.optString("port").toIntOrNull() ?: return null
+        val q = buildList {
+            o.optString("tls").takeIf { it.isNotEmpty() }?.let { add("tls" to it) }
+            o.optString("sni").takeIf { it.isNotEmpty() }?.let { add("sni" to it) }
+            o.optString("host").takeIf { it.isNotEmpty() }?.let { add("host" to it) }
+            o.optString("path").takeIf { it.isNotEmpty() }?.let { add("path" to it) }
+            // در vmess-json: net = شبکه (ws/grpc/…)، type = نوع هدر (none/http)
+            val net = o.optString("net").ifEmpty { "tcp" }
+            add("type" to net)
+            o.optString("type").takeIf { it.isNotEmpty() && it != "none" }?.let { add("headerType" to it) }
+            o.optString("alpn").takeIf { it.isNotEmpty() }?.let { add("alpn" to it) }
+            o.optString("fp").takeIf { it.isNotEmpty() }?.let { add("fp" to it) }
+            o.optString("scy").takeIf { it.isNotEmpty() }?.let { add("encryption" to it) }
+            o.optString("alterId").takeIf { it.isNotEmpty() }?.let { add("alterId" to it) }
+        }
+        return ProxyConfig(
+            scheme = "vmess", host = host, port = port,
+            uuidOrUser = o.optString("id"), query = q,
+            payload = payloadB64,
+            tag = o.optString("ps"), raw = link
+        )
+    }
+
+    /** ss://base64(method:pass)@host:port#tag — SIP002 و legacy */
+    private fun parseSs(link: String): ProxyConfig? {
+        val body = link.removePrefix("ss://")
+        val frag = body.substringAfter('#', "")
+        val tag = if (frag.isEmpty()) "" else URLDecoder.decode(frag, "UTF-8")
+        val main = body.substringBefore('#')
+
+        val (userinfo, hostport) = if (main.contains('@')) {
+            val at = main.lastIndexOf('@')
+            main.take(at) to main.substring(at + 1)
+        } else {
+            // legacy: ss://base64(method:pass@host:port)
+            val decoded = String(Base64.getMimeDecoder().decode(main))
+            val at = decoded.lastIndexOf('@')
+            if (at < 0) return null
+            decoded.take(at) to decoded.substring(at + 1)
+        }
+
+        val methodAndPass = try {
+            String(Base64.getMimeDecoder().decode(userinfo))
+        } catch (_: Exception) { userinfo }
+        val method = methodAndPass.substringBefore(':')
+        val pass = methodAndPass.substringAfter(':', "")
+
+        val colon = hostport.lastIndexOf(':')
+        if (colon < 0) return null
+        val host = cleanHost(hostport.take(colon)) ?: return null
+        val port = hostport.substring(colon + 1).toIntOrNull() ?: return null
+
+        return ProxyConfig(
+            scheme = "ss", host = host, port = port, uuidOrUser = pass,
+            query = listOf("method" to method), tag = tag, raw = link
+        )
+    }
+
+    private fun parseSocks(link: String, scheme: String): ProxyConfig? {
+        val uri = URI(link)
+        val host = cleanHost(uri.host) ?: return null
+        val port = uri.port.takeIf { it > 0 } ?: return null
+        return ProxyConfig(
+            scheme = scheme, host = host, port = port,
+            uuidOrUser = uri.userInfo ?: "", tag = "", raw = link
+        )
+    }
+
+    /** آدرس IPv6 در URI داخل [ ] می‌آید؛ هسته و Socket بدون براکت می‌خواهند. */
+    private fun cleanHost(h: String?): String? =
+        h?.trim()?.trim('[', ']')?.takeIf { it.isNotEmpty() }
+
+    /**
+     * aether://… (Narcic / PattNG). مقصد لینک (endpoint) برای پروفایل‌های دو-hop خالی است؛ در آن صورت یک میزبان
+     * ساختگی گذاشته می‌شود تا کلید سرور پایدار بماند. خود پروفایل همیشه از [ProxyConfig.raw] خوانده می‌شود.
+     */
+    private fun parseAether(link: String): ProxyConfig? {
+        val (name, profile) = com.helboy.vpnclub.corex.aether.AetherLink.parse(link) ?: return null
+        val host = profile.server.ifEmpty { "aether.local" }
+        val port = profile.serverPort.takeIf { it in 1..65535 } ?: 443
+        return ProxyConfig(scheme = "aether", host = host, port = port, query = emptyList(), tag = name, raw = link)
+    }
+}
