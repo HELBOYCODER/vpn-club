@@ -161,6 +161,7 @@ dependencies {
 
     implementation(files("libs/nrgcore.aar"))
     implementation(files("libs/hev-htproxy.aar"))
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
