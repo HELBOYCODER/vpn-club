@@ -36,6 +36,8 @@ data class DnsTunnelForm(
     val sshKey: String = "",
     val sshKeyPass: String = "",
     val forwardDns: Boolean = false,
+    /** Not on screen: the VayDNS wire-compatibility flag travels through unchanged. */
+    val keptDnsttCompat: Boolean = false,
 ) {
     val isVaydns: Boolean get() = engine == DnsTunnelProfile.ENGINE_VAYDNS
     val isDoh: Boolean get() = transport == DnsTunnelProfile.TRANSPORT_DOH
@@ -70,6 +72,7 @@ data class DnsTunnelForm(
         engine = engine,
         domain = domain.trim(),
         publicKey = publicKey.trim(),
+        dnsttCompat = keptDnsttCompat,
         dnsTransport = transport,
         resolvers = FormText.items(resolvers).joinToString(","),
         dohUrl = dohUrl.trim(),
@@ -149,6 +152,7 @@ data class DnsTunnelForm(
                 sshKey = p.sshPrivateKey,
                 sshKeyPass = p.sshKeyPassphrase,
                 forwardDns = p.forwardDnsThroughSsh,
+                keptDnsttCompat = p.dnsttCompat,
             )
         }
     }

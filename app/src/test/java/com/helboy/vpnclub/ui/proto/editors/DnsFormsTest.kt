@@ -59,7 +59,7 @@ class DnsFormsTest {
             recordType = "cname", maxQnameLen = 90, rps = 5.0, idleTimeout = 10, keepalive = 2, udpTimeout = 500,
             maxNumLabels = 3, clientIdSize = 2, socksUser = "u", socksPass = "p", sshEnabled = true, sshHost = "h", sshPort = 2200,
             sshUsername = "root", sshAuthType = DnsTunnelProfile.AUTH_KEY, sshPrivateKey = "KEY", sshKeyPassphrase = "pp",
-            forwardDnsThroughSsh = true, dnsPayloadSize = 80, authoritative = false, autoTune = true,
+            forwardDnsThroughSsh = true, dnsPayloadSize = 80, authoritative = false, autoTune = true, dnsttCompat = true,
         )
         val back = DnsTunnelForm.from(p, "x").toProfile()
         assertEquals(p, back)

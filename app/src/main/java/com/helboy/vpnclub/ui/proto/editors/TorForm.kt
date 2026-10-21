@@ -1,5 +1,6 @@
 package com.helboy.vpnclub.ui.proto.editors
 
+import com.helboy.vpnclub.ui.fa
 import dev.valid7996.narcicgeteway.domain.model.AppSettings
 
 /** The Tor profile itself only has a name; bridges are app-wide settings. These helpers describe and edit them. */
@@ -69,11 +70,11 @@ object TorBridgeSettings {
     fun summary(s: AppSettings): String = when (s.torBridgesMode) {
         MODE_DEFAULT -> {
             val picked = enabledSet(s.torEnabledBridges).size
-            "پل‌های پیش‌فرض (${transportLabel(s.torBridgeTransport)})" + if (picked == 0) " · ۸ پل اول" else " · $picked انتخاب‌شده"
+            "پل‌های پیش‌فرض (${transportLabel(s.torBridgeTransport)})" + if (picked == 0) " · ${DEFAULT_COUNT.fa()} پل اول" else " · ${picked.fa()} انتخاب‌شده"
         }
         MODE_OWN -> {
             val n = ownLines(s.torOwnBridges).size
-            "پل‌های شما (${transportLabel(s.torBridgeTransport)})" + if (n == 0) " · هنوز خطی وارد نشده" else " · $n خط"
+            "پل‌های شما (${transportLabel(s.torBridgeTransport)})" + if (n == 0) " · هنوز خطی وارد نشده" else " · ${n.fa()} خط"
         }
         else -> "بدون پل؛ اتصال مستقیم به شبکهٔ تور"
     }
