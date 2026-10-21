@@ -9,7 +9,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.helboy.vpnclub.MainActivity
+import dev.valid7996.narcicgeteway.MainActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -293,7 +293,11 @@ class HellboyVpnService : VpnService() {
         const val ACTION_START_PSIPHON_ONLY = "com.helboy.vpnclub.START_PSIPHON_ONLY"
         const val PSIPHON_ONLY_ID = "psiphon-only"
 
+        /** قبل از بالا آمدن تونل هلبوی صدا زده می‌شود (پل موتورها: تونل موتور دیگر را می‌بندد). */
+        @Volatile var beforeStart: (() -> Unit)? = null
+
         fun startPsiphonOnly(context: Context) {
+            runCatching { beforeStart?.invoke() }
             _status.value = SvcStatus(SvcState.STARTING)
             context.startForegroundService(
                 Intent(context, HellboyVpnService::class.java).setAction(ACTION_START_PSIPHON_ONLY))
@@ -317,6 +321,7 @@ class HellboyVpnService : VpnService() {
         }
 
         fun start(context: Context) {
+            runCatching { beforeStart?.invoke() }
             // وضعیت قبلی (UP سرور قبلی) نباید به‌عنوان نتیجه‌ی این شروع خوانده شود
             _status.value = SvcStatus(SvcState.STARTING)
             context.startForegroundService(

@@ -5,6 +5,10 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 
 object AndroidVpn {
+    /** Called before a tunnel is started; the engine bridge uses it to stop the other engine's tunnel. */
+    @Volatile
+    var beforeStart: (() -> Unit)? = null
+
     fun start(
         context: Context,
         configJson: String,
@@ -14,6 +18,7 @@ object AndroidVpn {
 
         proxyOnly: Boolean = false,
     ) {
+        runCatching { beforeStart?.invoke() }
         VpnManager.onStarting(remark)
 
         val viaFile = configJson.length > INLINE_CONFIG_LIMIT

@@ -219,7 +219,7 @@ data class AppSettings(
     val accentColor: Int = 0,
 
     val amoledBlack: Boolean = false,
-    val language: AppLanguage = AppLanguage.System,
+    val language: AppLanguage = AppLanguage.Persian,
 
     val customDownloadColor: Long? = 0xFFE8742AL,
     val customUploadColor: Long? = 0xFF9AA7FFL,

@@ -54,7 +54,12 @@ import kotlinx.coroutines.delay
 
 /** صفحهٔ خانه: دکمه، وضعیت، سرور فعلی، سرعت زنده و مدت نشست. */
 @Composable
-fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
+fun HomeScreen(
+    ui: VpnController.UiState,
+    onToggle: () -> Unit,
+    /** سرور/پروفایلی که موتور نارسیس به آن وصل است (برای کارت وضعیت)؛ null = موتور هلبوی. */
+    ext: com.helboy.vpnclub.bridge.EngineBridge.External? = null,
+) {
     // چرخش دکمه فقط وقتی واقعاً در حال اتصال هستیم (نه هنگام اسکن/ری‌اسکن جدا)
     val busy = ui.busyConnecting
     val shownPhase = if (!busy && !ui.connected && ui.phase != Phase.FAILED) Phase.IDLE else ui.phase
@@ -102,8 +107,8 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        // گزینه‌ی سریع‌ترین اتصال
-        ClubCard(Modifier.fillMaxWidth()) {
+        // گزینه‌ی سریع‌ترین اتصال (فقط برای موتور هلبوی)
+        if (ext == null) ClubCard(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("سریع‌ترین اتصال", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -122,8 +127,11 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             )
         }
 
-        if (ui.connected && ui.current != null) {
-            ServerCard(ui.current, ui.latencyMs, formatDuration(now - ui.connectedSince))
+        if (ui.connected && ext != null) {
+            ExternalCard(ext.name, formatDuration(now - ui.connectedSince))
+        }
+        if (ui.connected && (ui.current != null || ext != null)) {
+            if (ui.current != null) ServerCard(ui.current, ui.latencyMs, formatDuration(now - ui.connectedSince))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 StatTile("دانلود", formatSpeed(ui.downBps), "کل: ${formatBytes(ui.downTotal)}",
                     StatusGreen, Modifier.weight(1f))
@@ -143,6 +151,20 @@ fun HomeScreen(ui: VpnController.UiState, onToggle: () -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ExternalCard(name: String, duration: String) {
+    ClubCard(Modifier.fillMaxWidth(), border = StatusGreen.copy(alpha = 0.5f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(name.ifEmpty { "پروفایل فعال" }, color = TextPrimary, fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("پروتکل‌ها و پروفایل‌های من", color = TextTertiary, fontSize = 11.sp)
+            }
+            Text(duration, color = NeonCyan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

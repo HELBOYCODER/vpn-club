@@ -62,7 +62,7 @@ private val REPOS = listOf("helboycoder/hellboy-vpn", "helboycoder/vpn-club")
 
 /** تنظیمات: پروفایل شبکه، تونل تفکیکی، تعویض خودکار، لاگ تشخیصی، به‌روزرسانی. */
 @Composable
-fun SettingsScreen(settings: AppSettings) {
+fun SettingsScreen(settings: AppSettings, onOpenAdvanced: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     var carrier by remember { mutableStateOf(settings.carrierMode) }
     var theme by remember { mutableStateOf(settings.themeMode) }
@@ -83,6 +83,18 @@ fun SettingsScreen(settings: AppSettings) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("تنظیمات", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+
+        if (onOpenAdvanced != null) ClubCard(Modifier.fillMaxWidth(), border = NeonCyan.copy(alpha = 0.5f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ابزارها و تنظیمات پیشرفته", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("مسیریابی و قوانین، پروکسی هر برنامه، Tor و پل‌ها، مانیتور زنده، بهینه‌ساز MTU، " +
+                    "پروکسی تلگرام، فایل‌های geo، پشتیبان‌گیری و بازیابی، دستیار هوشمند، لاگ‌ها",
+                    color = TextSecondary, fontSize = 12.sp)
+                OutlinedButton(onClick = onOpenAdvanced, modifier = Modifier.fillMaxWidth().testTag("open_advanced")) {
+                    Text("باز کردن")
+                }
+            }
+        }
 
         ClubCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

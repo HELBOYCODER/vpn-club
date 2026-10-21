@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
         get() = sp.getBoolean("failover", true)
         set(v) { sp.edit().putBoolean("failover", v).apply() }
 
+    /** hellboy | narcic — دکمه‌ی خانه وقتی چیزی وصل نیست کدام موتور را بالا می‌آورد. */
+    var lastEngine: String
+        get() = sp.getString("last_engine", "hellboy") ?: "hellboy"
+        set(v) { sp.edit().putString("last_engine", v).apply() }
+
     /** اتصال خودکار به‌محض باز شدن اپ. */
     var autoConnectOnLaunch: Boolean
         get() = sp.getBoolean("auto_launch", false)

@@ -33,6 +33,11 @@ class NrgSecureApp : Application(), SingletonImageLoader.Factory {
 
         container = AppContainer(this)
 
+        // One app, two engines: init the Hellboy engine and tie both tunnels together before any UI exists,
+        // so the tile, widget and boot receiver also stop the other engine's tunnel correctly.
+        com.helboy.vpnclub.corex.VpnController.init(this)
+        com.helboy.vpnclub.bridge.EngineBridge.install(this)
+
         XrayController.warmUp(this)
         PingService.rstaSpoofLease = { RstaSpoofClient.lease(this, SettingsRepository(this).settings.value) }
         PingService.aetherTunnel = { profile, measure -> AetherDelayProbe.run(this, profile, measure) }

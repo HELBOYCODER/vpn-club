@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -33,6 +34,7 @@ import dev.valid7996.narcicgeteway.platform.AndroidPlatform
 import dev.valid7996.narcicgeteway.ui.MainScaffold
 import dev.valid7996.narcicgeteway.ui.platform.FilePick
 import dev.valid7996.narcicgeteway.ui.platform.LocalPlatform
+import dev.valid7996.narcicgeteway.ui.theme.toPersonalization
 import dev.valid7996.narcicgeteway.ui.theme.NrgSecureTheme
 import kotlinx.coroutines.CompletableDeferred
 
@@ -259,69 +261,28 @@ class MainActivity : ComponentActivity() {
         handleConnectRequest(intent)
         val repo = (application as NrgSecureApp).container.settingsRepository
         enableEdgeToEdge()
+        setupHellboy(savedInstanceState)
         setContent {
             val settings by repo.settings.collectAsStateWithLifecycle()
-            val dark = when (settings.themeMode) {
-                ThemeMode.System -> isSystemInDarkTheme()
-                ThemeMode.Light -> false
-                ThemeMode.Dark -> true
-            }
-            val langTag = settings.language.tag ?: resources.configuration.locales[0].language
-            NrgSecureTheme(
-                darkTheme = dark,
-                dynamicColor = settings.dynamicColor,
-                accentColor = settings.accentColor,
-                amoledBlack = settings.amoledBlack,
-                themeProfileId = settings.themeProfileId,
-                languageTag = langTag,
-                fontScale = settings.uiFontScale.scale,
-            ) {
+            // Hellboy theme mode is the single source of truth for light/dark in the whole app.
+            com.helboy.vpnclub.ui.theme.HellboyTheme {
                 val aetherActions = androidx.compose.runtime.remember { dev.valid7996.narcicgeteway.ui.AetherActionsAndroid(applicationContext) }
+                val aiBridge = androidx.compose.runtime.remember { createAiBridge(repo) }
+                val pages = androidx.compose.runtime.remember(aiBridge) { protocolPages(aiBridge) }
                 CompositionLocalProvider(
                     LocalPlatform provides androidPlatform,
                     dev.valid7996.narcicgeteway.ui.servers.LocalAetherActions provides aetherActions,
                 ) {
-                    val aiBridge = androidx.compose.runtime.remember {
-                        dev.valid7996.narcicgeteway.ai.AndroidAiBridge.create(
-                            repository = configRepository,
-                            settings = repo,
-                            toggleConnection = ::toggleConnection,
-                            mtuHint = {
-                                val active = configRepository.activeProfile()
-                                val link = (active?.source as? dev.valid7996.narcicgeteway.domain.config.ProfileSource.Link)?.link
-                                val parsed = link?.let {
-                                    runCatching { dev.valid7996.narcicgeteway.domain.config.ConfigParser.parse(it) }.getOrNull()
-                                }
-                                val host = parsed?.address?.takeIf { it.isNotBlank() }
-                                    ?: active?.address.orEmpty()
-                                if (host.isBlank()) {
-                                    null
-                                } else {
-                                    dev.valid7996.narcicgeteway.data.net.MtuServerHint(
-                                        host = host,
-                                        overhead = parsed
-                                            ?.let { dev.valid7996.narcicgeteway.data.net.MtuOverheads.ofServer(it) }
-                                            ?: dev.valid7996.narcicgeteway.data.net.MtuOverheads.worstCase(),
-                                    )
-                                }
-                            },
-                        )
-                    }
-                    dev.valid7996.narcicgeteway.skin.HellboySkinProviders {
-                    MainScaffold(
-                        settings = settings,
-                        configRepository = configRepository,
-                        onToggleConnection = ::toggleConnection,
-                        onActiveServerChanged = ::switchActiveServer,
-                        onUpdateSettings = repo::update,
-                        onLanguage = { lang ->
-                            repo.update { it.copy(language = lang) }
-                            recreate()
+                    com.helboy.vpnclub.ui.screen.AppRoot(
+                        onToggle = ::homeToggle,
+                        onConnect = { e ->
+                            com.helboy.vpnclub.corex.VpnController.settings().lastEngine = "hellboy"
+                            withHellboyPermission { com.helboy.vpnclub.corex.VpnController.connectTo(e) }
                         },
-                        aiBridge = aiBridge,
-                        appVersion = dev.valid7996.narcicgeteway.BuildConfig.VERSION_NAME,
+                        pages = pages,
+                        showOnboarding = settings.onboardingVersion == 0,
+                        onOnboardingDone = { repo.update { it.copy(onboardingVersion = 1) } },
                     )
-                    }
 
                     dev.valid7996.narcicgeteway.ui.OpenConnectAuthDialog()
                     dev.valid7996.narcicgeteway.ui.OpenConnectCertTrustDialog(
@@ -335,6 +296,174 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // ───────────── Hellboy shell: engine plumbing ─────────────
+
+    private var hellboyPending: (() -> Unit)? = null
+
+    private val hellboyVpnPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) hellboyPending?.invoke()
+            hellboyPending = null
+        }
+
+    private fun withHellboyPermission(action: () -> Unit) {
+        val prepare = VpnService.prepare(this)
+        if (prepare == null) action() else { hellboyPending = action; hellboyVpnPermissionLauncher.launch(prepare) }
+    }
+
+    /** Hellboy engine settings, theme state, auto-connect and the "needs VPN permission" signal. */
+    private fun setupHellboy(savedInstanceState: Bundle?) {
+        val hb = com.helboy.vpnclub.corex.VpnController
+        hb.init(applicationContext)
+        com.helboy.vpnclub.ui.theme.ThemeState.mode = hb.settings().themeMode
+        com.helboy.vpnclub.ui.theme.ThemeState.buttonStyle = hb.settings().buttonStyle
+        com.helboy.vpnclub.ui.theme.ThemeState.effects = hb.settings().skinEffects
+
+        if (savedInstanceState == null && hb.settings().autoConnectOnLaunch &&
+            !hb.state.value.connected && !VpnManager.status.value.state.isActive &&
+            VpnService.prepare(this) == null
+        ) {
+            if (hb.settings().lastEngine == "narcic" && configRepository.activeProfile() != null) toggleConnection()
+            else hb.connectFastest()
+        }
+
+        lifecycleScope.launch {
+            this@MainActivity.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                hb.state.collect { st ->
+                    if (st.needsPermission) {
+                        hb.clearPermissionFlag()
+                        withHellboyPermission { hb.connectFastest() }
+                    }
+                }
+            }
+        }
+    }
+
+    /** The Home button: stop whatever is running, otherwise start the engine the user used last. */
+    private fun homeToggle() {
+        val hb = com.helboy.vpnclub.corex.VpnController
+        val h = hb.state.value
+        when {
+            com.helboy.vpnclub.bridge.EngineBridge.narcicBusy(VpnManager.status.value.state) -> toggleConnection()
+            h.connected || h.busyConnecting -> hb.toggle()
+            hb.settings().lastEngine == "narcic" && configRepository.activeProfile() != null -> toggleConnection()
+            else -> withHellboyPermission { hb.toggle() }
+        }
+    }
+
+    private fun createAiBridge(repo: SettingsRepository) =
+        dev.valid7996.narcicgeteway.ai.AndroidAiBridge.create(
+            repository = configRepository,
+            settings = repo,
+            toggleConnection = ::toggleConnection,
+            mtuHint = { mtuHintFor(configRepository.activeProfile()) },
+        )
+
+    private fun mtuHintFor(active: dev.valid7996.narcicgeteway.domain.config.VpnProfile?): dev.valid7996.narcicgeteway.data.net.MtuServerHint? {
+        val link = (active?.source as? dev.valid7996.narcicgeteway.domain.config.ProfileSource.Link)?.link
+        val parsed = link?.let { runCatching { dev.valid7996.narcicgeteway.domain.config.ConfigParser.parse(it) }.getOrNull() }
+        val host = parsed?.address?.takeIf { it.isNotBlank() } ?: active?.address.orEmpty()
+        if (host.isBlank()) return null
+        return dev.valid7996.narcicgeteway.data.net.MtuServerHint(
+            host = host,
+            overhead = parsed?.let { dev.valid7996.narcicgeteway.data.net.MtuOverheads.ofServer(it) }
+                ?: dev.valid7996.narcicgeteway.data.net.MtuOverheads.worstCase(),
+        )
+    }
+
+    /**
+     * The protocol engine's pages, embedded in the Hellboy shell. Hellboy's palette is applied through the
+     * "hellboy" theme profile, so they pick up the same colours, wall and light/dark mode as the native screens.
+     */
+    private fun protocolPages(aiBridge: dev.valid7996.narcicgeteway.domain.ai.AiAppBridge): com.helboy.vpnclub.ui.screen.ProtocolPages {
+        val repo = (application as NrgSecureApp).container.settingsRepository
+        return com.helboy.vpnclub.ui.screen.ProtocolPages(
+            profiles = { padding, goHome ->
+                val settings by repo.settings.collectAsStateWithLifecycle()
+                NarcicTheme(settings) {
+                    dev.valid7996.narcicgeteway.ui.servers.ServersScreen(
+                        repository = configRepository,
+                        contentPadding = padding,
+                        twoColumns = settings.doubleColumnDisplay,
+                        showAllGroup = settings.groupAllDisplay,
+                        confirmRemove = settings.confirmRemove,
+                        realPingConcurrency = settings.realPingConcurrency,
+                        delayTestUrl = settings.delayTestUrl,
+                        autoTestAfterUpdate = settings.autoTestAfterUpdate,
+                        autoRemoveInvalidAfterTest = settings.autoRemoveInvalidAfterTest,
+                        autoSortAfterTest = settings.autoSortAfterTest,
+                        personalization = settings.toPersonalization(),
+                        settings = settings,
+                        onUpdateSettings = repo::update,
+                        onServerActivated = {
+                            com.helboy.vpnclub.corex.VpnController.settings().lastEngine = "narcic"
+                            if (settings.homeAfterSelect) goHome()
+                            switchActiveServer()
+                        },
+                    )
+                }
+            },
+            advanced = { padding ->
+                val settings by repo.settings.collectAsStateWithLifecycle()
+                val profiles by configRepository.profiles.collectAsStateWithLifecycle()
+                val platform = LocalPlatform.current
+                NarcicTheme(settings) {
+                    dev.valid7996.narcicgeteway.ui.settings.SettingsScreen(
+                        settings = settings,
+                        contentPadding = padding,
+                        onUpdate = repo::update,
+                        onLanguage = { lang ->
+                            repo.update { it.copy(language = lang) }
+                            recreate()
+                        },
+                        configRepository = configRepository,
+                        serverTargets = profiles
+                            .filter { it.source is dev.valid7996.narcicgeteway.domain.config.ProfileSource.Link }
+                            .map { it.id to it.name },
+                        mtuHint = mtuHintFor(configRepository.activeProfile()),
+                        ai = dev.valid7996.narcicgeteway.ui.settings.AiSection(
+                            settings = settings.ai,
+                            onUpdate = { next -> repo.update { it.copy(ai = next) } },
+                            bridge = aiBridge,
+                            onOpenUrl = { url -> platform.openUri(url) },
+                            languageName = "Persian",
+                            languageNative = "فارسی",
+                            platform = "Android",
+                            appVersion = dev.valid7996.narcicgeteway.BuildConfig.VERSION_NAME,
+                        ),
+                    )
+                }
+            },
+            hosts = { onImported ->
+                val settings by repo.settings.collectAsStateWithLifecycle()
+                NarcicTheme(settings) {
+                    dev.valid7996.narcicgeteway.ui.servers.DeepLinkImportHost(
+                        repository = configRepository,
+                        onImported = onImported,
+                    )
+                    dev.valid7996.narcicgeteway.ui.update.NudgeHost(settings = settings, onUpdateSettings = repo::update)
+                }
+            },
+        )
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun NarcicTheme(
+        settings: dev.valid7996.narcicgeteway.domain.model.AppSettings,
+        content: @androidx.compose.runtime.Composable () -> Unit,
+    ) {
+        dev.valid7996.narcicgeteway.ui.theme.NrgSecureTheme(
+            darkTheme = com.helboy.vpnclub.ui.theme.Palette.isDark,
+            dynamicColor = false,
+            accentColor = settings.accentColor,
+            amoledBlack = false,
+            themeProfileId = "hellboy",
+            languageTag = settings.language.tag ?: "fa",
+            fontScale = settings.uiFontScale.scale,
+            content = content,
+        )
     }
 
     private val switchStopTimeoutMs = 8_000L
